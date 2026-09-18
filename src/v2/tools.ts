@@ -28,7 +28,7 @@ type V1ToolDefinition = {
  * The tool definitions are authored against the V1 `tool()` helper
  * (`{ description, args, execute }`). opencode v2 expects `Tool.Info`
  * (`{ name, input, description, execute }`); we adapt:
- *   - `args` (Zod raw shape) -> `input: z.object(args)`
+ *   - `args` (Zod raw shape) -> `input`: JSON Schema (Zod v4 `toJSONSchema`)
  *   - string result -> `{ content }`
  */
 export function registerV2Tools(draft: ToolDraft): void {
@@ -42,7 +42,7 @@ export function registerV2Tools(draft: ToolDraft): void {
     const info: ToolInfoV2 = {
       name,
       description: definition.description,
-      input: tool.schema.object(definition.args),
+      input: tool.schema.toJSONSchema(tool.schema.object(definition.args)),
       execute: async (input, context) => {
         const result = await definition.execute(
           input as never,
