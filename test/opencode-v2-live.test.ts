@@ -7,7 +7,13 @@ import {
   ptyTools,
   stopActiveServer,
 } from '../src/v2/index.ts'
-import type { CommandDraft, CommandInfo, PluginContextV2 } from '../src/v2/types.ts'
+import type {
+  CommandDefinition,
+  CommandDraft,
+  PluginContextV2,
+  ToolDraft,
+  ToolInfoV2,
+} from '../src/v2/types.ts'
 
 describe('OpenCode V2 Live Integration', () => {
   afterEach(() => {
@@ -26,18 +32,25 @@ describe('OpenCode V2 Live Integration', () => {
   })
 
   it('executes setup inside a simulated OpenCode V2 PluginPromise host', async () => {
-    const registeredCommands: Record<string, CommandInfo> = {}
+    const registeredCommands: Record<string, CommandDefinition> = {}
+    const registeredTools: Record<string, ToolInfoV2> = {}
 
-    // Simulated V2 Command Draft from OpenCode core
+    // Simulated V2 drafts from OpenCode core. Note both editors expose `add()`
+    // only — there is no `update()` (that mismatch is why tools/commands were
+    // silently missing before).
     const commandDraft: CommandDraft = {
-      update: (name: string, updateFn: (cmd: CommandInfo) => void) => {
-        const item: CommandInfo = {}
-        registeredCommands[name] = item
-        updateFn(item)
+      add: (command) => {
+        registeredCommands[command.name] = command
+      },
+    }
+    const toolDraft: ToolDraft = {
+      add: (tool) => {
+        registeredTools[tool.name] = tool
       },
     }
 
-    let transformCalled = false
+    let commandTransformCalled = false
+    let toolTransformCalled = false
     const simulatedContext: PluginContextV2 = {
       options: {
         port: 48999,
@@ -45,8 +58,15 @@ describe('OpenCode V2 Live Integration', () => {
       },
       command: {
         transform: async (callback) => {
-          transformCalled = true
+          commandTransformCalled = true
           await callback(commandDraft)
+        },
+        reload: async () => {},
+      },
+      tool: {
+        transform: async (callback) => {
+          toolTransformCalled = true
+          await callback(toolDraft)
         },
         reload: async () => {},
       },
@@ -55,13 +75,24 @@ describe('OpenCode V2 Live Integration', () => {
     // Run setup through V2 plugin contract
     await Plugin.setup(simulatedContext)
 
-    expect(transformCalled).toBe(true)
+    expect(toolTransformCalled).toBe(true)
+    expect(Object.keys(registeredTools).sort()).toEqual([
+      'pty_kill',
+      'pty_list',
+      'pty_read',
+      'pty_spawn',
+      'pty_write',
+    ])
+
+    expect(commandTransformCalled).toBe(true)
     expect(registeredCommands[PTY_OPEN_CLIENT_COMMAND]?.description).toBe(
       'Open PTY Sessions Web Interface'
     )
+    expect(typeof registeredCommands[PTY_OPEN_CLIENT_COMMAND]?.execute).toBe('function')
     expect(registeredCommands[PTY_SHOW_SERVER_URL_COMMAND]?.description).toBe(
       'Show PTY Sessions Web Interface URL'
     )
+    expect(typeof registeredCommands[PTY_SHOW_SERVER_URL_COMMAND]?.execute).toBe('function')
 
     // Verify server creation with V2 options
     const server = await getOrCreateServer({

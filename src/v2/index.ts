@@ -1,6 +1,7 @@
 import { createV2Adapter } from '../adapters/v2/index.ts'
 import { installHostAdapter } from '../adapters/index.ts'
 import { getOrCreateServer, registerV2Commands } from './commands.ts'
+import { registerV2Tools } from './tools.ts'
 import { define, type PluginContextV2, type PluginV2 } from './types.ts'
 
 export * from './commands.ts'
@@ -17,6 +18,12 @@ export const Plugin: PluginV2 = define({
     const options = ctx.options
     const adapter = createV2Adapter()
     installHostAdapter(adapter)
+
+    if (ctx.tool && typeof ctx.tool.transform === 'function') {
+      await ctx.tool.transform((draft) => {
+        registerV2Tools(draft)
+      })
+    }
 
     if (ctx.command && typeof ctx.command.transform === 'function') {
       await ctx.command.transform((draft) => {
