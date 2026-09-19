@@ -30,7 +30,7 @@ function findPackFileFromOutput(stdout: string): string {
   throw new Error('No .tgz file found in pack output')
 }
 
-describe('npm pack integration', () => {
+describe('package pack integration', () => {
   let tempDir: string
   let packFile: string | null = null
   let serverProcess: ReturnType<typeof Bun.spawn> | null = null

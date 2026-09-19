@@ -23,7 +23,7 @@ async function run(cmd: string[], opts: { cwd?: string } = {}) {
 }
 
 function findPackFileFromOutput(stdout: string): string | null {
-  // npm prints the created tarball filename on the last line
+  // `bun pm pack` prints the created tarball filename on its own line
   const lines = stdout.trim().split(/\r?\n/)
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i]
@@ -32,7 +32,7 @@ function findPackFileFromOutput(stdout: string): string | null {
   return null
 }
 
-describe('npm pack structure', () => {
+describe('package pack structure', () => {
   it('includes dist web assets', async () => {
     // 1) Create tarball via bun pm pack (triggers prepack build)
     const pack = await run(['bun', 'pm', 'pack'])
