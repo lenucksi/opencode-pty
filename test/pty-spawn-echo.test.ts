@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
-import { manager, registerRawOutputCallback } from '../src/plugin/pty/manager.ts'
-import { ManagedTestServer } from './utils.ts'
+import { manager } from '../src/plugin/pty/manager.ts'
+import { ManagedTestServer, RawOutputCollector } from './utils.ts'
 
 describe('ptySpawn Integration', () => {
   let managedTestServer: ManagedTestServer
@@ -20,18 +20,7 @@ describe('ptySpawn Integration', () => {
 
   it('should spawn echo "Hello World" and capture output', async () => {
     const title = `test-${crypto.randomUUID()}`
-    let receivedOutput = ''
-
-    const outputPromise = new Promise<string>((resolve) => {
-      registerRawOutputCallback((session, rawData) => {
-        if (session.title !== title) return
-        receivedOutput += rawData
-        if (receivedOutput.includes('Hello World')) {
-          resolve(receivedOutput)
-        }
-      })
-      setTimeout(() => resolve(receivedOutput || 'Timeout'), 2000)
-    })
+    await using collector = new RawOutputCollector()
 
     const result = await ptySpawn.execute(
       {
@@ -51,18 +40,19 @@ describe('ptySpawn Integration', () => {
         worktree: '/tmp',
       }
     )
-    // @opencode-ai/plugin >= 1.18 types ToolResult as string | { output }.
-    const output = typeof result === 'string' ? result : result.output
 
-    expect(output).toContain('<pty_spawned>')
-    expect(output).toContain('Command: echo Hello World')
-    expect(output).toContain('Status: running')
+    const resultText = typeof result === 'string' ? result : result.output
+    expect(resultText).toContain('<pty_spawned>')
+    expect(resultText).toContain('Command: echo Hello World')
+    expect(resultText).toContain('Status: running')
 
-    const sessionIdMatch = output.match(/ID: (.+)/)
+    const sessionIdMatch = resultText.match(/ID: (.+)/)
     expect(sessionIdMatch).toBeTruthy()
     const sessionId = sessionIdMatch?.[1] ?? ''
 
-    const rawOutput = await outputPromise
+    const rawOutput = await collector
+      .waitFor(sessionId, (output) => output.includes('Hello World'), 2000)
+      .catch(() => 'Timeout')
     expect(rawOutput).toContain('Hello World')
 
     manager.kill(sessionId, true)

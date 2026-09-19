@@ -43,6 +43,7 @@ describe('PTYPlugin entrypoint', () => {
       'pty_list',
       'pty_read',
       'pty_spawn',
+      'pty_wait',
       'pty_write',
     ])
 

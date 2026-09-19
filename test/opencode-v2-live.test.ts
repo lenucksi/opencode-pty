@@ -98,6 +98,7 @@ describe('OpenCode V2 Live Integration', () => {
       'pty_list',
       'pty_read',
       'pty_spawn',
+      'pty_wait',
       'pty_write',
     ])
 
