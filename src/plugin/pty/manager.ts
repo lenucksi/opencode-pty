@@ -172,6 +172,10 @@ class PTYManager {
     return this.lifecycleManager.kill(id, cleanup)
   }
 
+  resize(id: string, cols: number, rows: number): boolean {
+    return this.lifecycleManager.resize(id, cols, rows)
+  }
+
   cleanupBySession(parentSessionId: string): void {
     this.lifecycleManager.cleanupBySession(parentSessionId)
   }

@@ -16,6 +16,7 @@ interface RawTerminalProps {
   rawOutput: string
   onSendInput?: (data: string) => void
   onInterrupt?: () => void
+  onResize?: (cols: number, rows: number) => void
   disabled?: boolean
 }
 
@@ -24,6 +25,28 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
   private xtermInstance: Terminal | null = null
   private fitAddon: FitAddon | null = null
   private serializeAddon: SerializeAddon | null = null
+
+  /**
+   * Fit the terminal to its container and report the resulting dimensions to
+   * the parent via `onResize`. Safe to call when the container has no layout
+   * yet (fit errors are swallowed and zero dimensions are not reported).
+   */
+  public fit(): void {
+    if (!this.fitAddon || !this.xtermInstance) return
+    try {
+      this.fitAddon.fit()
+    } catch {
+      // Container may not be laid out yet; xterm throws on zero dimensions.
+    }
+    this.emitResize()
+  }
+
+  private emitResize(): void {
+    const term = this.xtermInstance
+    if (!term || !this.props.onResize) return
+    if (term.cols <= 0 || term.rows <= 0) return
+    this.props.onResize(term.cols, term.rows)
+  }
 
   override componentDidMount() {
     this.initializeTerminal()
@@ -73,12 +96,12 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
     term.loadAddon(this.fitAddon)
     term.loadAddon(this.serializeAddon)
 
+    this.xtermInstance = term
+
     if (this.terminalRef.current) {
       term.open(this.terminalRef.current)
-      this.fitAddon.fit()
+      this.fit()
     }
-
-    this.xtermInstance = term
 
     // CRITICAL: Expose terminal and serialize addon for E2E testing
     window.xtermTerminal = term

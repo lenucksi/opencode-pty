@@ -22,6 +22,8 @@ import type {
   WSMessageClientSpawnSession,
   WSMessageClientSubscribeSession,
   WSMessageClientUnsubscribeSession,
+  WSMessageClientResize,
+  WSMessageClientReadRaw,
 } from '../src/web/shared/types'
 
 export class ManagedTestClient implements Disposable {
@@ -145,6 +147,8 @@ export class ManagedTestClient implements Disposable {
       | WSMessageClientSpawnSession
       | WSMessageClientSubscribeSession
       | WSMessageClientUnsubscribeSession
+      | WSMessageClientResize
+      | WSMessageClientReadRaw
   ) {
     this.ws.send(JSON.stringify(message))
   }

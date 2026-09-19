@@ -52,6 +52,7 @@ export function App() {
     connected: wsConnected,
     subscribeWithRetry,
     sendInput,
+    sendResize,
   } = useWebSocket({
     activeSession,
     onRawData: useCallback(
@@ -105,6 +106,52 @@ export function App() {
     setConnected(wsConnected)
   }, [wsConnected])
 
+  const terminalRef = useRef<RawTerminal>(null)
+  const outputContainerRef = useRef<HTMLDivElement>(null)
+  const terminalSizeRef = useRef<{ cols: number; rows: number } | null>(null)
+
+  const handleTerminalResize = useCallback(
+    (cols: number, rows: number) => {
+      if (cols <= 0 || rows <= 0) return
+      terminalSizeRef.current = { cols, rows }
+      if (activeSession) {
+        sendResize(activeSession.id, cols, rows)
+      }
+    },
+    [activeSession, sendResize]
+  )
+
+  // Re-send the known terminal size after connecting/subscribing or when the
+  // active session changes, so a freshly subscribed PTY matches the viewport
+  // even before the next ResizeObserver tick.
+  useEffect(() => {
+    if (!wsConnected || !activeSession) return
+    const size = terminalSizeRef.current
+    if (!size) return
+    sendResize(activeSession.id, size.cols, size.rows)
+  }, [wsConnected, activeSession, sendResize])
+
+  // Refit the terminal (and thereby report new cols/rows) when its container
+  // changes size. Debounced to avoid resize storms while dragging.
+  useEffect(() => {
+    const container = outputContainerRef.current
+    if (!container || !activeSession) return
+
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const observer = new ResizeObserver(() => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        terminalRef.current?.fit()
+      }, 100)
+    })
+    observer.observe(container)
+
+    return () => {
+      if (timer) clearTimeout(timer)
+      observer.disconnect()
+    }
+  }, [activeSession])
+
   // Periodic session list sync every 10 seconds
   useEffect(() => {
     const syncInterval = setInterval(async () => {
@@ -146,12 +193,14 @@ export function App() {
                 Kill Session
               </button>
             </div>
-            <div className="output-container">
+            <div className="output-container" ref={outputContainerRef}>
               <RawTerminal
+                ref={terminalRef}
                 key={activeSession?.id}
                 rawOutput={rawOutput}
                 onSendInput={handleSendInput}
                 onInterrupt={handleKillSession}
+                onResize={handleTerminalResize}
                 disabled={!activeSession || activeSession.status !== 'running'}
               />
             </div>

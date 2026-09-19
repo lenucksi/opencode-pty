@@ -344,6 +344,16 @@ bun unittest    # Runs the unit tests
 bun test:e2e    # Runs the e2e tests
 ```
 
+### Manual TUI resize check
+
+Resize negotiation is covered by unit tests (`SessionLifecycleManager.resize`) and
+WebSocket tests (`resize` message). To verify a real full-screen TUI end to end,
+start the Web UI, open a session, run `vim` or `htop`, then resize the browser
+window: the TUI should reflow to the new width because `FitAddon` reports the new
+`cols`/`rows` and the client sends a `resize` message to the server. A scripted
+version of this check belongs in the e2e (Playwright) suite; it is not run in
+headless environments without browser system libraries.
+
 To load a local checkout in OpenCode:
 
 ```json

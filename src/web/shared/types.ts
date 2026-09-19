@@ -19,7 +19,7 @@ export class CustomError extends Error {
 }
 
 export interface WSMessageClient {
-  type: 'subscribe' | 'unsubscribe' | 'session_list' | 'spawn' | 'input' | 'readRaw'
+  type: 'subscribe' | 'unsubscribe' | 'session_list' | 'spawn' | 'input' | 'readRaw' | 'resize'
 }
 
 export interface WSMessageClientSubscribeSession extends WSMessageClient {
@@ -50,6 +50,13 @@ export interface WSMessageClientInput extends WSMessageClient {
 export interface WSMessageClientReadRaw extends WSMessageClient {
   type: 'readRaw'
   sessionId: string
+}
+
+export interface WSMessageClientResize extends WSMessageClient {
+  type: 'resize'
+  sessionId: string
+  cols: number
+  rows: number
 }
 
 export interface WSMessageServer {

@@ -7,6 +7,7 @@ import type {
   WSMessageServerSessionUpdate,
   WSMessageServerSubscribedSession,
   WSMessageServerUnsubscribedSession,
+  WSMessageServerReadRawResponse,
 } from '../src/web/shared/types.ts'
 import { ManagedTestClient, ManagedTestServer } from './utils.ts'
 
@@ -168,6 +169,74 @@ describe('WebSocket Functionality', () => {
       })
 
       await sessionListPromise
+    }, 1000)
+
+    it('should handle resize message for an existing session', async () => {
+      await using managedTestClient = await ManagedTestClient.create(
+        managedTestServer.server.getWsUrl()
+      )
+      const session = manager.spawn({
+        command: 'bash',
+        args: [],
+        description: 'Resize test session',
+        parentSessionId: managedTestServer.sessionId,
+      })
+
+      const errors: CustomError[] = []
+      managedTestClient.errorCallbacks.push((message) => {
+        errors.push(message.error)
+      })
+
+      // A following readRaw for the same session confirms the resize message
+      // was processed (messages are handled in order) and lets us assert that
+      // no error was produced for the valid resize.
+      const readRawPromise = new Promise<WSMessageServerReadRawResponse>((res) => {
+        managedTestClient.readRawResponseCallbacks.push((message) => {
+          if (message.sessionId === session.id) {
+            res(message)
+          }
+        })
+      })
+
+      managedTestClient.send({
+        type: 'resize',
+        sessionId: session.id,
+        cols: 100,
+        rows: 30,
+      })
+      managedTestClient.send({
+        type: 'readRaw',
+        sessionId: session.id,
+      })
+      await readRawPromise
+
+      expect(errors.length).toBe(0)
+
+      manager.kill(session.id, true)
+    }, 1000)
+
+    it('should return an error for resize with unknown session', async () => {
+      await using managedTestClient = await ManagedTestClient.create(
+        managedTestServer.server.getWsUrl()
+      )
+      const nonexistentSessionId = crypto.randomUUID()
+      const errorPromise = new Promise<WSMessageServerError>((res) => {
+        managedTestClient.errorCallbacks.push((message) => {
+          if (message.error.message.includes(nonexistentSessionId)) {
+            res(message)
+          }
+        })
+      })
+
+      managedTestClient.send({
+        type: 'resize',
+        sessionId: nonexistentSessionId,
+        cols: 100,
+        rows: 30,
+      })
+
+      const error = await errorPromise
+      expect(error.error.message).toContain('not found')
     }, 1000)
 
     it('should handle invalid message format', async () => {

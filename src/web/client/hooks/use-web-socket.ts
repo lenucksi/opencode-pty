@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
 import type {
   WSMessageServer,
   WSMessageServerRawData,
   WSMessageServerSessionList,
   WSMessageServerSessionUpdate,
+  WSMessageClientResize,
 } from 'opencode-pty/web/shared/types'
 import { RETRY_DELAY, SKIP_AUTOSELECT_KEY } from 'opencode-pty/web/shared/constants'
 
@@ -131,5 +132,12 @@ export function useWebSocket({
     }
   }
 
-  return { connected, subscribe, subscribeWithRetry, sendInput }
+  const sendResize = useCallback((sessionId: string, cols: number, rows: number) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const message: WSMessageClientResize = { type: 'resize', sessionId, cols, rows }
+      wsRef.current.send(JSON.stringify(message))
+    }
+  }, [])
+
+  return { connected, subscribe, subscribeWithRetry, sendInput, sendResize }
 }

@@ -1,9 +1,27 @@
 import { spawn, type IPty } from 'bun-pty'
 import { RingBuffer } from './buffer.ts'
 import type { PTYSession, PTYSessionInfo, SpawnOptions } from './types.ts'
-import { DEFAULT_TERMINAL_COLS, DEFAULT_TERMINAL_ROWS } from '../constants.ts'
+import {
+  DEFAULT_TERMINAL_COLS,
+  DEFAULT_TERMINAL_ROWS,
+  MAX_TERMINAL_COLS,
+  MAX_TERMINAL_ROWS,
+  MIN_TERMINAL_COLS,
+  MIN_TERMINAL_ROWS,
+} from '../constants.ts'
 
 const SESSION_ID_BYTE_LENGTH = 4
+
+/**
+ * Clamp a terminal dimension to the PTY-supported range. Non-finite values
+ * (NaN/Infinity) or values outside the range fall back to sane bounds.
+ */
+function clampDimension(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback
+  }
+  return Math.min(max, Math.max(min, Math.floor(value)))
+}
 
 function generateId(): string {
   const hex = Array.from(crypto.getRandomValues(new Uint8Array(SESSION_ID_BYTE_LENGTH)))
@@ -170,6 +188,34 @@ export class SessionLifecycleManager {
     if (cleanup) {
       session.buffer.clear()
       this.sessions.delete(id)
+    }
+
+    return true
+  }
+
+  resize(id: string, cols: number, rows: number): boolean {
+    const session = this.sessions.get(id)
+    if (!session) {
+      return false
+    }
+
+    const boundedCols = clampDimension(
+      cols,
+      MIN_TERMINAL_COLS,
+      MAX_TERMINAL_COLS,
+      DEFAULT_TERMINAL_COLS
+    )
+    const boundedRows = clampDimension(
+      rows,
+      MIN_TERMINAL_ROWS,
+      MAX_TERMINAL_ROWS,
+      DEFAULT_TERMINAL_ROWS
+    )
+
+    try {
+      session.process?.resize(boundedCols, boundedRows)
+    } catch {
+      // Ignore resize errors (e.g. process already exited)
     }
 
     return true
