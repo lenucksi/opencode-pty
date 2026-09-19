@@ -36,8 +36,8 @@ describe('allStructured', () => {
   })
 
   it('treats `*` as a skip wildcard in the tail', () => {
-    const patterns = { 'npm * install': 'ask' }
-    expect(allStructured({ head: 'npm', tail: ['--global', 'install'] }, patterns)).toBe('ask')
+    const patterns = { 'bun * install': 'ask' }
+    expect(allStructured({ head: 'bun', tail: ['--global', 'install'] }, patterns)).toBe('ask')
   })
 
   it('prefers the last matching pattern and sorts by specificity', () => {
