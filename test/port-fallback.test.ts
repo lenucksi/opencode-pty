@@ -90,9 +90,9 @@ describe('Port resolution helpers', () => {
 
     it('detects EADDRINUSE from the message alone', () => {
       expect(isEaddrinuse(new Error('Failed to start server. Is port 42789 in use?'))).toBe(true)
-      expect(isEaddrinuse(new Error('listen EADDRINUSE: address already in use 127.0.0.1:4200'))).toBe(
-        true
-      )
+      expect(
+        isEaddrinuse(new Error('listen EADDRINUSE: address already in use 127.0.0.1:4200'))
+      ).toBe(true)
     })
 
     it('rejects unrelated errors and non-errors', () => {
@@ -185,9 +185,7 @@ describe('V2 plugin setup resilience', () => {
     expect(Number(active?.server.url.port)).not.toBe(port)
     expect(warnings.some((args) => String(args).includes('in use'))).toBe(true)
 
-    const health = await fetch(
-      `http://127.0.0.1:${Number(active?.server.url.port)}/health`
-    )
+    const health = await fetch(`http://127.0.0.1:${Number(active?.server.url.port)}/health`)
     expect(health.status).toBe(200)
   })
 })
