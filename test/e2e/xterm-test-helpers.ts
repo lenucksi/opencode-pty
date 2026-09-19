@@ -1,47 +1,66 @@
 import type { Page } from '@playwright/test'
-import type { SerializeAddon } from '@xterm/addon-serialize'
+import type { SerializeAddon } from '../../src/web/client/addons/serialize.ts'
 
-// Global module augmentation for E2E testing
+// Global module augmentation for E2E testing. The emulator is ghostty-web now;
+// the `xterm*` global names are retained for historical test compatibility.
 declare global {
   interface Window {
-    xtermTerminal?: import('@xterm/xterm').Terminal
+    xtermTerminal?: import('ghostty-web').Terminal
     xtermSerializeAddon?: SerializeAddon
   }
 }
 
+/** Return lines up to (and including) the last non-empty line. */
+const trimToLastNonEmpty = (lines: string[]): string[] => {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i] !== '') {
+      return lines.slice(0, i + 1)
+    }
+  }
+  return []
+}
+
 /**
- * Deprecated: Use getSerializedContentByXtermSerializeAddon for all terminal content extraction in E2E tests.
- * This DOM scraping method should only be used for rare visual/manual cross-checks or debugging.
+ * Plain-text view of the terminal, backed by the canonical SerializeAddon
+ * extractor. ghostty-web is canvas-only (there is no `.xterm-rows` DOM text
+ * layer), so DOM scraping is not possible; the serialize addon is the single
+ * source of truth for terminal content in the E2E suite.
  */
 export const getTerminalPlainText = async (page: Page): Promise<string[]> => {
+  const serialized = await getSerializedContentByXtermSerializeAddon(page, {
+    excludeModes: true,
+    excludeAltBuffer: true,
+  })
+  if (!serialized) return []
+  const lines = Bun.stripANSI(serialized).replaceAll('\r', '').split('\n')
+  return trimToLastNonEmpty(lines)
+}
+
+/**
+ * Content lines read directly from the emulator's buffer API
+ * (`window.xtermTerminal.buffer.active`). This is an extraction path
+ * independent of the SerializeAddon and is used to cross-check it.
+ */
+export const getTerminalBufferLines = async (page: Page): Promise<string[]> => {
   return await page.evaluate(() => {
-    const getPlainText = () => {
-      const terminalElement = document.querySelector('.xterm')
-      if (!terminalElement) return []
+    const term = window.xtermTerminal
+    const buffer = term?.buffer?.active
+    if (!buffer) return []
 
-      const lines = Array.from(terminalElement.querySelectorAll('.xterm-rows > div')).map((row) => {
-        return Array.from(row.querySelectorAll('span'))
-          .map((span) => span.textContent || '')
-          .join('')
-      })
-
-      // Return only lines up to the last non-empty line
-      const findLastNonEmptyIndex = (lines: string[]): number => {
-        for (let i = lines.length - 1; i >= 0; i--) {
-          if (lines[i] !== '') {
-            return i
-          }
-        }
-        return -1
-      }
-
-      const lastNonEmptyIndex = findLastNonEmptyIndex(lines)
-      if (lastNonEmptyIndex === -1) return []
-
-      return lines.slice(0, lastNonEmptyIndex + 1)
+    const lines: string[] = []
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i)
+      lines.push(line ? line.translateToString() : '')
     }
 
-    return getPlainText()
+    // Return only lines up to the last non-empty line, matching the
+    // SerializeAddon-based helper's trimming behaviour.
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (lines[i] !== '') {
+        return lines.slice(0, i + 1)
+      }
+    }
+    return []
   })
 }
 
@@ -122,18 +141,24 @@ export const waitForTerminalRegex = async (
       }
 
       return new Promise<boolean>((resolve) => {
-        const disposable = term.onWriteParsed(() => {
-          if (checkMatch(serializeAddon)) {
-            disposable.dispose()
-            resolve(true)
-          }
-        })
-
-        // Immediate check
-        if (checkMatch(serializeAddon)) {
-          disposable.dispose()
+        // ghostty-web has no `onWriteParsed` event, so poll the serialized
+        // buffer instead. The emulator parses writes synchronously, so this is
+        // an accurate (if slightly less event-driven) readiness signal.
+        let done = false
+        let intervalId: ReturnType<typeof setInterval> | undefined
+        const finish = () => {
+          if (done) return
+          done = true
+          if (intervalId !== undefined) clearInterval(intervalId)
           resolve(true)
         }
+        const check = () => {
+          if (checkMatch(serializeAddon)) finish()
+        }
+        intervalId = setInterval(check, 50)
+
+        // Immediate check
+        check()
       })
     },
     {
