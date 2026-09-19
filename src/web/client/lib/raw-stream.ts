@@ -10,6 +10,10 @@
 // Offsets are monotonic character offsets assigned by the server. `offset` is
 // the absolute offset one past the last character currently rendered, while
 // `start` is the absolute offset of the first rendered character.
+//
+// Alongside the reconciliation state the stream produces a `RenderIntent` for
+// the terminal emulator. Consumers push that intent straight into xterm instead
+// of mirroring the whole transcript in React state.
 
 export interface RawChunk {
   rawData: string
@@ -23,11 +27,27 @@ export interface RawSnapshot {
 
 export type ChunkResult = 'applied' | 'duplicate' | 'gap'
 
+/**
+ * What the emulator should do to catch up with the reconciled stream.
+ * - `append`: write `data` at the current cursor position
+ * - `rewrite`: discard the buffer and write `data` from scratch
+ * - `reset`: discard the buffer (used on session switches)
+ * - `none`: nothing changed
+ */
+export type RenderIntent =
+  | { type: 'append'; data: string }
+  | { type: 'rewrite'; data: string }
+  | { type: 'reset' }
+  | { type: 'none' }
+
+const NO_RENDER: RenderIntent = { type: 'none' }
+
 export class RawStream {
   private output = ''
   private startOffset = 0
   private endOffset = 0
   private known = false
+  private lastRender: RenderIntent = NO_RENDER
 
   get value(): string {
     return this.output
@@ -47,11 +67,17 @@ export class RawStream {
     return this.known
   }
 
+  /** Render instruction produced by the most recent apply/reset call. */
+  get render(): RenderIntent {
+    return this.lastRender
+  }
+
   reset(): void {
     this.output = ''
     this.startOffset = 0
     this.endOffset = 0
     this.known = false
+    this.lastRender = { type: 'reset' }
   }
 
   /**
@@ -68,6 +94,7 @@ export class RawStream {
       this.startOffset = chunk.offset
       this.endOffset = chunkEnd
       this.known = true
+      this.lastRender = { type: 'append', data: chunk.rawData }
       return 'applied'
     }
 
@@ -75,12 +102,15 @@ export class RawStream {
       if (chunk.offset < this.startOffset) {
         this.output = chunk.rawData.slice(0, this.startOffset - chunk.offset) + this.output
         this.startOffset = chunk.offset
+        this.lastRender = { type: 'rewrite', data: this.output }
         return 'applied'
       }
+      this.lastRender = NO_RENDER
       return 'duplicate'
     }
 
     if (chunk.offset > this.endOffset) {
+      this.lastRender = NO_RENDER
       return 'gap'
     }
 
@@ -90,8 +120,12 @@ export class RawStream {
       this.startOffset = chunk.offset
     }
 
-    this.output = prefix + this.output + chunk.rawData.slice(this.endOffset - chunk.offset)
+    const appended = chunk.rawData.slice(this.endOffset - chunk.offset)
+    this.output = prefix + this.output + appended
     this.endOffset = chunkEnd
+    this.lastRender = prefix
+      ? { type: 'rewrite', data: this.output }
+      : { type: 'append', data: appended }
     return 'applied'
   }
 
@@ -108,6 +142,7 @@ export class RawStream {
       this.startOffset = snapshot.offset
       this.endOffset = snapshotEnd
       this.known = true
+      this.lastRender = { type: 'rewrite', data: snapshot.raw }
       return
     }
 
@@ -116,6 +151,7 @@ export class RawStream {
       this.output = snapshot.raw
       this.startOffset = snapshot.offset
       this.endOffset = snapshotEnd
+      this.lastRender = { type: 'rewrite', data: snapshot.raw }
       return
     }
 
@@ -134,6 +170,16 @@ export class RawStream {
     }
     if (snapshotEnd > this.endOffset) {
       this.endOffset = snapshotEnd
+    }
+
+    if (prefix) {
+      // The snapshot backfilled the head of the window; the emulator has to be
+      // rebuilt because content cannot be prepended to a terminal.
+      this.lastRender = { type: 'rewrite', data: this.output }
+    } else if (suffix) {
+      this.lastRender = { type: 'append', data: suffix }
+    } else {
+      this.lastRender = NO_RENDER
     }
   }
 }

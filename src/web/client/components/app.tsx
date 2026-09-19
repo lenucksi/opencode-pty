@@ -4,6 +4,7 @@ import type { PTYSessionInfo, WSMessageServerRawData } from 'opencode-pty/web/sh
 import { useWebSocket } from '../hooks/use-web-socket.ts'
 import { useSessionManager } from '../hooks/use-session-manager.ts'
 import { useRawStream } from '../hooks/use-raw-stream.ts'
+import type { RenderIntent } from '../lib/raw-stream.ts'
 
 import { Sidebar } from './sidebar.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
@@ -17,7 +18,19 @@ export function App() {
   const [wsMessageCount, setWsMessageCount] = useState(0)
   const [sessionUpdateCount, setSessionUpdateCount] = useState(0)
 
-  const { rawOutput, reset: resetRawStream, applyChunk, applySnapshot, getOffset } = useRawStream()
+  const terminalRef = useRef<RawTerminal>(null)
+
+  const handleTerminalRender = useCallback((intent: RenderIntent) => {
+    terminalRef.current?.applyRender(intent)
+  }, [])
+
+  const {
+    reset: resetRawStream,
+    applyChunk,
+    applySnapshot,
+    getOffset,
+    charCount,
+  } = useRawStream(handleTerminalRender)
 
   const activeSessionIdRef = useRef<string | null>(null)
   const resyncingRef = useRef(false)
@@ -106,7 +119,6 @@ export function App() {
     setConnected(wsConnected)
   }, [wsConnected])
 
-  const terminalRef = useRef<RawTerminal>(null)
   const outputContainerRef = useRef<HTMLDivElement>(null)
   const terminalSizeRef = useRef<{ cols: number; rows: number } | null>(null)
 
@@ -196,8 +208,6 @@ export function App() {
             <div className="output-container" ref={outputContainerRef}>
               <RawTerminal
                 ref={terminalRef}
-                key={activeSession?.id}
-                rawOutput={rawOutput}
                 onSendInput={handleSendInput}
                 onInterrupt={handleKillSession}
                 onResize={handleTerminalResize}
@@ -205,7 +215,7 @@ export function App() {
               />
             </div>
             <div className="debug-info" data-testid="debug-info">
-              Debug: {rawOutput.length} chars, active: {activeSession?.id || 'none'}, WS raw_data:{' '}
+              Debug: chars: {charCount}, active: {activeSession?.id || 'none'}, WS raw_data:{' '}
               {wsMessageCount}, session_updates: {sessionUpdateCount}
             </div>
           </>

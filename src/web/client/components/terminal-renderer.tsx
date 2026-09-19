@@ -1,7 +1,8 @@
 import React from 'react'
-import { Terminal } from '@xterm/xterm'
+import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SerializeAddon } from '@xterm/addon-serialize'
+import type { RenderIntent } from '../lib/raw-stream.ts'
 import '@xterm/xterm/css/xterm.css'
 
 // Global module augmentation to extend Window interface
@@ -12,8 +13,22 @@ declare global {
   }
 }
 
+/**
+ * Resolve the terminal palette from the application theme. The colors are
+ * defined once as CSS custom properties (`--app-bg` / `--app-fg`) so the
+ * emulator stays in sync with the rest of the UI instead of hardcoding a
+ * separate dark palette.
+ */
+function readAppTheme(): ITheme {
+  const rootStyles = getComputedStyle(document.documentElement)
+  const bodyStyles = getComputedStyle(document.body)
+  return {
+    background: rootStyles.getPropertyValue('--app-bg').trim() || bodyStyles.backgroundColor,
+    foreground: rootStyles.getPropertyValue('--app-fg').trim() || bodyStyles.color,
+  }
+}
+
 interface RawTerminalProps {
-  rawOutput: string
   onSendInput?: (data: string) => void
   onInterrupt?: () => void
   onResize?: (cols: number, rows: number) => void
@@ -41,6 +56,31 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
     this.emitResize()
   }
 
+  /**
+   * Apply a reconciled render instruction from the raw stream. Keeping the
+   * transcript in the emulator instead of React state avoids copying the whole
+   * buffer on every chunk.
+   */
+  public applyRender(intent: RenderIntent): void {
+    const term = this.xtermInstance
+    if (!term) return
+
+    switch (intent.type) {
+      case 'append':
+        term.write(intent.data)
+        break
+      case 'rewrite':
+        term.reset()
+        term.write(intent.data)
+        break
+      case 'reset':
+        term.reset()
+        break
+      default:
+        break
+    }
+  }
+
   private emitResize(): void {
     const term = this.xtermInstance
     if (!term || !this.props.onResize) return
@@ -50,28 +90,6 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
 
   override componentDidMount() {
     this.initializeTerminal()
-    if (this.xtermInstance && this.props.rawOutput) {
-      this.xtermInstance.write(this.props.rawOutput)
-    }
-  }
-
-  override componentDidUpdate(prevProps: RawTerminalProps) {
-    if (!this.xtermInstance) return
-
-    const currentData = this.props.rawOutput
-    const prevData = prevProps.rawOutput
-
-    // Optimized diff-based writing - only write new content
-    if (currentData.startsWith(prevData)) {
-      const newData = currentData.slice(prevData.length)
-      if (newData) {
-        this.xtermInstance.write(newData)
-      }
-    } else {
-      // Session switch/truncate/etc - clear and rewrite
-      this.xtermInstance.clear()
-      this.xtermInstance.write(currentData)
-    }
   }
 
   override componentWillUnmount() {
@@ -83,12 +101,10 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
   private initializeTerminal() {
     const term = new Terminal({
       cursorBlink: true,
-      theme: { background: '#1e1e1e', foreground: '#d4d4d4' },
+      theme: readAppTheme(),
       fontFamily: 'monospace',
       fontSize: 14,
       scrollback: 5000,
-      convertEol: true,
-      allowTransparency: true,
     })
 
     this.fitAddon = new FitAddon()
@@ -103,30 +119,30 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
       this.fit()
     }
 
-    // CRITICAL: Expose terminal and serialize addon for E2E testing
-    window.xtermTerminal = term
-    window.xtermSerializeAddon = this.serializeAddon
+    // Expose terminal and serialize addon for E2E testing. Gated behind a
+    // build-time flag so production bundles never leak test hooks; dev builds
+    // expose them too for local debugging.
+    if (import.meta.env.DEV || import.meta.env.VITE_EXPOSE_TEST_HOOKS === '1') {
+      window.xtermTerminal = term
+      window.xtermSerializeAddon = this.serializeAddon
+    }
 
-    // Set up input handling
     this.setupInputHandling(term)
   }
 
   private setupInputHandling(term: Terminal) {
-    const { onSendInput, onInterrupt, disabled } = this.props
-
-    if (disabled) return
-
-    const handleData = (data: string) => {
+    // Read props at event time: the terminal instance is reused across session
+    // switches, so a captured `disabled`/callback would go stale.
+    term.onData((data) => {
+      if (this.props.disabled) return
       if (data === '\u0003') {
         // Ctrl+C
-        onInterrupt?.()
+        this.props.onInterrupt?.()
       } else {
         // Send input to PTY server (PTY will echo back for interactive sessions)
-        onSendInput?.(data)
+        this.props.onSendInput?.(data)
       }
-    }
-
-    term.onData(handleData)
+    })
   }
 
   override render() {
