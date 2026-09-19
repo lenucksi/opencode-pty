@@ -91,12 +91,12 @@ describe('PTY Tools', () => {
         worktree: '/tmp',
       }
       const args = {
-        command: 'node',
-        args: ['script.js'],
+        command: 'bun',
+        args: ['script.ts'],
         workdir: '/home/user',
         env: { NODE_ENV: 'test' },
-        title: 'My Node Session',
-        description: 'Running Node.js script',
+        title: 'My Bun Session',
+        description: 'Running Bun script',
         notifyOnExit: true,
         timeoutSeconds: 60,
       }
@@ -104,21 +104,21 @@ describe('PTY Tools', () => {
       const result = await ptySpawn.execute(args, ctx)
 
       expect(manager.spawn).toHaveBeenCalledWith({
-        command: 'node',
-        args: ['script.js'],
+        command: 'bun',
+        args: ['script.ts'],
         workdir: '/home/user',
         env: { NODE_ENV: 'test' },
-        title: 'My Node Session',
-        description: 'Running Node.js script',
+        title: 'My Bun Session',
+        description: 'Running Bun script',
         parentSessionId: 'parent-session-id',
         parentAgent: 'test-agent',
         notifyOnExit: true,
         timeoutSeconds: 60,
       })
 
-      expect(result).toContain('Title: My Node Session')
+      expect(result).toContain('Title: My Bun Session')
       expect(result).toContain('Workdir: /home/user')
-      expect(result).toContain('Command: node script.js')
+      expect(result).toContain('Command: bun script.ts')
       expect(result).toContain('PID: 12345')
       expect(result).toContain('Status: running')
       expect(result).toContain('NotifyOnExit: true')
