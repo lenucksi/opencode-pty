@@ -5,6 +5,7 @@ import type {
   WSMessageServerError,
   WSMessageServerRawData,
   WSMessageServerSessionList,
+  WSMessageServerSessionRemoved,
   WSMessageServerSessionUpdate,
   WSMessageClientResize,
 } from 'opencode-pty/web/shared/types'
@@ -15,6 +16,7 @@ interface UseWebSocketOptions {
   onRawData?: (message: WSMessageServerRawData) => void
   onSessionList: (sessions: PTYSessionInfo[], autoSelected: PTYSessionInfo | null) => void
   onSessionUpdate?: (updatedSession: PTYSessionInfo) => void
+  onSessionRemoved?: (sessionId: string) => void
 }
 
 export function useWebSocket({
@@ -22,6 +24,7 @@ export function useWebSocket({
   onRawData,
   onSessionList,
   onSessionUpdate,
+  onSessionRemoved,
 }: UseWebSocketOptions) {
   const [connected, setConnected] = useState(false)
 
@@ -87,6 +90,9 @@ export function useWebSocket({
         } else if (data.type === 'session_update') {
           const sessionUpdateMsg = data as WSMessageServerSessionUpdate
           onSessionUpdate?.(sessionUpdateMsg.session)
+        } else if (data.type === 'session_removed') {
+          const sessionRemovedMsg = data as WSMessageServerSessionRemoved
+          onSessionRemoved?.(sessionRemovedMsg.sessionId)
         } else if (data.type === 'raw_data') {
           const rawDataMsg = data as WSMessageServerRawData
           const isForActiveSession = rawDataMsg.sessionId === activeSessionRef.current?.id
@@ -112,7 +118,7 @@ export function useWebSocket({
     return () => {
       ws.close()
     }
-  }, [activeSession, onRawData, onSessionList, onSessionUpdate])
+  }, [activeSession, onRawData, onSessionList, onSessionUpdate, onSessionRemoved])
 
   const subscribe = (sessionId: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

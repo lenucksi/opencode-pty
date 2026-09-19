@@ -35,6 +35,7 @@ interface ActiveSessionViewProps {
   onTerminalResize: (cols: number, rows: number) => void
   onSendInput: (data: string) => void
   onKillSession: () => void
+  onRemoveSession: () => void
 }
 
 function ActiveSessionView({
@@ -47,14 +48,21 @@ function ActiveSessionView({
   onTerminalResize,
   onSendInput,
   onKillSession,
+  onRemoveSession,
 }: ActiveSessionViewProps) {
   return (
     <>
       <div className="output-header">
         <div className="output-title">{activeSession.description ?? activeSession.title}</div>
-        <button type="button" className="kill-btn" onClick={onKillSession}>
-          Kill Session
-        </button>
+        {activeSession.status === 'running' ? (
+          <button type="button" className="kill-btn" onClick={onKillSession}>
+            Kill Session
+          </button>
+        ) : (
+          <button type="button" className="remove-btn" onClick={onRemoveSession}>
+            Remove
+          </button>
+        )}
       </div>
       <div className="output-container" ref={outputContainerRef}>
         <RawTerminal
@@ -80,6 +88,11 @@ export function App() {
   const [sessionUpdateCount, setSessionUpdateCount] = useState(0)
 
   const terminalRef = useRef<RawTerminal>(null)
+
+  const handleSessionRemoved = useCallback((sessionId: string) => {
+    setSessions((prevSessions) => prevSessions.filter((session) => session.id !== sessionId))
+    setActiveSession((current) => (current?.id === sessionId ? null : current))
+  }, [])
 
   const handleTerminalRender = useCallback((intent: RenderIntent) => {
     terminalRef.current?.applyRender(intent)
@@ -170,6 +183,7 @@ export function App() {
         return [...prevSessions, updatedSession]
       })
     }, []),
+    onSessionRemoved: handleSessionRemoved,
   })
 
   const { outputContainerRef, handleTerminalResize } = useTerminalResize({
@@ -181,7 +195,14 @@ export function App() {
 
   usePeriodicSessionSync(setSessions)
 
-  const { handleSessionClick, handleSendInput, handleKillSession } = useSessionManager({
+  const {
+    handleSessionClick,
+    handleSendInput,
+    handleKillSession,
+    handleKillSessionById,
+    handleRemoveSession,
+    handleClearFinished,
+  } = useSessionManager({
     activeSession,
     setActiveSession,
     subscribeWithRetry,
@@ -192,12 +213,44 @@ export function App() {
     getSinceOffset: getOffset,
   })
 
+  const removeSessionFromList = handleSessionRemoved
+
+  const handleRemoveSessionClick = useCallback(
+    async (session: PTYSessionInfo) => {
+      const removed = await handleRemoveSession(session)
+      if (removed) {
+        removeSessionFromList(session.id)
+      }
+    },
+    [handleRemoveSession, removeSessionFromList]
+  )
+
+  const handleClearFinishedClick = useCallback(async () => {
+    const finishedSessions = sessions.filter(
+      (session) => session.status !== 'running' && session.status !== 'killing'
+    )
+    const cleared = await handleClearFinished(finishedSessions)
+    if (cleared) {
+      setSessions((prevSessions) =>
+        prevSessions.filter(
+          (session) => session.status === 'running' || session.status === 'killing'
+        )
+      )
+      setActiveSession((current) =>
+        current && (current.status === 'running' || current.status === 'killing') ? current : null
+      )
+    }
+  }, [sessions, handleClearFinished])
+
   return (
     <div className="container" data-active-session={activeSession?.id}>
       <Sidebar
         sessions={sessions}
         activeSession={activeSession}
         onSessionClick={handleSessionClick}
+        onKillSession={handleKillSessionById}
+        onRemoveSession={handleRemoveSessionClick}
+        onClearFinished={handleClearFinishedClick}
         connected={wsConnected}
       />
       <div className="main">
@@ -212,6 +265,7 @@ export function App() {
             onTerminalResize={handleTerminalResize}
             onSendInput={handleSendInput}
             onKillSession={handleKillSession}
+            onRemoveSession={() => handleRemoveSessionClick(activeSession)}
           />
         ) : (
           <div className="empty-state">Select a session from the sidebar to view its output</div>

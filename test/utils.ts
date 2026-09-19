@@ -4,6 +4,7 @@ import {
   manager,
   registerRawOutputCallback,
   removeRawOutputCallback,
+  sessionRemovedCallbacks,
   sessionUpdateCallbacks,
   rawOutputCallbacks,
 } from '../src/plugin/pty/manager'
@@ -13,6 +14,7 @@ import type {
   WSMessageServerSubscribedSession,
   WSMessageServerUnsubscribedSession,
   WSMessageServerSessionUpdate,
+  WSMessageServerSessionRemoved,
   WSMessageServerRawData,
   WSMessageServerReadRawResponse,
   WSMessageServerSessionList,
@@ -37,6 +39,8 @@ export class ManagedTestClient implements Disposable {
     (message: WSMessageServerUnsubscribedSession) => void
   > = []
   public readonly sessionUpdateCallbacks: Array<(message: WSMessageServerSessionUpdate) => void> =
+    []
+  public readonly sessionRemovedCallbacks: Array<(message: WSMessageServerSessionRemoved) => void> =
     []
   public readonly rawDataCallbacks: Array<(message: WSMessageServerRawData) => void> = []
   public readonly readRawResponseCallbacks: Array<
@@ -67,6 +71,11 @@ export class ManagedTestClient implements Disposable {
         case 'session_update':
           this.sessionUpdateCallbacks.forEach((callback) => {
             callback(message as WSMessageServerSessionUpdate)
+          })
+          break
+        case 'session_removed':
+          this.sessionRemovedCallbacks.forEach((callback) => {
+            callback(message as WSMessageServerSessionRemoved)
           })
           break
         case 'raw_data':
@@ -243,5 +252,6 @@ export class ManagedTestServer implements Disposable {
     manager.clearAllSessions()
     sessionUpdateCallbacks.length = 0
     rawOutputCallbacks.length = 0
+    sessionRemovedCallbacks.length = 0
   }
 }
