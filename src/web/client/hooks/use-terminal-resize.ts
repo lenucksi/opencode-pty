@@ -6,7 +6,7 @@ interface UseTerminalResizeOptions {
   activeSession: PTYSessionInfo | null
   connected: boolean
   sendResize: (sessionId: string, cols: number, rows: number) => void
-  terminalRef: RefObject<RawTerminal>
+  terminalRef: RefObject<RawTerminal | null>
 }
 
 /**

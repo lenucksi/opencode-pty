@@ -17,15 +17,15 @@ export default defineConfig({
       // resolving through the package exports map.
       {
         find: /^ghostty-web$/,
-        replacement: path.resolve(__dirname, 'node_modules/ghostty-web/lib/index.ts'),
+        replacement: path.resolve(import.meta.dirname, 'node_modules/ghostty-web/lib/index.ts'),
       },
-      { find: 'opencode-pty', replacement: path.resolve(__dirname, './src') },
+      { find: 'opencode-pty', replacement: path.resolve(import.meta.dirname, './src') },
     ],
   },
   build: {
     outDir: '../../../dist/web',
     emptyOutDir: true,
-    minify: process.env.NODE_ENV === 'test' ? false : 'esbuild', // Enable minification for production
+    minify: process.env.NODE_ENV === 'test' ? false : 'oxc', // Vite 8 minifies with Oxc; esbuild is no longer bundled
   },
   server: {
     port: 3000,

@@ -27,8 +27,8 @@ function usePeriodicSessionSync(setSessions: (sessions: PTYSessionInfo[]) => voi
 
 interface ActiveSessionViewProps {
   activeSession: PTYSessionInfo
-  terminalRef: RefObject<RawTerminal>
-  outputContainerRef: RefObject<HTMLDivElement>
+  terminalRef: RefObject<RawTerminal | null>
+  outputContainerRef: RefObject<HTMLDivElement | null>
   charCount: number
   wsMessageCount: number
   sessionUpdateCount: number
