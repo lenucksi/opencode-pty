@@ -112,12 +112,12 @@ export class SessionLifecycleManager {
 
   private setupEventHandlers(
     session: PTYSession,
-    onData: (session: PTYSession, data: string) => void,
+    onData: (session: PTYSession, data: string, offset: number) => void,
     onExit: (session: PTYSession, exitCode: number | null) => void
   ): void {
     session.process?.onData((data: string) => {
-      session.buffer.append(data)
-      onData(session, data)
+      const offset = session.buffer.append(data)
+      onData(session, data, offset)
     })
 
     session.process?.onExit(({ exitCode, signal }) => {
@@ -139,7 +139,7 @@ export class SessionLifecycleManager {
 
   spawn(
     opts: SpawnOptions,
-    onData: (session: PTYSession, data: string) => void,
+    onData: (session: PTYSession, data: string, offset: number) => void,
     onExit: (session: PTYSession, exitCode: number | null) => void
   ): PTYSessionInfo {
     const session = this.createSessionObject(opts)

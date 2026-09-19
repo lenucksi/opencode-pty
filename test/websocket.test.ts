@@ -234,7 +234,7 @@ describe('WebSocket Functionality', () => {
 
       let rawData = ''
       managedTestClient.rawDataCallbacks.push((message) => {
-        if (message.session.id === testSession.id) {
+        if (message.sessionId === testSession.id) {
           rawData += message.rawData
         }
       })

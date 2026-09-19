@@ -9,7 +9,9 @@ interface UseSessionManagerOptions {
   subscribeWithRetry: (sessionId: string) => void
   sendInput?: (sessionId: string, data: string) => void
   wsConnected?: boolean
-  onRawOutputUpdate?: (rawOutput: string) => void
+  onSessionReset?: () => void
+  onSnapshot?: (snapshot: { raw: string; offset: number }) => void
+  getSinceOffset?: () => number
 }
 
 export function useSessionManager({
@@ -18,7 +20,9 @@ export function useSessionManager({
   subscribeWithRetry,
   sendInput,
   wsConnected,
-  onRawOutputUpdate,
+  onSessionReset,
+  onSnapshot,
+  getSinceOffset,
 }: UseSessionManagerOptions) {
   const handleSessionClick = useCallback(
     async (session: PTYSessionInfo) => {
@@ -28,27 +32,24 @@ export function useSessionManager({
           return
         }
         setActiveSession(session)
-        onRawOutputUpdate?.('')
-        // Subscribe to this session for live updates
+        onSessionReset?.()
+        // Subscribe to this session before fetching the snapshot so no chunk
+        // produced in between can be lost.
         subscribeWithRetry(session.id)
 
+        const since = getSinceOffset?.() ?? 0
         try {
-          // Fetch raw buffer data only (processed output endpoint removed)
-          const rawData = await api.session.buffer
-            .raw({ id: session.id })
-            .catch(() => ({ raw: '' }))
-
-          // Call callback with raw data
-          onRawOutputUpdate?.(rawData.raw || '')
+          const rawData = await api.session.buffer.raw({ id: session.id, since })
+          onSnapshot?.({ raw: rawData.raw || '', offset: rawData.offset })
         } catch {
-          onRawOutputUpdate?.('')
+          // Keep whatever the WebSocket stream already delivered.
         }
       } catch {
         // Ensure UI remains stable
-        onRawOutputUpdate?.('')
+        onSessionReset?.()
       }
     },
-    [setActiveSession, subscribeWithRetry, onRawOutputUpdate]
+    [setActiveSession, subscribeWithRetry, onSessionReset, onSnapshot, getSinceOffset]
   )
 
   const handleSendInput = useCallback(

@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
-import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import type { PTYSessionInfo, WSMessageServerRawData } from 'opencode-pty/web/shared/types'
 
 import { useWebSocket } from '../hooks/use-web-socket.ts'
 import { useSessionManager } from '../hooks/use-session-manager.ts'
+import { useRawStream } from '../hooks/use-raw-stream.ts'
 
 import { Sidebar } from './sidebar.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
@@ -11,11 +12,41 @@ import { api } from '../../shared/api-client.ts'
 export function App() {
   const [sessions, setSessions] = useState<PTYSessionInfo[]>([])
   const [activeSession, setActiveSession] = useState<PTYSessionInfo | null>(null)
-  const [rawOutput, setRawOutput] = useState<string>('')
 
   const [connected, setConnected] = useState(false)
   const [wsMessageCount, setWsMessageCount] = useState(0)
   const [sessionUpdateCount, setSessionUpdateCount] = useState(0)
+
+  const { rawOutput, reset: resetRawStream, applyChunk, applySnapshot, getOffset } = useRawStream()
+
+  const activeSessionIdRef = useRef<string | null>(null)
+  const resyncingRef = useRef(false)
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSession?.id ?? null
+  }, [activeSession])
+
+  const resync = useCallback(
+    async (sessionId: string) => {
+      if (resyncingRef.current) {
+        return
+      }
+      resyncingRef.current = true
+      try {
+        const since = getOffset()
+        const data = await api.session.buffer.raw({ id: sessionId, since })
+        if (activeSessionIdRef.current !== sessionId) {
+          return
+        }
+        applySnapshot({ raw: data.raw || '', offset: data.offset })
+      } catch (error) {
+        console.error('Failed to resync raw buffer snapshot', error)
+      } finally {
+        resyncingRef.current = false
+      }
+    },
+    [getOffset, applySnapshot]
+  )
 
   const {
     connected: wsConnected,
@@ -23,13 +54,16 @@ export function App() {
     sendInput,
   } = useWebSocket({
     activeSession,
-    onRawData: useCallback((rawData: string) => {
-      setRawOutput((prev) => {
-        const newOutput = prev + rawData
-        return newOutput
-      })
-      setWsMessageCount((prev) => prev + 1)
-    }, []),
+    onRawData: useCallback(
+      (message: WSMessageServerRawData) => {
+        setWsMessageCount((prev) => prev + 1)
+        const result = applyChunk({ rawData: message.rawData, offset: message.offset })
+        if (result === 'gap') {
+          void resync(message.sessionId)
+        }
+      },
+      [applyChunk, resync]
+    ),
     onSessionList: useCallback(
       (newSessions: PTYSessionInfo[], autoSelected: PTYSessionInfo | null) => {
         setSessions(newSessions)
@@ -37,16 +71,17 @@ export function App() {
           return
         }
         setActiveSession(autoSelected)
+        resetRawStream()
         api.session.buffer
-          .raw({ id: autoSelected.id })
+          .raw({ id: autoSelected.id, since: getOffset() })
           .then((data) => {
-            setRawOutput(data.raw)
+            applySnapshot({ raw: data.raw || '', offset: data.offset })
           })
           .catch((error) => {
             console.error('Failed to fetch initial raw buffer for auto-selected session', error)
           })
       },
-      []
+      [resetRawStream, applySnapshot, getOffset]
     ),
     onSessionUpdate: useCallback((updatedSession: PTYSessionInfo) => {
       setSessionUpdateCount((prev) => prev + 1)
@@ -89,9 +124,9 @@ export function App() {
     subscribeWithRetry,
     sendInput,
     wsConnected,
-    onRawOutputUpdate: useCallback((rawOutput: string) => {
-      setRawOutput(rawOutput)
-    }, []),
+    onSessionReset: resetRawStream,
+    onSnapshot: applySnapshot,
+    getSinceOffset: getOffset,
   })
 
   return (

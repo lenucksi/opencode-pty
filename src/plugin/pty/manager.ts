@@ -43,7 +43,7 @@ function notifySessionUpdate(session: PTYSessionInfo) {
   }
 }
 
-type RawOutputCallback = (session: PTYSessionInfo, rawData: string) => void
+type RawOutputCallback = (sessionId: string, rawData: string, offset: number) => void
 
 export const rawOutputCallbacks: RawOutputCallback[] = []
 
@@ -58,10 +58,10 @@ export function removeRawOutputCallback(callback: RawOutputCallback): void {
   }
 }
 
-function notifyRawOutput(session: PTYSessionInfo, rawData: string): void {
+function notifyRawOutput(sessionId: string, rawData: string, offset: number): void {
   for (const callback of rawOutputCallbacks) {
     try {
-      callback(session, rawData)
+      callback(sessionId, rawData, offset)
     } catch {
       // Ignore callback errors
     }
@@ -94,8 +94,8 @@ class PTYManager {
   spawn(opts: SpawnOptions): PTYSessionInfo {
     const session = this.lifecycleManager.spawn(
       opts,
-      (session, data) => {
-        notifyRawOutput(this.lifecycleManager.toInfo(session), data)
+      (session, data, offset) => {
+        notifyRawOutput(session.id, data, offset)
       },
       async (session, exitCode) => {
         notifySessionUpdate(this.lifecycleManager.toInfo(session))
@@ -149,14 +149,21 @@ class PTYManager {
     )
   }
 
-  getRawBuffer(id: string): { raw: string; byteLength: number } | null {
+  getRawBuffer(
+    id: string,
+    since?: number
+  ): { raw: string; byteLength: number; offset: number } | null {
     return withSession(
       this.lifecycleManager,
       id,
-      (session) => ({
-        raw: session.buffer.readRaw(),
-        byteLength: session.buffer.byteLength,
-      }),
+      (session) => {
+        const { raw, offset } = session.buffer.sliceSince(since ?? 0)
+        return {
+          raw,
+          byteLength: raw.length,
+          offset,
+        }
+      },
       null
     )
   }

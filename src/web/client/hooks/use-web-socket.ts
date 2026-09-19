@@ -12,7 +12,7 @@ import { RouteBuilder } from 'opencode-pty/web/shared/route-builder'
 
 interface UseWebSocketOptions {
   activeSession: PTYSessionInfo | null
-  onRawData?: (rawData: string) => void
+  onRawData?: (message: WSMessageServerRawData) => void
   onSessionList: (sessions: PTYSessionInfo[], autoSelected: PTYSessionInfo | null) => void
   onSessionUpdate?: (updatedSession: PTYSessionInfo) => void
 }
@@ -91,9 +91,9 @@ export function useWebSocket({
           onSessionUpdate?.(sessionUpdateMsg.session)
         } else if (data.type === 'raw_data') {
           const rawDataMsg = data as WSMessageServerRawData
-          const isForActiveSession = rawDataMsg.session.id === activeSessionRef.current?.id
+          const isForActiveSession = rawDataMsg.sessionId === activeSessionRef.current?.id
           if (isForActiveSession) {
-            onRawData?.(rawDataMsg.rawData)
+            onRawData?.(rawDataMsg)
           }
         }
         // eslint-disable-next-line no-empty

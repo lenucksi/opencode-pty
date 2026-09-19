@@ -75,8 +75,10 @@ export interface WSMessageServerUnsubscribedSession extends WSMessageServer {
 
 export interface WSMessageServerRawData extends WSMessageServer {
   type: 'raw_data'
-  session: PTYSessionInfo
+  sessionId: string
   rawData: string
+  /** Monotonic character offset of the first character in `rawData`. */
+  offset: number
 }
 
 export interface WSMessageServerReadRawResponse extends WSMessageServer {

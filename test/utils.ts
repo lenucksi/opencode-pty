@@ -2,6 +2,8 @@ import { OpencodeClient } from '@opencode-ai/sdk'
 import {
   initManager,
   manager,
+  registerRawOutputCallback,
+  removeRawOutputCallback,
   sessionUpdateCallbacks,
   rawOutputCallbacks,
 } from '../src/plugin/pty/manager'
@@ -126,7 +128,7 @@ export class ManagedTestClient implements Disposable {
 
       let rawData = ''
       this.rawDataCallbacks.push((message) => {
-        if (message.session.id !== sessionId) return
+        if (message.sessionId !== sessionId) return
         rawData += message.rawData
         if (rawData.includes(chars)) {
           clearTimeout(timeoutId)
@@ -145,6 +147,72 @@ export class ManagedTestClient implements Disposable {
       | WSMessageClientUnsubscribeSession
   ) {
     this.ws.send(JSON.stringify(message))
+  }
+}
+
+export class RawOutputCollector implements Disposable {
+  private readonly outputs = new Map<string, string>()
+  private readonly waiters = new Set<{
+    sessionId: string
+    predicate: (output: string) => boolean
+    resolve: (output: string) => void
+    timer: ReturnType<typeof setTimeout>
+  }>()
+
+  constructor() {
+    registerRawOutputCallback(this.handleRawOutput)
+  }
+
+  private handleRawOutput = (sessionId: string, chunk: string, _offset: number): void => {
+    const next = (this.outputs.get(sessionId) ?? '') + chunk
+    this.outputs.set(sessionId, next)
+    for (const waiter of [...this.waiters]) {
+      if (waiter.sessionId === sessionId && waiter.predicate(next)) {
+        clearTimeout(waiter.timer)
+        this.waiters.delete(waiter)
+        waiter.resolve(next)
+      }
+    }
+  }
+
+  public get(sessionId: string): string {
+    return this.outputs.get(sessionId) ?? ''
+  }
+
+  public waitFor(
+    sessionId: string,
+    predicate: (output: string) => boolean,
+    timeout = 2000
+  ): Promise<string> {
+    const current = this.outputs.get(sessionId) ?? ''
+    if (predicate(current)) {
+      return Promise.resolve(current)
+    }
+
+    return new Promise((resolve, reject) => {
+      const waiter = {
+        sessionId,
+        predicate,
+        resolve,
+        timer: setTimeout(() => {
+          this.waiters.delete(waiter)
+          reject(
+            new Error(
+              `Timed out waiting for raw output (received: ${this.outputs.get(sessionId) ?? ''})`
+            )
+          )
+        }, timeout),
+      }
+      this.waiters.add(waiter)
+    })
+  }
+
+  [Symbol.dispose]() {
+    for (const waiter of this.waiters) {
+      clearTimeout(waiter.timer)
+    }
+    this.waiters.clear()
+    removeRawOutputCallback(this.handleRawOutput)
   }
 }
 
