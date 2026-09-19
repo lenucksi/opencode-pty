@@ -3,7 +3,9 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-// This test ensures the npm package can be packed, installed, and serves assets correctly
+// This test ensures the package can be packed, installed, and serves assets correctly.
+// Packing uses `bun pm pack` (the project's package manager) rather than `npm`,
+// which is not required to be installed for the bun-based test suite.
 
 async function run(cmd: string[], opts: { cwd?: string } = {}) {
   const proc = Bun.spawn(cmd, {
@@ -25,7 +27,7 @@ function findPackFileFromOutput(stdout: string): string {
     const line = lines[i]
     if (line?.trim().endsWith('.tgz')) return line.trim()
   }
-  throw new Error('No .tgz file found in npm pack output')
+  throw new Error('No .tgz file found in pack output')
 }
 
 describe('npm pack integration', () => {
@@ -62,8 +64,8 @@ describe('npm pack integration', () => {
     // 1) Create temp workspace
     tempDir = mkdtempSync(join(tmpdir(), 'opencode-pty-'))
 
-    // 2) Pack the package
-    const pack = await run(['npm', 'pack'])
+    // 2) Pack the package (triggers the package's `prepack` build)
+    const pack = await run(['bun', 'pm', 'pack'])
     expect(pack.code).toBe(0)
     const tgz = findPackFileFromOutput(pack.stdout)
     packFile = tgz
