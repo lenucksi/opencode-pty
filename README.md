@@ -6,8 +6,8 @@ A plugin for [OpenCode](https://opencode.ai) that provides interactive PTY (pseu
 
 OpenCode's built-in `bash` tool runs commands synchronously—the agent waits for completion. This works for quick commands, but not for:
 
-- **Dev servers** (`npm run dev`, `cargo watch`)
-- **Watch modes** (`npm test -- --watch`)
+- **Dev servers** (`bun run dev`, `cargo watch`)
+- **Watch modes** (`bun test --watch`)
 - **Long-running processes** (database servers, tunnels)
 - **Interactive programs** (REPLs, prompts)
 
@@ -191,14 +191,14 @@ This will ease the development on the client.
 ### Start a dev server
 
 ```
-pty_spawn: command="npm", args=["run", "dev"], title="Dev Server"
+pty_spawn: command="bun", args=["run", "dev"], title="Dev Server"
 → Returns: pty_a1b2c3d4
 ```
 
 ### Start a timed session
 
 ```
-pty_spawn: command="npm", args=["run", "dev"], title="Dev Server", timeoutSeconds=600
+pty_spawn: command="bun", args=["run", "dev"], title="Dev Server", timeoutSeconds=600
 → Returns: pty_a1b2c3d4
 ```
 
@@ -233,7 +233,7 @@ pty_kill: id="pty_a1b2c3d4", cleanup=true
 ### Run with exit notification
 
 ```
-pty_spawn: command="npm", args=["run", "build"], title="Build", notifyOnExit=true
+pty_spawn: command="bun", args=["run", "build"], title="Build", notifyOnExit=true
 → Returns: pty_a1b2c3d4
 ```
 
@@ -272,7 +272,7 @@ This plugin respects OpenCode's [permission settings](https://opencode.ai/docs/p
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "bash": {
-      "npm *": "allow",
+      "bun *": "allow",
       "git push": "deny",
       "terraform *": "deny"
     }
@@ -293,9 +293,9 @@ This plugin respects OpenCode's [permission settings](https://opencode.ai/docs/p
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "bash": {
-      "npm run dev": "allow",
-      "npm run build": "allow",
-      "npm test *": "allow",
+      "bun run dev": "allow",
+      "bun run build": "allow",
+      "bun test *": "allow",
       "cargo *": "allow",
       "python *": "allow"
     }
