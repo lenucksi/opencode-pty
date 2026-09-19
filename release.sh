@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# release.sh - Automate NPM package release via GitHub Actions
+# release.sh - Automate npm-registry package release via GitHub Actions
 # 
 # Usage: ./release.sh [options]
 # 
@@ -112,11 +112,6 @@ if ! command -v git &> /dev/null; then
     exit 1
 fi
 
-if ! command -v npm &> /dev/null; then
-    log_error "npm is required but not installed."
-    exit 1
-fi
-
 # 2. Check Git Status
 log_info "Checking git status..."
 if [ -n "$(git status --porcelain)" ]; then
@@ -130,13 +125,15 @@ log_info "Current version: v$CURRENT_VERSION"
 
 # 4. Bump Version
 if [ "$DRY_RUN" = true ]; then
-    log_info "[DRY-RUN] Would run: npm version $BUMP_TYPE --no-git-tag-version"
+    log_info "[DRY-RUN] Would run: bun pm version $BUMP_TYPE --no-git-tag-version"
     # Estimate next version for display (naive approximation)
     log_info "[DRY-RUN] Would bump version ($BUMP_TYPE)"
 else
-    # npm version returns the new version string like "v1.0.1"
-    NEW_VERSION_TAG=$(npm version "$BUMP_TYPE" --no-git-tag-version)
-    # Remove 'v' prefix for consistency if needed, though npm version returns with v
+    # `bun pm version` mirrors `npm version`: it bumps package.json and prints
+    # the new version (e.g. "v1.0.1"). `--no-git-tag-version` keeps the local
+    # commit/tag behaviour identical to before (the GitHub Action cuts the tag).
+    NEW_VERSION_TAG=$(bun pm version "$BUMP_TYPE" --no-git-tag-version)
+    # Remove 'v' prefix for consistency if needed, though bun pm version returns with v
     NEW_VERSION=${NEW_VERSION_TAG#v}
     log_success "Bumped version to: $NEW_VERSION"
 fi
