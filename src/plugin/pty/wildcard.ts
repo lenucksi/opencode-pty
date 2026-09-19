@@ -11,19 +11,6 @@ export function match(str: string, pattern: string): boolean {
   return regex.test(str)
 }
 
-export function all(input: string, patterns: Record<string, string>): string | undefined {
-  const sorted = Object.entries(patterns).sort(
-    (a, b) => a[0].length - b[0].length || a[0].localeCompare(b[0])
-  )
-  let result: string | undefined
-  for (const [pattern, value] of sorted) {
-    if (match(input, pattern)) {
-      result = value
-    }
-  }
-  return result
-}
-
 export function allStructured(
   input: { head: string; tail: string[] },
   patterns: Record<string, string>

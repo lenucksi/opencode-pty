@@ -101,15 +101,6 @@ extendedTest.describe('PTY Buffer readRaw() Function', () => {
     }
   )
 
-  extendedTest('should demonstrate readRaw functionality preserves newlines', async () => {
-    // This test documents the readRaw() capability
-    // In a real implementation, readRaw() would return: "line1\nline2\nline3\n"
-    // While read() returns: ["line1", "line2", "line3", ""]
-    const expectedRawContent = 'line1\nline2\nline3\n'
-    const expectedParsedLines = ['line1', 'line2', 'line3', '']
-    expect(expectedRawContent.split('\n')).toEqual(expectedParsedLines)
-  })
-
   extendedTest('should expose raw buffer data via API endpoint', async ({ page, api }) => {
     const sessionId = await createSession(api, {
       command: 'bash',
@@ -287,7 +278,6 @@ extendedTest.describe('PTY Buffer readRaw() Function', () => {
       await page.locator('.terminal.xterm').click()
       await page.keyboard.type('1')
       await waitForTerminalRegex(page, /1/)
-      // const apiData = await fetchBufferApi(page, server, sessionId, 'plain')
       const afterContent = await getSerializedContentByXtermSerializeAddon(page, {
         excludeModes: true,
         excludeAltBuffer: true,

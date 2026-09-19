@@ -35,7 +35,6 @@ async function getRawBuffer(
   const data = await api.session.buffer.raw({ id: sessionId })
   return data.raw
 }
-// Usage: await getSerializedContentByXtermSerializeAddon(page, { excludeModes: true, excludeAltBuffer: true })
 
 extendedTest.describe('Buffer Extension on Input', () => {
   extendedTest(

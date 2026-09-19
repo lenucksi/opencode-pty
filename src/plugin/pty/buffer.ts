@@ -220,10 +220,6 @@ export class RingBuffer {
     return this.newlineCount + (this.buffer.endsWith('\n') ? 0 : 1)
   }
 
-  get byteLength(): number {
-    return this.buffer.length
-  }
-
   /** Absolute offset of the first retained character. */
   get bufferStart(): number {
     return this.startOffset
@@ -232,10 +228,6 @@ export class RingBuffer {
   /** Absolute offset one past the last appended character. */
   get bufferEnd(): number {
     return this.endOffset
-  }
-
-  flush(): void {
-    // No-op in new implementation
   }
 
   clear(): void {

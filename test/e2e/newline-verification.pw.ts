@@ -60,13 +60,6 @@ extendedTest.describe('Xterm Newline Handling', () => {
     await page.waitForSelector('.xterm', { timeout: 5000 })
     await waitForTerminalRegex(page, /\$\s*$/)
 
-    // Capture initial
-    // const initialLines = await getTerminalPlainText(page)
-    // const initialLastNonEmpty = findLastNonEmptyLineIndex(initialLines)
-    // console.log('🔍 Initial lines count:', initialLines.length)
-    // console.log('🔍 Initial last non-empty line index:', initialLastNonEmpty)
-    // logLinesUpToIndex(initialLines, initialLastNonEmpty, 'Initial content')
-
     // Type command
     await page.locator('.terminal.xterm').click()
     await page.keyboard.type("echo 'Hello World'")

@@ -48,12 +48,11 @@ export class V1PermissionAuthorizer implements PermissionAuthorizer {
     throw new Error(details ? `${msg} ${details}` : msg)
   }
 
-  private async handleAskPermission(commandLine: string): Promise<never> {
-    await this.denyWithToast(
+  private handleAskPermission(commandLine: string): Promise<never> {
+    return this.denyWithToast(
       `PTY: Command "${commandLine}" requires permission (treated as denied)`,
       `PTY spawn denied: Command "${commandLine}" requires user permission which is not supported by this plugin. Configure explicit "allow" or "deny" in your opencode.json permission.bash settings.`
     )
-    throw new Error('Unreachable')
   }
 
   async checkCommand(command: string, args: string[]): Promise<void> {

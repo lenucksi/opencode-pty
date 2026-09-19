@@ -135,32 +135,6 @@ export interface ISerializeRange {
   end: number
 }
 
-export interface IHTMLSerializeOptions {
-  /**
-   * The number of rows in the scrollback buffer to serialize, starting from
-   * the bottom of the scrollback buffer.
-   */
-  scrollback?: number
-  /**
-   * Whether to only serialize the selection.
-   * Default: false
-   */
-  onlySelection?: boolean
-  /**
-   * Whether to include the global background of the terminal.
-   * Default: false
-   */
-  includeGlobalBackground?: boolean
-  /**
-   * The range to serialize. This is prioritized over onlySelection.
-   */
-  range?: {
-    startLine: number
-    endLine: number
-    startCol: number
-  }
-}
-
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -562,53 +536,6 @@ export class SerializeAddon implements ITerminalAddon {
     }
 
     return content
-  }
-
-  /**
-   * Serializes terminal content as plain text (no escape sequences)
-   * @param options Custom options to allow control over what gets serialized.
-   */
-  public serializeAsText(options?: { scrollback?: number; trimWhitespace?: boolean }): string {
-    if (!this._terminal) {
-      throw new Error('Cannot use addon until it has been loaded')
-    }
-
-    const buffer = getTerminalBuffers(this._terminal)
-
-    if (!buffer) {
-      return ''
-    }
-
-    const activeBuffer = buffer.active ?? buffer.normal
-    if (!activeBuffer) {
-      return ''
-    }
-
-    const maxRows = activeBuffer.length
-    const scrollback = options?.scrollback
-    const correctRows =
-      scrollback === undefined ? maxRows : constrain(scrollback + this._terminal.rows, 0, maxRows)
-
-    const startRow = maxRows - correctRows
-    const endRow = maxRows - 1
-    const lines: string[] = []
-
-    for (let row = startRow; row <= endRow; row++) {
-      const line = activeBuffer.getLine(row)
-      if (line) {
-        const text = line.translateToString(options?.trimWhitespace ?? true)
-        lines.push(text)
-      }
-    }
-
-    // Trim trailing empty lines if requested
-    if (options?.trimWhitespace) {
-      while (lines.length > 0 && lines[lines.length - 1] === '') {
-        lines.pop()
-      }
-    }
-
-    return lines.join('\n')
   }
 
   private _serializeBufferByScrollback(buffer: IBuffer, scrollback?: number): string {
