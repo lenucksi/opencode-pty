@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        quality: [test, typecheck, lint, format, test:e2e]
+        quality: [test, test:coverage, typecheck, lint, format, test:e2e]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
