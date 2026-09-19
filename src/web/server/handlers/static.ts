@@ -14,11 +14,10 @@ const SECURITY_HEADERS = {
   // `script-src` keeps `'wasm-unsafe-eval'` (Chromium and Firefox require it to
   // compile the ghostty-web WebAssembly module; it does NOT enable JS `eval`).
   // The WASM is served as a same-origin asset under `default-src 'self'`, so no
-  // `connect-src data:` is needed. `'unsafe-inline'` is gone from `script-src`
-  // because the built index.html has no inline scripts; `style-src` keeps it
-  // for the inline <style> in index.html (Vite's bundled CSS).
+  // `connect-src data:` is needed. All scripts and styles are emitted as
+  // external same-origin assets, so `'unsafe-inline'` is not needed anywhere.
   'Content-Security-Policy':
-    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline';",
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self';",
 } as const
 const STATIC_DIR = join(PROJECT_ROOT, 'dist/web')
 
