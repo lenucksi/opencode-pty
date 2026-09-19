@@ -68,7 +68,8 @@ export function isEaddrinuse(error: unknown): boolean {
   }
   const code = (error as NodeJS.ErrnoException).code
   return (
-    code === 'EADDRINUSE' || /EADDRINUSE|address already in use|port \d+ in use/i.test(error.message)
+    code === 'EADDRINUSE' ||
+    /EADDRINUSE|address already in use|port \d+ in use/i.test(error.message)
   )
 }
 
