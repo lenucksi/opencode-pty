@@ -54,8 +54,11 @@ export class NotificationManager implements SessionNotifier {
           ...modelContext,
         },
       })
-    } catch {
-      // Ignore notification errors
+    } catch (error) {
+      // Surface delivery failures instead of swallowing them silently; the V2
+      // notifier already warns, and a lost exit notification would otherwise be
+      // invisible to the user.
+      console.warn('[opencode-pty] failed to send exit notification:', error)
     }
   }
 }
