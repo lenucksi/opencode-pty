@@ -1,4 +1,5 @@
 import { test as extendedTest, expect } from './fixtures'
+import { waitForTerminalRegex } from './xterm-test-helpers'
 import type { Page } from '@playwright/test'
 import type { createApiClient } from 'opencode-pty/web/shared/api-client'
 
@@ -18,7 +19,7 @@ async function setupSession(
   await page.waitForSelector('.output-container', { timeout: 5000 })
   await page.waitForSelector('.xterm', { timeout: 5000 })
   // Wait for bash prompt to appear (indicating interactive session is ready)
-  await page.waitForSelector('.xterm:has-text("$")', { timeout: 10000 })
+  await waitForTerminalRegex(page, /\$\s*$/)
   return id
 }
 async function typeInTerminal(page: Page, text: string) {

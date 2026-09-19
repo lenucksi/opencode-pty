@@ -1,4 +1,5 @@
 import { test as extendedTest, expect } from './fixtures'
+import { waitForTerminalRegex } from './xterm-test-helpers'
 
 extendedTest.describe('Xterm Content Extraction', () => {
   extendedTest(
@@ -19,10 +20,9 @@ extendedTest.describe('Xterm Content Extraction', () => {
       await page.waitForSelector('.output-container', { timeout: 5000 })
       await page.waitForSelector('.xterm', { timeout: 5000 })
 
-      // Wait for command output to appear
-      await page.waitForSelector('.xterm:has-text("Hello from manual buffer test")', {
-        timeout: 10000,
-      })
+      // Wait for command output to appear (SerializeAddon-backed waiter; the
+      // canvas renderer has no DOM text layer to match on).
+      await waitForTerminalRegex(page, /Hello from manual buffer test/)
 
       // Extract content directly from xterm.js Terminal buffer using manual reading
       const extractedContent = await page.evaluate(() => {

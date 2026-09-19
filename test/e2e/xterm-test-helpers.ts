@@ -1,10 +1,11 @@
 import type { Page } from '@playwright/test'
-import type { SerializeAddon } from '@xterm/addon-serialize'
+import type { SerializeAddon } from '../../src/web/client/addons/serialize.ts'
 
-// Global module augmentation for E2E testing
+// Global module augmentation for E2E testing. The emulator is ghostty-web now;
+// the `xterm*` global names are retained for historical test compatibility.
 declare global {
   interface Window {
-    xtermTerminal?: import('@xterm/xterm').Terminal
+    xtermTerminal?: import('ghostty-web').Terminal
     xtermSerializeAddon?: SerializeAddon
   }
 }
@@ -122,18 +123,24 @@ export const waitForTerminalRegex = async (
       }
 
       return new Promise<boolean>((resolve) => {
-        const disposable = term.onWriteParsed(() => {
-          if (checkMatch(serializeAddon)) {
-            disposable.dispose()
-            resolve(true)
-          }
-        })
-
-        // Immediate check
-        if (checkMatch(serializeAddon)) {
-          disposable.dispose()
+        // ghostty-web has no `onWriteParsed` event, so poll the serialized
+        // buffer instead. The emulator parses writes synchronously, so this is
+        // an accurate (if slightly less event-driven) readiness signal.
+        let done = false
+        let intervalId: ReturnType<typeof setInterval> | undefined
+        const finish = () => {
+          if (done) return
+          done = true
+          if (intervalId !== undefined) clearInterval(intervalId)
           resolve(true)
         }
+        const check = () => {
+          if (checkMatch(serializeAddon)) finish()
+        }
+        intervalId = setInterval(check, 50)
+
+        // Immediate check
+        check()
       })
     },
     {

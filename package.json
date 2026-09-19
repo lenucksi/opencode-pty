@@ -88,6 +88,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/xterm": "^6.0.0",
+    "ghostty-web": "github:anomalyco/ghostty-web#83c0a07b8628b748aed073b232cb4b52a6ca11c1",
     "happy-dom": "^20.5.0",
     "jsdom": "^27.4.0",
     "playwright-core": "1.57.0",

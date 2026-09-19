@@ -11,8 +11,11 @@ const SECURITY_HEADERS = {
   'X-Frame-Options': 'DENY',
   'X-XSS-Protection': '1; mode=block',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
+  // ghostty-web compiles a WebAssembly module (`'wasm-unsafe-eval'`) from a
+  // data: URL, so `connect-src` has to allow `data:` and `script-src` has to
+  // allow WebAssembly compilation.
   'Content-Security-Policy':
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';",
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' data:;",
 } as const
 const STATIC_DIR = join(PROJECT_ROOT, 'dist/web')
 
