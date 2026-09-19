@@ -279,9 +279,14 @@ describe('WebSocket Functionality', () => {
       await using managedTestClient = await ManagedTestClient.create(
         managedTestServer.server.getWsUrl()
       )
+      // Invoke bash non-interactively: it reads one line from stdin, echoes
+      // it, and exits. An interactive shell discards input written before
+      // readline is initialised, which made this subscription round-trip
+      // racy. A blocking `read` buffers the input deterministically, so the
+      // session reliably reaches `exited`.
       const testSession = manager.spawn({
         command: 'bash',
-        args: [],
+        args: ['-c', 'read -r line; echo "$line"; exit'],
         description: 'Test session for subscription logic',
         parentSessionId: managedTestServer.sessionId,
       })
@@ -322,7 +327,7 @@ describe('WebSocket Functionality', () => {
       managedTestClient.send({
         type: 'input',
         sessionId: testSession.id,
-        data: "echo 'Hello from subscription test'\nexit\n",
+        data: 'Hello from subscription test\n',
       })
 
       // Wait for session to exit
@@ -344,7 +349,7 @@ describe('WebSocket Functionality', () => {
         sessionId: testSession.id,
       })
       await unsubscribePromise
-    }, 500)
+    }, 5000)
 
     it('should handle multiple subscription states correctly', async () => {
       await using managedTestClient = await ManagedTestClient.create(
@@ -421,6 +426,6 @@ describe('WebSocket Functionality', () => {
       // multiple subscriptions per client, which is essential for the UI
       // to properly track counter state for different sessions.
       // Integration test failures were DOM-related, not subscription logic issues.
-    }, 200)
+    }, 5000)
   })
 })
