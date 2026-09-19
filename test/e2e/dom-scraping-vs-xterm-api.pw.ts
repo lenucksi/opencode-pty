@@ -1,9 +1,13 @@
 import { test as extendedTest, expect } from './fixtures'
-import { waitForTerminalRegex } from './xterm-test-helpers'
+import {
+  getTerminalBufferLines,
+  getTerminalPlainText,
+  waitForTerminalRegex,
+} from './xterm-test-helpers'
 
 extendedTest.describe('Xterm Content Extraction', () => {
   extendedTest(
-    'should validate DOM scraping against xterm.js Terminal API',
+    'should validate SerializeAddon extraction against the Terminal buffer API',
     async ({ page, api }) => {
       await page.waitForSelector('h1:has-text("PTY Sessions")')
 
@@ -23,43 +27,17 @@ extendedTest.describe('Xterm Content Extraction', () => {
       // Wait for the command to complete
       await waitForTerminalRegex(page, /Line 3/)
 
-      // Extract content using DOM scraping
-      const domContent = await page.evaluate(() => {
-        const terminalElement = document.querySelector('.xterm')
-        if (!terminalElement) return []
+      // Extract content via the canonical SerializeAddon extractor (no DOM text
+      // layer exists with ghostty-web's canvas renderer).
+      const serializeContent = await getTerminalPlainText(page)
 
-        const lines = Array.from(terminalElement.querySelectorAll('.xterm-rows > div')).map(
-          (row) => {
-            return Array.from(row.querySelectorAll('span'))
-              .map((span) => span.textContent || '')
-              .join('')
-          }
-        )
+      // Extract content via the emulator's Terminal buffer API
+      const terminalContent = await getTerminalBufferLines(page)
 
-        return lines
-      })
-
-      // Extract content using xterm.js Terminal API
-      const terminalContent = await page.evaluate(() => {
-        const term = window.xtermTerminal
-        if (!term?.buffer?.active) return []
-
-        const buffer = term.buffer.active
-        const lines = []
-        for (let i = 0; i < buffer.length; i++) {
-          const line = buffer.getLine(i)
-          if (line) {
-            lines.push(line.translateToString())
-          } else {
-            lines.push('')
-          }
-        }
-        return lines
-      })
-
-      // NOTE: Strict line-by-line equality between DOM and Terminal API is not enforced.
-      // xterm.js and DOM scraper may differ on padding, prompt, and blank lines due to rendering quirks across browsers/versions.
-      // For robust test coverage, instead assert BOTH methods contain the expected command output as an ordered slice.
+      // NOTE: Strict line-by-line equality between the two extractors is not enforced.
+      // They may differ on padding, prompt, and blank lines due to trimming quirks.
+      // For robust test coverage, instead assert BOTH methods contain the expected
+      // command output as an ordered slice.
 
       function findSliceIndex(haystack: string[], needles: string[]): number {
         // Returns the index in haystack where an ordered slice matching needles starts, or -1
@@ -77,18 +55,17 @@ extendedTest.describe('Xterm Content Extraction', () => {
       }
 
       const expectedLines = ['Line 1', 'Line 2', 'Line 3']
-      const domIdx = findSliceIndex(domContent, expectedLines)
+      const serializeIdx = findSliceIndex(serializeContent, expectedLines)
       const termIdx = findSliceIndex(terminalContent, expectedLines)
-      expect(domIdx).not.toBe(-1) // DOM extraction contains output
-      expect(termIdx).not.toBe(-1) // API extraction contains output
+      expect(serializeIdx).not.toBe(-1) // SerializeAddon extraction contains output
+      expect(termIdx).not.toBe(-1) // Terminal API extraction contains output
 
       // Optionally: Fail if the arrays are dramatically different in length (to catch regressions)
-      expect(Math.abs(domContent.length - terminalContent.length)).toBeLessThan(8)
-      expect(domContent.length).toBeGreaterThanOrEqual(3)
+      expect(Math.abs(serializeContent.length - terminalContent.length)).toBeLessThan(8)
+      expect(serializeContent.length).toBeGreaterThanOrEqual(3)
       expect(terminalContent.length).toBeGreaterThanOrEqual(3)
 
       // (No output if matching: ultra-silent)
-      // If wanted, could log a warning if any unexpected extra content appears (not required for this test)
     }
   )
 })

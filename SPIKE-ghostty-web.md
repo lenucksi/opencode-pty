@@ -106,3 +106,105 @@ bun add -d github:anomalyco/ghostty-web#83c0a07b8628b748aed073b232cb4b52a6ca11c1
 bun run format && bun run lint && bun run build:prod && bun run typecheck && bun test
 bash .local/e2e-local.sh --project=chromium
 ```
+
+---
+
+# TASK-6: adoption outcome (supersedes the "do not migrate" recommendation)
+
+The three blockers above are resolved; the branch now has all 34 chromium E2E tests
+green. Details:
+
+## DOM text layer removed from E2E
+
+- `getTerminalPlainText` is now backed by the canonical `SerializeAddon`
+  (`window.xtermSerializeAddon`), still returning `string[]` up to the last
+  non-empty line.
+- New `getTerminalBufferLines` reads the emulator buffer API
+  (`window.xtermTerminal.buffer.active`) as a second, independent extractor.
+- `dom-scraping-vs-xterm-api.pw.ts` and `dom-vs-api-interactive-commands.pw.ts`
+  now compare `SerializeAddon` vs the Terminal buffer API (no `.xterm-rows`).
+- `extraction-methods-echo-prompt-match.pw.ts` compares `SerializeAddon` vs the
+  buffer API vs the backend plain-buffer API.
+- `newline-verification.pw.ts` only referenced `getTerminalPlainText` in a
+  comment; no change needed.
+
+## WASM externalized; CSP strict
+
+- `terminal-renderer.tsx` imports `ghostty-web/ghostty-vt.wasm?url` and calls
+  `Ghostty.load(url)`, then passes the instance to `new Terminal({ ghostty })`.
+- `vite.config.ts` aliases `ghostty-web` to the fork's TypeScript source
+  (`node_modules/ghostty-web/lib/index.ts`). The published `dist` hard-codes the
+  WASM as a `data:application/wasm` base64 string; the source references it via
+  `new URL(..., import.meta.url)`, so Vite emits a real content-hashed asset and
+  the base64 disappears from the JS (verified: 0 occurrences).
+- CSP is now `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline';`
+  — dropped `script-src 'unsafe-inline'` (no inline scripts in the build) and
+  dropped `connect-src data:`.
+
+### `'wasm-unsafe-eval'` is genuinely required (empirical)
+
+Removing only that keyword makes the terminal fail to initialize. Captured
+browser console error:
+
+```
+[RawTerminal] initializeTerminal failed CompileError: WebAssembly.compile():
+Compiling or instantiating WebAssembly module violates the following Content
+Security policy directive because 'unsafe-eval' is not an allowed source of
+script in the following Content Security Policy directive:
+```
+
+With the keyword present the terminal initializes and `SerializeAddon` works.
+It does **not** enable JS `eval`.
+
+## Bundle (minified production, externalized WASM)
+
+| Build | JS raw | JS gzip | CSS raw/gzip | WASM raw/gzip |
+| --- | --- | --- | --- | --- |
+| xterm (base) | 504,131 B | 138,669 B | 3,621 / 1,014 B | — |
+| ghostty fork, embedded (spike) | 1,546,904 B | 480,393 B | none | embedded |
+| ghostty upstream 0.4.0, embedded (spike 2) | 803,831 B | 239,006 B | — | embedded |
+| **ghostty fork, externalized (this)** | **255,891 B** | **77,402 B** | 2,681 / 920 B | 967,563 / 298,598 B |
+
+Total transfer: 1,226,135 B raw / 376,920 B gzip. The JS itself is smaller than
+the xterm baseline; the WASM is a separate, content-hashed, immutable-cacheable
+asset, so repeat visits only re-fetch the ~77 KB JS.
+
+## Fork vs npm decision: keep the fork
+
+Keep `github:anomalyco/ghostty-web#83c0a07`; do **not** move to upstream npm 0.4.0.
+
+- Upstream 0.4.0 regresses `scrollback` semantics (bytes vs lines; `scrollback:
+  5000` keeps ~854 lines) and viewport/row stability (8/30 corrupted reps, 11
+  scrollback drops) whereas the fork showed 0/0. These are correctness bugs in a
+  terminal emulator; bundle size is secondary.
+- The fork's bundle penalty was the inlined base64 WASM. With the source alias +
+  external asset the shipped JS is 77 KB gzip and the WASM is a cacheable asset,
+  so upstream's size advantage largely disappears.
+- The fork is the implementation the opencode host itself uses, which reduces
+  behavior skew between the host and this plugin.
+
+**Caveat:** the alias relies on the fork's `lib/` TypeScript sources, which are
+present in a git dependency but omitted from an npm tarball (`files` only ships
+`dist`). If the dependency ever moves to npm, either vendor/patch the `dist`
+entry or use a build that exposes the WASM path.
+
+## Additional fixes required for a green suite
+
+- **Empty writes crash ghostty-web.** `GhosttyTerminal.write()` calls
+  `new Uint8Array(memory.buffer).set(bytes, ptr)`; for empty `bytes` the
+  `alloc(0)` pointer is out of bounds and throws `RangeError: offset is out of
+  bounds`. This was the root cause of the intermittent
+  `local-vs-remote-echo-fast-typing` failure (empty `raw_data` chunks replayed on
+  init). `applyIntent` now skips zero-length `append`/`rewrite` payloads.
+- **CSS asset restored.** The xterm swap removed the only CSS import, so the
+  build stopped emitting `/assets/*.css` and the `should serve built assets`
+  unit test failed. `main.tsx` now imports `index.css` (the app stylesheet,
+  previously unused); the inline `<style>` in `index.html` is kept, so
+  `style-src 'unsafe-inline'` is still required.
+
+## Final verification
+
+- `bun run format`, `bun run lint`, `bun run typecheck` — clean.
+- `bun test` — 108 pass / 1 skip / 4 fail (the four pre-existing failures).
+- `bash .local/e2e-local.sh --project=chromium` — 34 passed / 0 failed.
+

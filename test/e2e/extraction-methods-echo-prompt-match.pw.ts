@@ -1,12 +1,12 @@
 import {
-  getTerminalPlainText,
   getSerializedContentByXtermSerializeAddon,
+  getTerminalBufferLines,
   waitForTerminalRegex,
 } from './xterm-test-helpers'
 import { test as extendedTest, expect } from './fixtures'
 
 extendedTest(
-  'should assert exactly 2 "$" prompts appear and verify 4 extraction methods match (ignoring \\r) with echo "Hello World"',
+  'should assert exactly 2 "$" prompts appear and verify extraction methods match (ignoring \\r) with echo "Hello World"',
   async ({ page, api }) => {
     // Setup session with echo command
     const session = await api.sessions.create({
@@ -36,13 +36,13 @@ extendedTest(
     const serializeContent = await getSerializedContentByXtermSerializeAddon(page)
     const serializeStrippedContent = Bun.stripANSI(serializeContent).split('\n')
 
-    // API
+    // API (backend buffer)
     const plainData = await api.session.buffer.plain({ id: session.id })
     const plainApiContent = plainData.plain.split('\n')
 
-    // SECONDARY: DOM scraping (for informational/debug purposes only)
-    // Kept for rare debugging or cross-checks only; not used in any required assertions.
-    const domContent = await getTerminalPlainText(page)
+    // SECONDARY: emulator Terminal buffer API (independent of SerializeAddon).
+    // ghostty-web is canvas-only, so there is no DOM text layer to scrape.
+    const bufferContent = await getTerminalBufferLines(page)
 
     // === VISUAL VERIFICATION LOGGING ===
 
@@ -55,7 +55,7 @@ extendedTest(
 
     // Count $ signs in each method
     const countDollarSigns = (lines: string[]) => lines.join('').split('$').length - 1
-    const domDollarCount = countDollarSigns(domContent)
+    const bufferDollarCount = countDollarSigns(bufferContent)
     const serializeDollarCount = countDollarSigns(serializeStrippedContent)
     const serializeBunDollarCount = countDollarSigns(serializeStrippedContent)
 
@@ -64,21 +64,21 @@ extendedTest(
     // Minimal diff logic (unused hasMismatch removed)
     // Show $ count summary only if not all equal
     const dollarCounts = [
-      domDollarCount,
+      bufferDollarCount,
       serializeDollarCount,
       serializeBunDollarCount,
       plainDollarCount,
     ]
     if (!dollarCounts.every((v) => v === dollarCounts[0])) {
       // console.log(
-      //   `DIFFERENCE: $ counts across methods: DOM=${domDollarCount}, SerializeNPM=${serializeDollarCount}, SerializeBun=${serializeBunDollarCount}, Plain=${plainDollarCount}`
+      //   `DIFFERENCE: $ counts across methods: Buffer=${bufferDollarCount}, SerializeNPM=${serializeDollarCount}, SerializeBun=${serializeBunDollarCount}, Plain=${plainDollarCount}`
       // )
     }
     // === VALIDATION ASSERTIONS ===
 
     // Basic content presence
-    const domJoined = domContent.join('\n')
-    expect(domJoined).toContain('Hello World')
+    const bufferJoined = bufferContent.join('\n')
+    expect(bufferJoined).toContain('Hello World')
 
     // $ sign count validation
     // Tolerate 2 or 3 prompts -- some bash shells emit initial prompt, before and after command (env-dependent)
@@ -86,22 +86,18 @@ extendedTest(
     expect([2, 3]).toContain(serializeDollarCount)
     expect([2, 3]).toContain(plainDollarCount)
     // Informational only:
-    // console.log(`DOM $ count = ${domDollarCount}`)
+    // console.log(`Buffer $ count = ${bufferDollarCount}`)
     // console.log(`SerializeAddon $ count = ${serializeDollarCount}`)
 
     // Robust output comparison: canonical check is that SerializeAddon and plainApi have output and prompt
     expect(serializeNormalized.some((line) => line.includes('Hello World'))).toBe(true)
     expect(plainNormalized.some((line) => line.includes('Hello World'))).toBe(true)
-    // The others are debug-only (not required for pass/fail)
-    // expect(domNormalized.some((line) => line.includes('Hello World'))).toBe(true)
-    // expect(serializeBunNormalized.some((line) => line.includes('Hello World'))).toBe(true)
+    // The other is debug-only (not required for pass/fail)
+    // expect(bufferNormalized.some((line) => line.includes('Hello World'))).toBe(true)
 
     // Ensure at least one prompt appears in each normalized array (only require for stable methods)
     expect(serializeNormalized.some((line) => /\$\s*$/.test(line))).toBe(true)
     expect(plainNormalized.some((line) => /\$\s*$/.test(line))).toBe(true)
-    // The others are debug-only
-    // expect(domNormalized.some((line) => /\$\s*$/.test(line))).toBe(true)
-    // expect(serializeBunNormalized.some((line) => /\$\s*$/.test(line))).toBe(true)
 
     // ANSI cleaning validation
     const serializeNpmJoined = serializeStrippedContent.join('\n')
@@ -110,9 +106,7 @@ extendedTest(
     expect(serializeBunJoined).not.toContain('\x1B[') // No ANSI codes in Serialize+Bun.stripANSI (merged)
 
     // Length similarity (should be very close with echo command)
-    expect(Math.abs(domContent.length - serializeStrippedContent.length)).toBeLessThan(2)
-    expect(Math.abs(domContent.length - serializeStrippedContent.length)).toBeLessThan(2)
-
-    expect(Math.abs(domContent.length - plainApiContent.length)).toBeLessThan(2)
+    expect(Math.abs(bufferContent.length - serializeStrippedContent.length)).toBeLessThan(2)
+    expect(Math.abs(bufferContent.length - plainApiContent.length)).toBeLessThan(2)
   }
 )

@@ -7,9 +7,20 @@ export default defineConfig({
   plugins: [react()],
   root: 'src/web/client',
   resolve: {
-    alias: {
-      'opencode-pty': path.resolve(__dirname, './src'),
-    },
+    alias: [
+      // Use ghostty-web's TypeScript source so Vite emits `ghostty-vt.wasm` as
+      // a real same-origin asset via `new URL(..., import.meta.url)`. The
+      // published `dist/ghostty-web.js` bundle inlines the WASM as a
+      // `data:application/wasm` URL, which the app CSP (`connect-src 'self'`)
+      // blocks and which bloats the JS bundle by ~1.3 MB. Exact match only:
+      // subpath imports (e.g. `ghostty-web/ghostty-vt.wasm?url`) must keep
+      // resolving through the package exports map.
+      {
+        find: /^ghostty-web$/,
+        replacement: path.resolve(__dirname, 'node_modules/ghostty-web/lib/index.ts'),
+      },
+      { find: 'opencode-pty', replacement: path.resolve(__dirname, './src') },
+    ],
   },
   build: {
     outDir: '../../../dist/web',

@@ -1,7 +1,29 @@
 import React from 'react'
-import { FitAddon, init, Terminal, type ITheme } from 'ghostty-web'
+import { FitAddon, Ghostty, Terminal, type ITheme } from 'ghostty-web'
+// Vite emits the package's `ghostty-vt.wasm` as a same-origin, content-hashed
+// asset and rewrites this import to its final URL. Passing that URL to
+// `Ghostty.load()` keeps the WASM out of the JS bundle and avoids the
+// `data:application/wasm` fallback, which the app CSP (`connect-src 'self'`)
+// would block.
+import ghosttyWasmUrl from 'ghostty-web/ghostty-vt.wasm?url'
 import { SerializeAddon } from '../addons/serialize.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
+
+/**
+ * Load the shared Ghostty WASM instance once per page. `Ghostty.load(path)`
+ * fetches the externalized asset; the promise is cached so every terminal in
+ * the app reuses the same instance (mirroring the package's own `init()`).
+ */
+let ghosttyPromise: Promise<Ghostty> | null = null
+function loadGhostty(): Promise<Ghostty> {
+  // Reset the cache on failure so a transient load error does not poison every
+  // subsequent terminal in the page (the package's `init()` also retries).
+  ghosttyPromise ??= Ghostty.load(ghosttyWasmUrl).catch((err) => {
+    ghosttyPromise = null
+    throw err
+  })
+  return ghosttyPromise
+}
 
 // Global module augmentation to extend Window interface. The `xterm*` names are
 // kept for E2E test compatibility even though the emulator is now ghostty-web.
@@ -89,11 +111,18 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
 
     switch (intent.type) {
       case 'append':
-        term.write(intent.data)
+        // ghostty-web's `GhosttyTerminal.write()` throws a `RangeError:
+        // offset is out of bounds` for empty input (`alloc(0)` yields a
+        // pointer that is not addressable in the typed-array view). Skip it.
+        if (intent.data.length > 0) {
+          term.write(intent.data)
+        }
         break
       case 'rewrite':
         term.reset()
-        term.write(intent.data)
+        if (intent.data.length > 0) {
+          term.write(intent.data)
+        }
         break
       case 'reset':
         term.reset()
@@ -132,8 +161,9 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
   }
 
   private async initializeTerminal(generation: number) {
-    // Load the shared WASM instance. `init()` is idempotent.
-    await init()
+    // Load the shared WASM instance from the same-origin asset. The promise is
+    // shared across terminals and terminal remounts.
+    const ghostty = await loadGhostty()
     if (generation !== this.initGeneration) return
 
     const term = new Terminal({
@@ -144,6 +174,9 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
       fontFamily: 'monospace',
       fontSize: 14,
       scrollback: 5000,
+      // Use the explicitly-loaded external WASM rather than the module-level
+      // `init()` singleton (whose bundle inlines a blocked data: URL).
+      ghostty,
     })
 
     this.fitAddon = new FitAddon()
