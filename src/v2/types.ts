@@ -1,3 +1,5 @@
+import type { Plugin } from '@opencode/plugin'
+
 export interface OpencodePtyOptions {
   /**
    * Fixed port for the PTY Web UI observer server.
@@ -68,7 +70,16 @@ export interface PluginContextV2 {
     transform(callback: (tools: ToolDraft) => Promise<void> | void): Promise<unknown> | undefined
     reload?(): Promise<void> | void
   }
-  readonly [key: string]: unknown
+  /**
+   * opencode v2's plugin contexts are server clients: the `session` domain is
+   * how a plugin reads sessions and wakes them with user prompts. Typed from
+   * `@opencode/plugin` (the V2 SDK) so `ctx.session?.prompt` is checked
+   * against the real `SessionPromptInput`. Optional because hosts pre-2.0.x
+   * may not expose it; the setup guards at runtime.
+   */
+  readonly session?: {
+    readonly prompt: Plugin.Context['session']['prompt']
+  }
 }
 
 export interface PluginV2 {
