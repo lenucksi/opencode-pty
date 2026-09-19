@@ -1,11 +1,11 @@
-Terminates a PTY session and optionally cleans up its buffer.
+Terminates a running PTY session.
 
 Use this tool to:
 - Stop a running process (sends SIGTERM)
 
 Usage:
 - `id`: The PTY session ID (from pty_spawn or pty_list)
-- `cleanup`: Deprecated — remove sessions from the human web UI instead (default: false)
+- `cleanup`: Deprecated — remove finished sessions from the human web UI instead.
 
 Behavior:
 - If the session is running, it will be killed (status becomes "killed")
@@ -13,15 +13,9 @@ Behavior:
 - If cleanup=true, the session is removed entirely and the buffer is freed
 
 Deprecation:
-- Removing sessions is intended for humans via the web UI. The `cleanup` flag
-  still works for backwards compatibility but will be removed in a future
-  release, so prefer killing the session and leaving it for the human to
-  discard. Finished sessions are pruned from the list by the human, not by tools.
+- Removing sessions is intended for humans via the web UI. The `cleanup` flag still
+  works for backwards compatibility but will be removed in a future release, so prefer
+  killing the session and letting the human discard it.
 
 Tips:
-- Use cleanup=false and let the human remove finished sessions from the web UI
-- Keeping sessions without cleanup allows you to compare logs between runs
 - To send Ctrl+C instead of killing, use pty_write with data="\x03"
-
-Examples:
-- Kill but keep logs: cleanup=false (or omit)
