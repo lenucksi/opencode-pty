@@ -100,4 +100,75 @@ describe('RawStream', () => {
     expect(stream.offset).toBe(0)
     expect(stream.initialized).toBe(false)
   })
+
+  it('backfills a prefix chunk that starts before the rendered window', () => {
+    const stream = new RawStream()
+
+    // Seed mid-stream, then receive a chunk that also covers the missing head.
+    stream.applyChunk({ rawData: ' worl', offset: 5 })
+    expect(stream.start).toBe(5)
+    expect(stream.render).toEqual({ type: 'append', data: ' worl' })
+
+    expect(stream.applyChunk({ rawData: 'hello world', offset: 0 })).toBe('applied')
+    expect(stream.value).toBe('hello world')
+    expect(stream.start).toBe(0)
+    expect(stream.offset).toBe(11)
+    expect(stream.render).toEqual({ type: 'rewrite', data: 'hello world' })
+  })
+
+  it('appends only the suffix of a snapshot that extends past the window', () => {
+    const stream = new RawStream()
+
+    stream.applyChunk({ rawData: 'abc', offset: 0 })
+    stream.applySnapshot({ raw: 'abcde', offset: 0 })
+
+    expect(stream.value).toBe('abcde')
+    expect(stream.offset).toBe(5)
+    expect(stream.render).toEqual({ type: 'append', data: 'de' })
+  })
+
+  it('produces a rewrite when the snapshot backfills the head', () => {
+    const stream = new RawStream()
+
+    stream.applyChunk({ rawData: 'cde', offset: 2 })
+    stream.applySnapshot({ raw: 'abcde', offset: 0 })
+
+    expect(stream.value).toBe('abcde')
+    expect(stream.render).toEqual({ type: 'rewrite', data: 'abcde' })
+  })
+
+  it('exposes a none render intent when nothing changes', () => {
+    const stream = new RawStream()
+
+    stream.applyChunk({ rawData: 'hello', offset: 0 })
+    expect(stream.applyChunk({ rawData: 'hello', offset: 0 })).toBe('duplicate')
+    expect(stream.render).toEqual({ type: 'none' })
+
+    expect(stream.applyChunk({ rawData: 'world', offset: 99 })).toBe('gap')
+    expect(stream.render).toEqual({ type: 'none' })
+
+    stream.applySnapshot({ raw: 'hello', offset: 0 })
+    expect(stream.render).toEqual({ type: 'none' })
+  })
+
+  it('reports the reset render intent after reset', () => {
+    const stream = new RawStream()
+
+    stream.applyChunk({ rawData: 'hello', offset: 0 })
+    stream.reset()
+
+    expect(stream.render).toEqual({ type: 'reset' })
+  })
+
+  it('marks itself initialized only after the first chunk or snapshot', () => {
+    const stream = new RawStream()
+    expect(stream.initialized).toBe(false)
+
+    stream.applyChunk({ rawData: 'hello', offset: 0 })
+    expect(stream.initialized).toBe(true)
+
+    const snapshotStream = new RawStream()
+    snapshotStream.applySnapshot({ raw: 'snapshot', offset: 0 })
+    expect(snapshotStream.initialized).toBe(true)
+  })
 })
