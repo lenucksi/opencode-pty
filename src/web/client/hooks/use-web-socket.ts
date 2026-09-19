@@ -1,18 +1,18 @@
-import { useState, useEffect, useRef } from 'react'
-import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type {
+  PTYSessionInfo,
   WSMessageServer,
+  WSMessageServerError,
   WSMessageServerRawData,
   WSMessageServerSessionList,
   WSMessageServerSessionUpdate,
+  WSMessageClientResize,
 } from 'opencode-pty/web/shared/types'
 import { RETRY_DELAY, SKIP_AUTOSELECT_KEY } from 'opencode-pty/web/shared/constants'
 
-import { RouteBuilder } from 'opencode-pty/web/shared/route-builder'
-
 interface UseWebSocketOptions {
   activeSession: PTYSessionInfo | null
-  onRawData?: (rawData: string) => void
+  onRawData?: (message: WSMessageServerRawData) => void
   onSessionList: (sessions: PTYSessionInfo[], autoSelected: PTYSessionInfo | null) => void
   onSessionUpdate?: (updatedSession: PTYSessionInfo) => void
 }
@@ -35,9 +35,7 @@ export function useWebSocket({
 
   // Connect to WebSocket on mount
   useEffect(() => {
-    const ws = new WebSocket(
-      `${RouteBuilder.websocket()}`.replace(/^\/ws/, `ws://${location.host}/ws`)
-    )
+    const ws = new WebSocket(`ws://${location.host}/ws`)
     ws.onopen = () => {
       setConnected(true)
       // Request initial session list
@@ -91,13 +89,20 @@ export function useWebSocket({
           onSessionUpdate?.(sessionUpdateMsg.session)
         } else if (data.type === 'raw_data') {
           const rawDataMsg = data as WSMessageServerRawData
-          const isForActiveSession = rawDataMsg.session.id === activeSessionRef.current?.id
+          const isForActiveSession = rawDataMsg.sessionId === activeSessionRef.current?.id
           if (isForActiveSession) {
-            onRawData?.(rawDataMsg.rawData)
+            onRawData?.(rawDataMsg)
           }
+        } else if (data.type === 'error') {
+          const errorMsg = data as WSMessageServerError
+          console.warn('WebSocket server error:', errorMsg.error)
         }
-        // eslint-disable-next-line no-empty
-      } catch {}
+        // `subscribed`, `unsubscribed`, and `readRawResponse` are intentionally
+        // ignored: the client tracks subscription state locally and reads raw
+        // buffers over HTTP.
+      } catch (error) {
+        console.warn('Failed to parse WebSocket message', error)
+      }
     }
     ws.onclose = () => {
       setConnected(false)
@@ -131,5 +136,12 @@ export function useWebSocket({
     }
   }
 
-  return { connected, subscribe, subscribeWithRetry, sendInput }
+  const sendResize = useCallback((sessionId: string, cols: number, rows: number) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      const message: WSMessageClientResize = { type: 'resize', sessionId, cols, rows }
+      wsRef.current.send(JSON.stringify(message))
+    }
+  }, [])
+
+  return { connected, subscribe, subscribeWithRetry, sendInput, sendResize }
 }

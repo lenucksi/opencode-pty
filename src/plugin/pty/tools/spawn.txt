@@ -7,7 +7,7 @@ Unlike the built-in bash tool which runs commands synchronously and waits for co
 - Manage multiple concurrent terminal sessions
 
 Usage:
-- The `command` parameter is required (e.g., "npm", "python", "bash")
+- The `command` parameter is required (e.g., "bun", "python", "bash")
 - Use `args` to pass arguments to the command (e.g., ["run", "dev"])
 - Use `workdir` to set the working directory (defaults to project root)
 - Use `env` to set additional environment variables
@@ -44,9 +44,9 @@ instead of polling with `pty_read`.
 - Use `pty_read` before exit only if you need live output now, the user explicitly asks for logs, or the exit notification reports a non-zero status and you need to investigate
 
 Examples:
-- Start a dev server: command="npm", args=["run", "dev"], title="Dev Server"
-- Start a timed dev server when explicitly requested: command="npm", args=["run", "dev"], title="Dev Server", timeoutSeconds=600
+- Start a dev server: command="bun", args=["run", "dev"], title="Dev Server"
+- Start a timed dev server when explicitly requested: command="bun", args=["run", "dev"], title="Dev Server", timeoutSeconds=600
 - Start a Python REPL: command="python3", title="Python REPL"
-- Run tests in watch mode: command="npm", args=["test", "--", "--watch"]
-- Run build with notification and timeout: command="npm", args=["run", "build"], title="Build", notifyOnExit=true, timeoutSeconds=900
-- Run end-to-end tests with timeout: command="npm", args=["run", "test:e2e"], title="E2E Tests", notifyOnExit=true, timeoutSeconds=1800
+- Run tests in watch mode: command="bun", args=["test", "--watch"]
+- Run build with notification and timeout: command="bun", args=["run", "build"], title="Build", notifyOnExit=true, timeoutSeconds=900
+- Run end-to-end tests with timeout: command="bun", args=["run", "test:e2e"], title="E2E Tests", notifyOnExit=true, timeoutSeconds=1800

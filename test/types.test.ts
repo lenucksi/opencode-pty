@@ -55,6 +55,22 @@ describe('Web Types', () => {
       expect(message.type).toBe('error')
       expect(message.error.message).toBe('Session not found')
     })
+
+    it('serializes CustomError with name, message and pretty print fields', () => {
+      const error = new CustomError('boom')
+
+      const json = error.toJSON()
+
+      expect(json.name).toBe('CustomError')
+      expect(json.message).toBe('boom')
+      expect(typeof json.stack).toBe('string')
+      expect(typeof json.prettyPrintColor).toBe('string')
+      expect(typeof json.prettyPrintNoColor).toBe('string')
+
+      const serialized = JSON.parse(JSON.stringify(error)) as { name: string; message: string }
+      expect(serialized.name).toBe('CustomError')
+      expect(serialized.message).toBe('boom')
+    })
   })
 
   describe('SessionData', () => {

@@ -1,9 +1,13 @@
 import { test as extendedTest, expect } from './fixtures'
-import { waitForTerminalRegex } from './xterm-test-helpers'
+import {
+  getTerminalBufferLines,
+  getTerminalPlainText,
+  waitForTerminalRegex,
+} from './xterm-test-helpers'
 
 extendedTest.describe('Xterm Content Extraction', () => {
   extendedTest(
-    'should compare DOM scraping vs Terminal API with interactive commands',
+    'should compare SerializeAddon extraction vs Terminal API with interactive commands',
     async ({ page, api }) => {
       await page.waitForSelector('h1:has-text("PTY Sessions")')
 
@@ -31,49 +35,22 @@ extendedTest.describe('Xterm Content Extraction', () => {
       // Wait for command execution
       await waitForTerminalRegex(page, /Hello World/)
 
-      // Extract content using DOM scraping
-      const domContent = await page.evaluate(() => {
-        const terminalElement = document.querySelector('.xterm')
-        if (!terminalElement) return []
+      // Extract content via the canonical SerializeAddon extractor
+      const serializeContent = await getTerminalPlainText(page)
 
-        const lines = Array.from(terminalElement.querySelectorAll('.xterm-rows > div')).map(
-          (row) => {
-            return Array.from(row.querySelectorAll('span'))
-              .map((span) => span.textContent || '')
-              .join('')
-          }
-        )
+      // Extract content via the emulator's Terminal buffer API
+      const terminalContent = await getTerminalBufferLines(page)
 
-        return lines
-      })
+      // Compare content (both extraction paths must agree on the visible content)
+      const serializeJoined = serializeContent.join('\n')
+      const terminalJoined = terminalContent.join('\n')
+      expect(serializeJoined).toContain('echo "Hello World"')
+      expect(serializeJoined).toContain('Hello World')
+      expect(terminalJoined).toContain('echo "Hello World"')
+      expect(terminalJoined).toContain('Hello World')
 
-      // Extract content using xterm.js Terminal API
-      const terminalContent = await page.evaluate(() => {
-        const term = window.xtermTerminal
-        if (!term?.buffer?.active) return []
-
-        const buffer = term.buffer.active
-        const lines = []
-        for (let i = 0; i < buffer.length; i++) {
-          const line = buffer.getLine(i)
-          if (line) {
-            lines.push(line.translateToString())
-          } else {
-            lines.push('')
-          }
-        }
-        return lines
-      })
-
-      // Compare lengths
-      expect(domContent.length).toBe(terminalContent.length)
-
-      // Compare content (logging removed for minimal output)
-
-      // Verify expected content is present
-      const domJoined = domContent.join('\n')
-      expect(domJoined).toContain('echo "Hello World"')
-      expect(domJoined).toContain('Hello World')
+      // The two extractors may differ by a trailing prompt/newline only.
+      expect(Math.abs(serializeContent.length - terminalContent.length)).toBeLessThan(2)
     }
   )
 })

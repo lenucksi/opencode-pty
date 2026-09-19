@@ -48,12 +48,11 @@ export class V1PermissionAuthorizer implements PermissionAuthorizer {
     throw new Error(details ? `${msg} ${details}` : msg)
   }
 
-  private async handleAskPermission(commandLine: string): Promise<never> {
-    await this.denyWithToast(
+  private handleAskPermission(commandLine: string): Promise<never> {
+    return this.denyWithToast(
       `PTY: Command "${commandLine}" requires permission (treated as denied)`,
       `PTY spawn denied: Command "${commandLine}" requires user permission which is not supported by this plugin. Configure explicit "allow" or "deny" in your opencode.json permission.bash settings.`
     )
-    throw new Error('Unreachable')
   }
 
   async checkCommand(command: string, args: string[]): Promise<void> {
@@ -111,7 +110,11 @@ export class V1PermissionAuthorizer implements PermissionAuthorizer {
     }
 
     if (extDirPerm === 'ask') {
-      // TODO: Implement user prompt for external directory access
+      // Interactive prompting is not supported by this plugin, so `ask` is
+      // treated as a denial, matching `checkCommand`'s handling of `ask`.
+      await this.denyWithToast(
+        `PTY spawn denied: Working directory "${workdir}" is outside project directory "${this.directory}". External directory access requires user permission which is not supported by this plugin. Configure explicit "allow" or "deny" in your opencode.json permission.external_directory settings.`
+      )
     }
   }
 }

@@ -11,6 +11,7 @@ import {
   type WSMessageClientSpawnSession,
   type WSMessageClientInput,
   type WSMessageClientReadRaw,
+  type WSMessageClientResize,
   type WSMessageServerReadRawResponse,
   type WSMessageServerSubscribedSession,
   CustomError,
@@ -113,6 +114,10 @@ class WebSocketHandler {
           this.handleReadRaw(ws, message as WSMessageClientReadRaw)
           break
 
+        case 'resize':
+          this.handleResize(ws, message as WSMessageClientResize)
+          break
+
         default:
           this.handleUnknownMessage(ws, message)
       }
@@ -147,6 +152,17 @@ class WebSocketHandler {
 
   private handleInput(message: WSMessageClientInput) {
     manager.write(message.sessionId, message.data)
+  }
+
+  private handleResize(ws: ServerWebSocket<undefined>, message: WSMessageClientResize) {
+    const resized = manager.resize(message.sessionId, message.cols, message.rows)
+    if (!resized) {
+      const error: WSMessageServerError = {
+        type: 'error',
+        error: new CustomError(`Session ${message.sessionId} not found`),
+      }
+      ws.send(JSON.stringify(error))
+    }
   }
 
   private handleReadRaw(ws: ServerWebSocket<undefined>, message: WSMessageClientReadRaw) {

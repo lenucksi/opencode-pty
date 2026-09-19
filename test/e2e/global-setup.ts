@@ -88,6 +88,9 @@ export default function globalSetup() {
   const result = spawnSync(['bun', 'build:prod'], {
     cwd: ROOT,
     stdio: ['inherit', 'inherit', 'inherit'],
+    // E2E suites read `window.xtermTerminal`/`window.xtermSerializeAddon`, which
+    // production builds gate behind this flag. The e2e build must opt in.
+    env: { ...process.env, VITE_EXPOSE_TEST_HOOKS: '1' },
   })
 
   if (!result.success) {

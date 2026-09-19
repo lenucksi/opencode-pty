@@ -18,6 +18,20 @@ export function formatSessionInfo(session: PTYSessionInfo): string[] {
   ]
 }
 
+export function formatPtyOutputBlock(
+  id: string,
+  status: string,
+  lines: string[],
+  pattern?: string
+): string {
+  const patternAttr = pattern ? ` pattern="${pattern}"` : ''
+  return [
+    `<pty_output id="${id}" status="${status}"${patternAttr}>`,
+    ...lines,
+    `</pty_output>`,
+  ].join('\n')
+}
+
 export function formatLine(line: string, lineNum: number, maxLength: number = 2000): string {
   const lineNumStr = lineNum.toString().padStart(5, '0')
   const truncatedLine = line.length > maxLength ? `${line.slice(0, maxLength)}...` : line

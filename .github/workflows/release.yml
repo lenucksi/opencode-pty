@@ -118,6 +118,14 @@ jobs:
             echo "EOF"
           } >>"$GITHUB_OUTPUT"
 
+      # Node/npm is kept ONLY for the publish step below because provenance is a
+      # hard requirement for this package and `bun publish` cannot emit npm
+      # provenance attestations yet. As of bun 1.4.2 `bun publish --help` has no
+      # `--provenance` flag and passes unknown flags through silently (verified:
+      # `bun publish --provenance --access public --dry-run` never validates or
+      # errors on provenance). Everything else in this workflow uses bun.
+      # Drop this step and switch to `bun publish --access public` once bun
+      # supports `--provenance` (oven-sh/bun#15601).
       - name: Setup Node
         if: steps.determine.outputs.changed == 'true' && steps.determine.outputs.tag_exists == 'false'
         uses: actions/setup-node@v4

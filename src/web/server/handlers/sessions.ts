@@ -101,7 +101,12 @@ export function killSession(req: BunRequest<typeof routes.session.path>) {
 }
 
 export function getRawBuffer(req: BunRequest<typeof routes.session.buffer.raw.path>) {
-  const bufferData = manager.getRawBuffer(req.params.id)
+  const sinceParam = new URL(req.url).searchParams.get('since')
+  const since = sinceParam !== null && sinceParam.trim() !== '' ? Number(sinceParam) : undefined
+  const bufferData = manager.getRawBuffer(
+    req.params.id,
+    since !== undefined && Number.isFinite(since) ? since : undefined
+  )
   if (!bufferData) {
     return new ErrorResponse('Session not found', 404)
   }

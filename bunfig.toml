@@ -1,0 +1,19 @@
+[test]
+# Gate the suite on per-file line coverage. Function coverage is intentionally
+# not gated: Bun counts implicit class constructors as uncalled functions, which
+# makes classes without an explicit constructor fail a function threshold even
+# when every method is exercised. The stated goal is >80% line coverage.
+coverageThreshold = { lines = 0.8, functions = 0 }
+coverageReporter = ["text"]
+coverageDir = "coverage"
+# Compiled duplicates, test helpers and React client components/hooks are out of
+# scope for the unit/integration suite (the React layer is covered by Playwright).
+coveragePathIgnorePatterns = [
+  "dist/**",
+  "test/**",
+  "src/web/client/components/**",
+  "src/web/client/hooks/**",
+  "src/web/client/addons/**",
+  "src/web/client/main.tsx",
+  "src/web/client/vite-env.d.ts",
+]

@@ -26,7 +26,6 @@ describe('PTY Manager Integration', () => {
       const dataReceivedPromise = new Promise<string>((resolve) => {
         let dataTotal = ''
         managedTestClient.rawDataCallbacks.push((message) => {
-          if (message.session.title !== title) return
           dataTotal += message.rawData
           if (dataTotal.includes('test output')) {
             resolve(dataTotal)
@@ -60,7 +59,6 @@ describe('PTY Manager Integration', () => {
       const dataReceivedPromise1 = new Promise<string>((resolve) => {
         let dataTotal = ''
         managedTestClient1.rawDataCallbacks.push((message) => {
-          if (message.session.title !== title1) return
           dataTotal += message.rawData
           if (dataTotal.includes('output from session 1')) {
             resolve(dataTotal)
@@ -70,7 +68,6 @@ describe('PTY Manager Integration', () => {
       const dataReceivedPromise2 = new Promise<string>((resolve) => {
         let dataTotal = ''
         managedTestClient2.rawDataCallbacks.push((message) => {
-          if (message.session.title !== title2) return
           dataTotal += message.rawData
           if (dataTotal.includes('output from session 2')) {
             resolve(dataTotal)
@@ -127,17 +124,17 @@ describe('PTY Manager Integration', () => {
 
       let outputTotal = ''
       managedTestClient.rawDataCallbacks.push((message) => {
-        if (message.session.title !== title) return
         outputTotal += message.rawData
       })
 
-      // Spawn a session
+      // Spawn a session using `bun`, which is guaranteed to exist in this
+      // bun-based project (and on CI), unlike `node`.
       managedTestClient.send({
         type: 'spawn',
         title,
-        command: 'node',
+        command: 'bun',
         args: ['-e', "console.log('test')"],
-        description: 'Test Node.js session',
+        description: 'Test Bun session',
         parentSessionId: managedTestServer.sessionId,
         subscribe: true,
       })
@@ -153,7 +150,7 @@ describe('PTY Manager Integration', () => {
       const testSession = sessions.find((s) => s.id === sessionInfo.session.id)
       expect(testSession).toBeDefined()
       if (!testSession) return
-      expect(testSession.command).toBe('node')
+      expect(testSession.command).toBe('bun')
       expect(testSession.args).toEqual(['-e', "console.log('test')"])
       expect(testSession.status).toBeDefined()
       expect(typeof testSession.pid).toBe('number')

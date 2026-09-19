@@ -1,6 +1,3 @@
-// Structured route definitions with paths, methods, and type information
-// Used by both server and client for type-safe API interactions
-
 export const routes = {
   websocket: {
     path: '/ws',

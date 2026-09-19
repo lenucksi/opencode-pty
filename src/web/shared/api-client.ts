@@ -25,6 +25,7 @@ type ApiFetchOptions<
   params?: ExtractParams<Route['path']>
   body?: Method extends 'POST' ? unknown : never
   baseUrl?: string
+  query?: Record<string, string | number | undefined>
 }
 
 // Build URL by replacing path parameters
@@ -44,7 +45,20 @@ export async function apiFetch<
   Method extends AllowedMethods<Route>,
 >(route: Route, options: ApiFetchOptions<Route, Method>): Promise<Response> {
   const baseUrl = options.baseUrl || `${location.protocol}//${location.host}`
-  const url = baseUrl + buildUrl(route.path, options.params)
+  let url = baseUrl + buildUrl(route.path, options.params)
+
+  if (options.query) {
+    const search = new URLSearchParams()
+    for (const [key, value] of Object.entries(options.query)) {
+      if (value !== undefined) {
+        search.set(key, String(value))
+      }
+    }
+    const queryString = search.toString()
+    if (queryString) {
+      url += `?${queryString}`
+    }
+  }
 
   const fetchOptions: RequestInit = {
     method: options.method,
@@ -129,12 +143,17 @@ export function createApiClient(baseUrl: string) {
         ),
 
       buffer: {
-        raw: (params: { id: string }) =>
+        raw: (params: { id: string; since?: number }) =>
           apiFetchJson<
             typeof routes.session.buffer.raw,
             'GET',
-            { raw: string; byteLength: number }
-          >(routes.session.buffer.raw, { method: 'GET', params, baseUrl }),
+            { raw: string; byteLength: number; offset: number }
+          >(routes.session.buffer.raw, {
+            method: 'GET',
+            params: { id: params.id },
+            ...(params.since !== undefined ? { query: { since: params.since } } : {}),
+            baseUrl,
+          }),
 
         plain: (params: { id: string }) =>
           apiFetchJson<

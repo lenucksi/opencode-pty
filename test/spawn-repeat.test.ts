@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { OpencodeClient } from '@opencode-ai/sdk'
-import {
-  initManager,
-  manager,
-  rawOutputCallbacks,
-  registerRawOutputCallback,
-} from '../src/plugin/pty/manager.ts'
+import { initManager, manager, rawOutputCallbacks } from '../src/plugin/pty/manager.ts'
+import { RawOutputCollector } from './utils.ts'
 import type { Subprocess } from 'bun'
 
 function positiveIntFromEnv(name: string, fallback: number): number {
@@ -136,21 +132,7 @@ describe('PTY Echo Behavior', () => {
     'should receive initial data once',
     async () => {
       const title = crypto.randomUUID()
-      // Subscribe to raw output events
-      const promise = new Promise<string>((resolve, reject) => {
-        let rawDataTotal = ''
-        registerRawOutputCallback((session, rawData) => {
-          // console.log(`[TEST] Received raw data for session ${session.id} (${session.title}): ${rawData}`)
-          if (session.title !== title) return
-          rawDataTotal += rawData
-          if (rawData.includes('Hello World')) {
-            resolve(rawDataTotal)
-          }
-        })
-        setTimeout(() => {
-          reject(new Error(`Timeout waiting for Hello World, received: ${rawDataTotal}`))
-        }, 10000)
-      })
+      await using collector = new RawOutputCollector()
 
       // Spawn interactive bash session
       const session = manager.spawn({
@@ -161,8 +143,9 @@ describe('PTY Echo Behavior', () => {
         parentSessionId: 'test',
       })
 
-      // await Promise.resolve() // Yield to allow session to be fully registered and callbacks to be set up
-      const rawData = await promise
+      const rawData = await collector
+        .waitFor(session.id, (output) => output.includes('Hello World'), 10000)
+        .catch((error: Error) => error.message)
       expect(rawData).toContain('Hello World')
 
       // Clean up

@@ -200,7 +200,9 @@ export class PTYServer implements Disposable {
       websocket: {
         data: undefined as undefined,
         perMessageDeflate: true,
-        open: (ws) => ws.subscribe('sessions:update'),
+        open: (ws) => {
+          ws.subscribe('sessions:update')
+        },
         message: handleWebSocketMessage,
         close: (ws) => {
           ws.subscriptions.forEach((topic) => {

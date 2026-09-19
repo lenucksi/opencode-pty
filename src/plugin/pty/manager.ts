@@ -7,15 +7,22 @@ import { SessionLifecycleManager } from './session-lifecycle.ts'
 import type { PTYSessionInfo, ReadResult, SearchResult, SpawnOptions } from './types.ts'
 import { withSession } from './utils.ts'
 
-const proto = Terminal.prototype as unknown as { _startReadLoop?: (...args: unknown[]) => unknown }
+type StartReadLoop = (this: InstanceType<typeof Terminal>, ...args: unknown[]) => unknown
 
-const original = proto._startReadLoop
+const proto = Terminal.prototype
+// `_startReadLoop` is a private method, so reach it through Reflect and treat
+// it as the typed shim below rather than asserting the whole prototype shape.
+const original = Reflect.get(proto, '_startReadLoop') as StartReadLoop | undefined
 
 if (typeof original === 'function') {
-  proto._startReadLoop = async function (this: InstanceType<typeof Terminal>, ...args: unknown[]) {
-    await Promise.resolve() // Yield to allow event handlers to be registered
-    return original.apply(this, args)
-  }
+  Reflect.set(
+    proto,
+    '_startReadLoop',
+    async function (this: InstanceType<typeof Terminal>, ...args: unknown[]) {
+      await Promise.resolve() // Yield to allow event handlers to be registered
+      return original.apply(this, args)
+    }
+  )
 }
 
 type SessionUpdateCallback = (session: PTYSessionInfo) => void
@@ -43,7 +50,7 @@ function notifySessionUpdate(session: PTYSessionInfo) {
   }
 }
 
-type RawOutputCallback = (session: PTYSessionInfo, rawData: string) => void
+type RawOutputCallback = (sessionId: string, rawData: string, offset: number) => void
 
 export const rawOutputCallbacks: RawOutputCallback[] = []
 
@@ -58,10 +65,10 @@ export function removeRawOutputCallback(callback: RawOutputCallback): void {
   }
 }
 
-function notifyRawOutput(session: PTYSessionInfo, rawData: string): void {
+function notifyRawOutput(sessionId: string, rawData: string, offset: number): void {
   for (const callback of rawOutputCallbacks) {
     try {
-      callback(session, rawData)
+      callback(sessionId, rawData, offset)
     } catch {
       // Ignore callback errors
     }
@@ -94,8 +101,8 @@ class PTYManager {
   spawn(opts: SpawnOptions): PTYSessionInfo {
     const session = this.lifecycleManager.spawn(
       opts,
-      (session, data) => {
-        notifyRawOutput(this.lifecycleManager.toInfo(session), data)
+      (session, data, offset) => {
+        notifyRawOutput(session.id, data, offset)
       },
       async (session, exitCode) => {
         notifySessionUpdate(this.lifecycleManager.toInfo(session))
@@ -149,20 +156,36 @@ class PTYManager {
     )
   }
 
-  getRawBuffer(id: string): { raw: string; byteLength: number } | null {
+  /**
+   * Return the raw buffer suffix starting at `since`. `byteLength` is the real
+   * UTF-8 byte length of `raw` (not the UTF-16 code-unit count), matching the
+   * plain-buffer endpoint.
+   */
+  getRawBuffer(
+    id: string,
+    since?: number
+  ): { raw: string; byteLength: number; offset: number } | null {
     return withSession(
       this.lifecycleManager,
       id,
-      (session) => ({
-        raw: session.buffer.readRaw(),
-        byteLength: session.buffer.byteLength,
-      }),
+      (session) => {
+        const { raw, offset } = session.buffer.sliceSince(since ?? 0)
+        return {
+          raw,
+          byteLength: new TextEncoder().encode(raw).length,
+          offset,
+        }
+      },
       null
     )
   }
 
   kill(id: string, cleanup: boolean = false): boolean {
     return this.lifecycleManager.kill(id, cleanup)
+  }
+
+  resize(id: string, cols: number, rows: number): boolean {
+    return this.lifecycleManager.resize(id, cols, rows)
   }
 
   cleanupBySession(parentSessionId: string): void {

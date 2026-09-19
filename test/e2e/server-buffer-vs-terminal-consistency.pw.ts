@@ -1,4 +1,5 @@
 import { test as extendedTest, expect } from './fixtures'
+import { waitForTerminalRegex } from './xterm-test-helpers'
 
 extendedTest.describe('Xterm Content Extraction', () => {
   extendedTest(
@@ -21,10 +22,8 @@ extendedTest.describe('Xterm Content Extraction', () => {
       await page.waitForSelector('.output-container', { timeout: 5000 })
       await page.waitForSelector('.xterm', { timeout: 5000 })
 
-      // Wait for the expected output to be present in the terminal
-      await page.waitForSelector('.xterm:has-text("Hello from consistency test")', {
-        timeout: 10000,
-      })
+      // Wait for the expected output to be present in the terminal (SerializeAddon)
+      await waitForTerminalRegex(page, /Hello from consistency test/)
 
       // Extract content using SerializeAddon
       const serializeAddonOutput = await page.evaluate(() => {

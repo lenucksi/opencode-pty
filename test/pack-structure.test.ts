@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test'
 
-// This test ensures `npm pack` (which triggers the package's `prepack` script)
+// This test ensures `bun pm pack` (which triggers the package's `prepack` script)
 // produces a tarball that includes the built web UI (`dist/web/**`) and the
-// plugin bundle (`dist/opencode-pty.js`).
+// plugin bundle (`dist/opencode-pty.js`). `bun pm pack` is used because the
+// suite is bun-based and must not require a separate `npm` install.
 
 async function run(cmd: string[], opts: { cwd?: string } = {}) {
   const proc = Bun.spawn(cmd, {
@@ -22,7 +23,7 @@ async function run(cmd: string[], opts: { cwd?: string } = {}) {
 }
 
 function findPackFileFromOutput(stdout: string): string | null {
-  // npm prints the created tarball filename on the last line
+  // `bun pm pack` prints the created tarball filename on its own line
   const lines = stdout.trim().split(/\r?\n/)
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i]
@@ -31,10 +32,10 @@ function findPackFileFromOutput(stdout: string): string | null {
   return null
 }
 
-describe('npm pack structure', () => {
+describe('package pack structure', () => {
   it('includes dist web assets', async () => {
-    // 1) Create tarball via npm pack (triggers prepack build)
-    const pack = await run(['npm', 'pack'])
+    // 1) Create tarball via bun pm pack (triggers prepack build)
+    const pack = await run(['bun', 'pm', 'pack'])
     expect(pack.code).toBe(0)
     const tgz = findPackFileFromOutput(pack.stdout)
     expect(typeof tgz).toBe('string')

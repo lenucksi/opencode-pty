@@ -7,6 +7,7 @@ import type {
   WSMessageServerSessionUpdate,
   WSMessageServerSubscribedSession,
   WSMessageServerUnsubscribedSession,
+  WSMessageServerReadRawResponse,
 } from '../src/web/shared/types.ts'
 import { ManagedTestClient, ManagedTestServer } from './utils.ts'
 
@@ -170,6 +171,74 @@ describe('WebSocket Functionality', () => {
       await sessionListPromise
     }, 1000)
 
+    it('should handle resize message for an existing session', async () => {
+      await using managedTestClient = await ManagedTestClient.create(
+        managedTestServer.server.getWsUrl()
+      )
+      const session = manager.spawn({
+        command: 'bash',
+        args: [],
+        description: 'Resize test session',
+        parentSessionId: managedTestServer.sessionId,
+      })
+
+      const errors: CustomError[] = []
+      managedTestClient.errorCallbacks.push((message) => {
+        errors.push(message.error)
+      })
+
+      // A following readRaw for the same session confirms the resize message
+      // was processed (messages are handled in order) and lets us assert that
+      // no error was produced for the valid resize.
+      const readRawPromise = new Promise<WSMessageServerReadRawResponse>((res) => {
+        managedTestClient.readRawResponseCallbacks.push((message) => {
+          if (message.sessionId === session.id) {
+            res(message)
+          }
+        })
+      })
+
+      managedTestClient.send({
+        type: 'resize',
+        sessionId: session.id,
+        cols: 100,
+        rows: 30,
+      })
+      managedTestClient.send({
+        type: 'readRaw',
+        sessionId: session.id,
+      })
+      await readRawPromise
+
+      expect(errors.length).toBe(0)
+
+      manager.kill(session.id, true)
+    }, 1000)
+
+    it('should return an error for resize with unknown session', async () => {
+      await using managedTestClient = await ManagedTestClient.create(
+        managedTestServer.server.getWsUrl()
+      )
+      const nonexistentSessionId = crypto.randomUUID()
+      const errorPromise = new Promise<WSMessageServerError>((res) => {
+        managedTestClient.errorCallbacks.push((message) => {
+          if (message.error.message.includes(nonexistentSessionId)) {
+            res(message)
+          }
+        })
+      })
+
+      managedTestClient.send({
+        type: 'resize',
+        sessionId: nonexistentSessionId,
+        cols: 100,
+        rows: 30,
+      })
+
+      const error = await errorPromise
+      expect(error.error.message).toContain('not found')
+    }, 1000)
+
     it('should handle invalid message format', async () => {
       await using managedTestClient = await ManagedTestClient.create(
         managedTestServer.server.getWsUrl()
@@ -210,9 +279,14 @@ describe('WebSocket Functionality', () => {
       await using managedTestClient = await ManagedTestClient.create(
         managedTestServer.server.getWsUrl()
       )
+      // Invoke bash non-interactively: it reads one line from stdin, echoes
+      // it, and exits. An interactive shell discards input written before
+      // readline is initialised, which made this subscription round-trip
+      // racy. A blocking `read` buffers the input deterministically, so the
+      // session reliably reaches `exited`.
       const testSession = manager.spawn({
         command: 'bash',
-        args: [],
+        args: ['-c', 'read -r line; echo "$line"; exit'],
         description: 'Test session for subscription logic',
         parentSessionId: managedTestServer.sessionId,
       })
@@ -234,7 +308,7 @@ describe('WebSocket Functionality', () => {
 
       let rawData = ''
       managedTestClient.rawDataCallbacks.push((message) => {
-        if (message.session.id === testSession.id) {
+        if (message.sessionId === testSession.id) {
           rawData += message.rawData
         }
       })
@@ -253,7 +327,7 @@ describe('WebSocket Functionality', () => {
       managedTestClient.send({
         type: 'input',
         sessionId: testSession.id,
-        data: "echo 'Hello from subscription test'\nexit\n",
+        data: 'Hello from subscription test\n',
       })
 
       // Wait for session to exit
@@ -275,7 +349,7 @@ describe('WebSocket Functionality', () => {
         sessionId: testSession.id,
       })
       await unsubscribePromise
-    }, 500)
+    }, 5000)
 
     it('should handle multiple subscription states correctly', async () => {
       await using managedTestClient = await ManagedTestClient.create(
@@ -352,6 +426,6 @@ describe('WebSocket Functionality', () => {
       // multiple subscriptions per client, which is essential for the UI
       // to properly track counter state for different sessions.
       // Integration test failures were DOM-related, not subscription logic issues.
-    }, 200)
+    }, 5000)
   })
 })

@@ -9,7 +9,6 @@ import type { WSMessageServerSessionUpdate, WSMessageServerRawData } from '../sh
 
 export class CallbackManager implements Disposable {
   constructor(private server: Bun.Server<undefined>) {
-    this.server = server
     registerSessionUpdateCallback(this.sessionUpdateCallback)
     registerRawOutputCallback(this.rawOutputCallback)
   }
@@ -19,9 +18,9 @@ export class CallbackManager implements Disposable {
     this.server.publish('sessions:update', JSON.stringify(message))
   }
 
-  private rawOutputCallback = (session: PTYSessionInfo, rawData: string): void => {
-    const message: WSMessageServerRawData = { type: 'raw_data', session, rawData }
-    this.server.publish(`session:${session.id}`, JSON.stringify(message))
+  private rawOutputCallback = (sessionId: string, rawData: string, offset: number): void => {
+    const message: WSMessageServerRawData = { type: 'raw_data', sessionId, rawData, offset }
+    this.server.publish(`session:${sessionId}`, JSON.stringify(message))
   };
 
   [Symbol.dispose]() {

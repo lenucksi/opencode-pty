@@ -112,8 +112,8 @@ describe('Web Server', () => {
       })
       const rawDataPromise = new Promise<string>((resolve) => {
         let rawDataTotal = ''
-        registerRawOutputCallback((sessionInfo: PTYSessionInfo, rawData: string) => {
-          if (sessionInfo.id === session.id) {
+        registerRawOutputCallback((sessionId: string, rawData: string, _offset: number) => {
+          if (sessionId === session.id) {
             rawDataTotal += rawData
             if (rawDataTotal.includes('test output')) {
               resolve(rawDataTotal)
@@ -267,10 +267,21 @@ describe('Web Server', () => {
       const bufferData = await response.json()
       expect(bufferData).toHaveProperty('raw')
       expect(bufferData).toHaveProperty('byteLength')
+      expect(bufferData).toHaveProperty('offset', 0)
       expect(typeof bufferData.raw).toBe('string')
       expect(typeof bufferData.byteLength).toBe('number')
       expect(bufferData.raw.length).toBe(21)
       expect(bufferData.raw).toBe('line1\r\nline2\r\nline3\r\n')
+
+      // `since` returns only the suffix after the given character offset.
+      const sinceResponse = await fetch(
+        `${managedTestServer.server.server.url}/api/sessions/${session.id}/buffer/raw?since=10`
+      )
+      expect(sinceResponse.status).toBe(200)
+      const sinceData = await sinceResponse.json()
+      expect(sinceData.offset).toBe(10)
+      expect(sinceData.raw).toBe(bufferData.raw.slice(10))
+      expect(sinceData.byteLength).toBe(new TextEncoder().encode(sinceData.raw).length)
     })
 
     it('should return index.html for non-existent endpoints', async () => {

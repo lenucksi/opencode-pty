@@ -5,6 +5,17 @@ import { ptyList } from '../src/plugin/pty/tools/list.ts'
 import { RingBuffer } from '../src/plugin/pty/buffer.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
 
+const readCtx = {
+  sessionID: 'parent',
+  messageID: 'msg',
+  agent: 'agent',
+  abort: new AbortController().signal,
+  metadata: () => {},
+  ask: async () => {},
+  directory: '/tmp',
+  worktree: '/tmp',
+}
+
 describe('PTY Tools', () => {
   afterAll(() => {
     mock.restore()
@@ -80,12 +91,12 @@ describe('PTY Tools', () => {
         worktree: '/tmp',
       }
       const args = {
-        command: 'node',
-        args: ['script.js'],
+        command: 'bun',
+        args: ['script.ts'],
         workdir: '/home/user',
         env: { NODE_ENV: 'test' },
-        title: 'My Node Session',
-        description: 'Running Node.js script',
+        title: 'My Bun Session',
+        description: 'Running Bun script',
         notifyOnExit: true,
         timeoutSeconds: 60,
       }
@@ -93,21 +104,21 @@ describe('PTY Tools', () => {
       const result = await ptySpawn.execute(args, ctx)
 
       expect(manager.spawn).toHaveBeenCalledWith({
-        command: 'node',
-        args: ['script.js'],
+        command: 'bun',
+        args: ['script.ts'],
         workdir: '/home/user',
         env: { NODE_ENV: 'test' },
-        title: 'My Node Session',
-        description: 'Running Node.js script',
+        title: 'My Bun Session',
+        description: 'Running Bun script',
         parentSessionId: 'parent-session-id',
         parentAgent: 'test-agent',
         notifyOnExit: true,
         timeoutSeconds: 60,
       })
 
-      expect(result).toContain('Title: My Node Session')
+      expect(result).toContain('Title: My Bun Session')
       expect(result).toContain('Workdir: /home/user')
-      expect(result).toContain('Command: node script.js')
+      expect(result).toContain('Command: bun script.ts')
       expect(result).toContain('PID: 12345')
       expect(result).toContain('Status: running')
       expect(result).toContain('NotifyOnExit: true')
@@ -278,6 +289,107 @@ describe('PTY Tools', () => {
 
       expect(ptyRead.execute(args, ctx)).rejects.toThrow(
         'Potentially dangerous regex pattern rejected'
+      )
+    })
+
+    it('reports when no lines match the pattern', async () => {
+      spyOn(manager, 'search').mockReturnValue({
+        matches: [],
+        totalMatches: 0,
+        totalLines: 2,
+        hasMore: false,
+        offset: 0,
+      })
+
+      const result = await ptyRead.execute({ id: 'test-session-id', pattern: 'zzz' }, readCtx)
+
+      expect(result).toContain("No lines matched the pattern 'zzz'.")
+      expect(result).toContain('Total lines in buffer: 2')
+      expect(result).toContain('pattern="zzz"')
+    })
+
+    it('passes ignoreCase to the search regex', async () => {
+      let captured: RegExp | undefined
+      spyOn(manager, 'search').mockImplementation(((
+        _id: string,
+        pattern: RegExp
+      ): ReturnType<typeof manager.search> => {
+        captured = pattern
+        return {
+          matches: [{ lineNumber: 1, text: 'LINE 1' }],
+          totalMatches: 1,
+          totalLines: 2,
+          hasMore: false,
+          offset: 0,
+        }
+      }) as typeof manager.search)
+
+      await ptyRead.execute({ id: 'test-session-id', pattern: 'line', ignoreCase: true }, readCtx)
+
+      expect(captured?.flags).toContain('i')
+    })
+
+    it('paginates plain reads when more lines are available', async () => {
+      spyOn(manager, 'read').mockReturnValue({
+        lines: ['line 1'],
+        offset: 0,
+        hasMore: true,
+        totalLines: 10,
+      })
+
+      const result = await ptyRead.execute({ id: 'test-session-id' }, readCtx)
+
+      expect(result).toContain('Buffer has more lines. Use offset=1 to read beyond line 1')
+    })
+
+    it('reports an empty buffer', async () => {
+      spyOn(manager, 'read').mockReturnValue({
+        lines: [],
+        offset: 0,
+        hasMore: false,
+        totalLines: 0,
+      })
+
+      const result = await ptyRead.execute({ id: 'test-session-id' }, readCtx)
+
+      expect(result).toContain('(No output available - buffer is empty)')
+      expect(result).toContain('Total lines: 0')
+    })
+
+    it('adds a timeout reminder for timed-out sessions', async () => {
+      spyOn(manager, 'get').mockReturnValue({
+        id: 'test-session-id',
+        title: 'Test Session',
+        command: 'echo',
+        args: ['hello'],
+        workdir: '/tmp',
+        status: 'exited',
+        notifyOnExit: false,
+        timeoutSeconds: 5,
+        timedOut: true,
+        pid: 12345,
+        createdAt: new Date().toISOString(),
+        lineCount: 2,
+      })
+
+      const result = await ptyRead.execute({ id: 'test-session-id' }, readCtx)
+
+      expect(result).toContain('This session was auto-killed after reaching `timeoutSeconds=5`.')
+    })
+
+    it('throws when the search result disappears mid-read', async () => {
+      spyOn(manager, 'search').mockReturnValue(null)
+
+      expect(ptyRead.execute({ id: 'test-session-id', pattern: 'line' }, readCtx)).rejects.toThrow(
+        "PTY session 'test-session-id' not found"
+      )
+    })
+
+    it('throws when the read result disappears mid-read', async () => {
+      spyOn(manager, 'read').mockReturnValue(null)
+
+      expect(ptyRead.execute({ id: 'test-session-id' }, readCtx)).rejects.toThrow(
+        "PTY session 'test-session-id' not found"
       )
     })
   })

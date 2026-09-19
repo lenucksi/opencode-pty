@@ -19,7 +19,7 @@ export class CustomError extends Error {
 }
 
 export interface WSMessageClient {
-  type: 'subscribe' | 'unsubscribe' | 'session_list' | 'spawn' | 'input' | 'readRaw'
+  type: 'subscribe' | 'unsubscribe' | 'session_list' | 'spawn' | 'input' | 'readRaw' | 'resize'
 }
 
 export interface WSMessageClientSubscribeSession extends WSMessageClient {
@@ -52,6 +52,13 @@ export interface WSMessageClientReadRaw extends WSMessageClient {
   sessionId: string
 }
 
+export interface WSMessageClientResize extends WSMessageClient {
+  type: 'resize'
+  sessionId: string
+  cols: number
+  rows: number
+}
+
 export interface WSMessageServer {
   type:
     | 'subscribed'
@@ -75,8 +82,10 @@ export interface WSMessageServerUnsubscribedSession extends WSMessageServer {
 
 export interface WSMessageServerRawData extends WSMessageServer {
   type: 'raw_data'
-  session: PTYSessionInfo
+  sessionId: string
   rawData: string
+  /** Monotonic character offset of the first character in `rawData`. */
+  offset: number
 }
 
 export interface WSMessageServerReadRawResponse extends WSMessageServer {

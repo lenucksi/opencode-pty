@@ -1,5 +1,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+// Import the app stylesheet so Vite emits a content-hashed CSS asset (the
+// xterm migration previously pulled in `@xterm/xterm/css/xterm.css`; ghostty-web
+// has no stylesheet of its own).
+import './index.css'
 import { App } from './components/app.tsx'
 import { ErrorBoundary } from './components/error-boundary.tsx'
 
