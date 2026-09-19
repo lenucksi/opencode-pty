@@ -118,7 +118,7 @@ extendedTest.describe('PTY Buffer readRaw() Function', () => {
     expect(typeof rawData.raw).toBe('string')
     expect(typeof rawData.byteLength).toBe('number')
     expect(rawData.raw).toMatch(/api[\r\n]+test[\r\n]+data/)
-    expect(rawData.byteLength).toBe(rawData.raw.length)
+    expect(rawData.byteLength).toBe(new TextEncoder().encode(rawData.raw).length)
     expect(typeof rawData.raw).toBe('string')
     expect(typeof rawData.byteLength).toBe('number')
   })

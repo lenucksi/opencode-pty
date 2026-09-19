@@ -110,7 +110,11 @@ export class V1PermissionAuthorizer implements PermissionAuthorizer {
     }
 
     if (extDirPerm === 'ask') {
-      // TODO: Implement user prompt for external directory access
+      // Interactive prompting is not supported by this plugin, so `ask` is
+      // treated as a denial, matching `checkCommand`'s handling of `ask`.
+      await this.denyWithToast(
+        `PTY spawn denied: Working directory "${workdir}" is outside project directory "${this.directory}". External directory access requires user permission which is not supported by this plugin. Configure explicit "allow" or "deny" in your opencode.json permission.external_directory settings.`
+      )
     }
   }
 }

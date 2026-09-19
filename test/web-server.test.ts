@@ -281,7 +281,7 @@ describe('Web Server', () => {
       const sinceData = await sinceResponse.json()
       expect(sinceData.offset).toBe(10)
       expect(sinceData.raw).toBe(bufferData.raw.slice(10))
-      expect(sinceData.byteLength).toBe(sinceData.raw.length)
+      expect(sinceData.byteLength).toBe(new TextEncoder().encode(sinceData.raw).length)
     })
 
     it('should return index.html for non-existent endpoints', async () => {

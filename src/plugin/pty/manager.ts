@@ -156,6 +156,11 @@ class PTYManager {
     )
   }
 
+  /**
+   * Return the raw buffer suffix starting at `since`. `byteLength` is the real
+   * UTF-8 byte length of `raw` (not the UTF-16 code-unit count), matching the
+   * plain-buffer endpoint.
+   */
   getRawBuffer(
     id: string,
     since?: number
@@ -167,7 +172,7 @@ class PTYManager {
         const { raw, offset } = session.buffer.sliceSince(since ?? 0)
         return {
           raw,
-          byteLength: raw.length,
+          byteLength: new TextEncoder().encode(raw).length,
           offset,
         }
       },
