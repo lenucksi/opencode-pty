@@ -219,7 +219,7 @@ export class SessionLifecycleManager {
   }
 
   private clearAllSessionsInternal(): void {
-    for (const id of [...this.sessions.keys()]) {
+    for (const id of this.sessions.keys()) {
       this.kill(id, true)
     }
   }

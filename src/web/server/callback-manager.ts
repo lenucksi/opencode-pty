@@ -9,7 +9,6 @@ import type { WSMessageServerSessionUpdate, WSMessageServerRawData } from '../sh
 
 export class CallbackManager implements Disposable {
   constructor(private server: Bun.Server<undefined>) {
-    this.server = server
     registerSessionUpdateCallback(this.sessionUpdateCallback)
     registerRawOutputCallback(this.rawOutputCallback)
   }

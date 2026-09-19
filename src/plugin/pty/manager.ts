@@ -7,15 +7,22 @@ import { SessionLifecycleManager } from './session-lifecycle.ts'
 import type { PTYSessionInfo, ReadResult, SearchResult, SpawnOptions } from './types.ts'
 import { withSession } from './utils.ts'
 
-const proto = Terminal.prototype as unknown as { _startReadLoop?: (...args: unknown[]) => unknown }
+type StartReadLoop = (this: InstanceType<typeof Terminal>, ...args: unknown[]) => unknown
 
-const original = proto._startReadLoop
+const proto = Terminal.prototype
+// `_startReadLoop` is a private method, so reach it through Reflect and treat
+// it as the typed shim below rather than asserting the whole prototype shape.
+const original = Reflect.get(proto, '_startReadLoop') as StartReadLoop | undefined
 
 if (typeof original === 'function') {
-  proto._startReadLoop = async function (this: InstanceType<typeof Terminal>, ...args: unknown[]) {
-    await Promise.resolve() // Yield to allow event handlers to be registered
-    return original.apply(this, args)
-  }
+  Reflect.set(
+    proto,
+    '_startReadLoop',
+    async function (this: InstanceType<typeof Terminal>, ...args: unknown[]) {
+      await Promise.resolve() // Yield to allow event handlers to be registered
+      return original.apply(this, args)
+    }
+  )
 }
 
 type SessionUpdateCallback = (session: PTYSessionInfo) => void

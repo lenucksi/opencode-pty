@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
 import type {
+  PTYSessionInfo,
   WSMessageServer,
+  WSMessageServerError,
   WSMessageServerRawData,
   WSMessageServerSessionList,
   WSMessageServerSessionUpdate,
@@ -92,9 +93,16 @@ export function useWebSocket({
           if (isForActiveSession) {
             onRawData?.(rawDataMsg)
           }
+        } else if (data.type === 'error') {
+          const errorMsg = data as WSMessageServerError
+          console.warn('WebSocket server error:', errorMsg.error)
         }
-        // eslint-disable-next-line no-empty
-      } catch {}
+        // `subscribed`, `unsubscribed`, and `readRawResponse` are intentionally
+        // ignored: the client tracks subscription state locally and reads raw
+        // buffers over HTTP.
+      } catch (error) {
+        console.warn('Failed to parse WebSocket message', error)
+      }
     }
     ws.onclose = () => {
       setConnected(false)

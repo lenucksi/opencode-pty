@@ -6,7 +6,7 @@ import { FitAddon, Ghostty, Terminal, type ITheme } from 'ghostty-web'
 // `data:application/wasm` fallback, which the app CSP (`connect-src 'self'`)
 // would block.
 import ghosttyWasmUrl from 'ghostty-web/ghostty-vt.wasm?url'
-import { SerializeAddon } from '../addons/serialize.ts'
+import { SerializeAddon } from '../addons/serialize/index.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
 
 /**

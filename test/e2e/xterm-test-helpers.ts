@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import type { SerializeAddon } from '../../src/web/client/addons/serialize.ts'
+import type { SerializeAddon } from '../../src/web/client/addons/serialize/index.ts'
 
 // Global module augmentation for E2E testing. The emulator is ghostty-web now;
 // the `xterm*` global names are retained for historical test compatibility.

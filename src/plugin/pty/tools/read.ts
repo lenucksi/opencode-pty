@@ -2,7 +2,7 @@ import { tool } from '@opencode-ai/plugin'
 import { manager } from '../manager.ts'
 import { DEFAULT_READ_LIMIT, MAX_LINE_LENGTH } from '../../../shared/constants.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
-import { formatLine } from '../formatters.ts'
+import { formatLine, formatPtyOutputBlock } from '../formatters.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import DESCRIPTION from './read.txt'
 
@@ -113,12 +113,15 @@ function handlePatternRead(
 
   if (result.matches.length === 0) {
     return appendSessionReminders(
-      [
-        `<pty_output id="${id}" status="${session.status}" pattern="${pattern}">`,
-        `No lines matched the pattern '${pattern}'.`,
-        `Total lines in buffer: ${result.totalLines}`,
-        `</pty_output>`,
-      ].join('\n'),
+      formatPtyOutputBlock(
+        id,
+        session.status,
+        [
+          `No lines matched the pattern '${pattern}'.`,
+          `Total lines in buffer: ${result.totalLines}`,
+        ],
+        pattern
+      ),
       session
     )
   }
@@ -160,12 +163,10 @@ function handlePlainRead(
 
   if (result.lines.length === 0) {
     return appendSessionReminders(
-      [
-        `<pty_output id="${args.id}" status="${session.status}">`,
+      formatPtyOutputBlock(args.id, session.status, [
         `(No output available - buffer is empty)`,
         `Total lines: ${result.totalLines}`,
-        `</pty_output>`,
-      ].join('\n'),
+      ]),
       session
     )
   }

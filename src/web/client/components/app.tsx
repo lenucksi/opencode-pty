@@ -1,20 +1,81 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import type { PTYSessionInfo, WSMessageServerRawData } from 'opencode-pty/web/shared/types'
 
 import { useWebSocket } from '../hooks/use-web-socket.ts'
 import { useSessionManager } from '../hooks/use-session-manager.ts'
 import { useRawStream } from '../hooks/use-raw-stream.ts'
+import { useTerminalResize } from '../hooks/use-terminal-resize.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
 
 import { Sidebar } from './sidebar.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
 import { api } from '../../shared/api-client.ts'
 
+function usePeriodicSessionSync(setSessions: (sessions: PTYSessionInfo[]) => void): void {
+  useEffect(() => {
+    const syncInterval = setInterval(async () => {
+      try {
+        setSessions(await api.sessions.list())
+      } catch (error) {
+        console.error('Failed to sync sessions', error)
+      }
+    }, 10000)
+
+    return () => clearInterval(syncInterval)
+  }, [setSessions])
+}
+
+interface ActiveSessionViewProps {
+  activeSession: PTYSessionInfo
+  terminalRef: RefObject<RawTerminal>
+  outputContainerRef: RefObject<HTMLDivElement>
+  charCount: number
+  wsMessageCount: number
+  sessionUpdateCount: number
+  onTerminalResize: (cols: number, rows: number) => void
+  onSendInput: (data: string) => void
+  onKillSession: () => void
+}
+
+function ActiveSessionView({
+  activeSession,
+  terminalRef,
+  outputContainerRef,
+  charCount,
+  wsMessageCount,
+  sessionUpdateCount,
+  onTerminalResize,
+  onSendInput,
+  onKillSession,
+}: ActiveSessionViewProps) {
+  return (
+    <>
+      <div className="output-header">
+        <div className="output-title">{activeSession.description ?? activeSession.title}</div>
+        <button type="button" className="kill-btn" onClick={onKillSession}>
+          Kill Session
+        </button>
+      </div>
+      <div className="output-container" ref={outputContainerRef}>
+        <RawTerminal
+          ref={terminalRef}
+          onSendInput={onSendInput}
+          onInterrupt={onKillSession}
+          onResize={onTerminalResize}
+          disabled={activeSession.status !== 'running'}
+        />
+      </div>
+      <div className="debug-info" data-testid="debug-info">
+        Debug: chars: {charCount}, active: {activeSession.id || 'none'}, WS raw_data:{' '}
+        {wsMessageCount}, session_updates: {sessionUpdateCount}
+      </div>
+    </>
+  )
+}
+
 export function App() {
   const [sessions, setSessions] = useState<PTYSessionInfo[]>([])
   const [activeSession, setActiveSession] = useState<PTYSessionInfo | null>(null)
-
-  const [connected, setConnected] = useState(false)
   const [wsMessageCount, setWsMessageCount] = useState(0)
   const [sessionUpdateCount, setSessionUpdateCount] = useState(0)
 
@@ -102,80 +163,23 @@ export function App() {
       setSessions((prevSessions) => {
         const existingIndex = prevSessions.findIndex((s) => s.id === updatedSession.id)
         if (existingIndex >= 0) {
-          // Replace the existing session
           const newSessions = [...prevSessions]
           newSessions[existingIndex] = updatedSession
           return newSessions
-        } else {
-          // Add the new session to the list
-          return [...prevSessions, updatedSession]
         }
+        return [...prevSessions, updatedSession]
       })
     }, []),
   })
 
-  // Update connected from wsConnected
-  useEffect(() => {
-    setConnected(wsConnected)
-  }, [wsConnected])
+  const { outputContainerRef, handleTerminalResize } = useTerminalResize({
+    activeSession,
+    connected: wsConnected,
+    sendResize,
+    terminalRef,
+  })
 
-  const outputContainerRef = useRef<HTMLDivElement>(null)
-  const terminalSizeRef = useRef<{ cols: number; rows: number } | null>(null)
-
-  const handleTerminalResize = useCallback(
-    (cols: number, rows: number) => {
-      if (cols <= 0 || rows <= 0) return
-      terminalSizeRef.current = { cols, rows }
-      if (activeSession) {
-        sendResize(activeSession.id, cols, rows)
-      }
-    },
-    [activeSession, sendResize]
-  )
-
-  // Re-send the known terminal size after connecting/subscribing or when the
-  // active session changes, so a freshly subscribed PTY matches the viewport
-  // even before the next ResizeObserver tick.
-  useEffect(() => {
-    if (!wsConnected || !activeSession) return
-    const size = terminalSizeRef.current
-    if (!size) return
-    sendResize(activeSession.id, size.cols, size.rows)
-  }, [wsConnected, activeSession, sendResize])
-
-  // Refit the terminal (and thereby report new cols/rows) when its container
-  // changes size. Debounced to avoid resize storms while dragging.
-  useEffect(() => {
-    const container = outputContainerRef.current
-    if (!container || !activeSession) return
-
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const observer = new ResizeObserver(() => {
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(() => {
-        terminalRef.current?.fit()
-      }, 100)
-    })
-    observer.observe(container)
-
-    return () => {
-      if (timer) clearTimeout(timer)
-      observer.disconnect()
-    }
-  }, [activeSession])
-
-  // Periodic session list sync every 10 seconds
-  useEffect(() => {
-    const syncInterval = setInterval(async () => {
-      try {
-        setSessions(await api.sessions.list())
-      } catch (error) {
-        console.error('Failed to sync sessions', error)
-      }
-    }, 10000) // 10 seconds
-
-    return () => clearInterval(syncInterval)
-  }, [])
+  usePeriodicSessionSync(setSessions)
 
   const { handleSessionClick, handleSendInput, handleKillSession } = useSessionManager({
     activeSession,
@@ -194,31 +198,21 @@ export function App() {
         sessions={sessions}
         activeSession={activeSession}
         onSessionClick={handleSessionClick}
-        connected={connected}
+        connected={wsConnected}
       />
       <div className="main">
         {activeSession ? (
-          <>
-            <div className="output-header">
-              <div className="output-title">{activeSession.description ?? activeSession.title}</div>
-              <button type="button" className="kill-btn" onClick={handleKillSession}>
-                Kill Session
-              </button>
-            </div>
-            <div className="output-container" ref={outputContainerRef}>
-              <RawTerminal
-                ref={terminalRef}
-                onSendInput={handleSendInput}
-                onInterrupt={handleKillSession}
-                onResize={handleTerminalResize}
-                disabled={!activeSession || activeSession.status !== 'running'}
-              />
-            </div>
-            <div className="debug-info" data-testid="debug-info">
-              Debug: chars: {charCount}, active: {activeSession?.id || 'none'}, WS raw_data:{' '}
-              {wsMessageCount}, session_updates: {sessionUpdateCount}
-            </div>
-          </>
+          <ActiveSessionView
+            activeSession={activeSession}
+            terminalRef={terminalRef}
+            outputContainerRef={outputContainerRef}
+            charCount={charCount}
+            wsMessageCount={wsMessageCount}
+            sessionUpdateCount={sessionUpdateCount}
+            onTerminalResize={handleTerminalResize}
+            onSendInput={handleSendInput}
+            onKillSession={handleKillSession}
+          />
         ) : (
           <div className="empty-state">Select a session from the sidebar to view its output</div>
         )}

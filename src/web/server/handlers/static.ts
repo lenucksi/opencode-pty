@@ -2,7 +2,6 @@ import { readdirSync, statSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { ASSET_CONTENT_TYPES } from '../../shared/constants.ts'
 
-// ----- MODULE-SCOPE CONSTANTS -----
 // Resolve project root regardless of whether we're running from source or dist/
 const MODULE_DIR = resolve(import.meta.dir, '../../../..')
 const PROJECT_ROOT = MODULE_DIR.replace(/[\\/]dist$/, '')
