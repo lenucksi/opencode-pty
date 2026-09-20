@@ -10,6 +10,7 @@ import { SerializeAddon } from '../addons/serialize/index.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
 import { linesToText, visibleScreenRange } from '../lib/terminal-text.ts'
 import { readTerminalTheme, type ThemeScheme } from '../lib/theme.ts'
+import { DEFAULT_TERMINAL_FONT_SIZE } from '../lib/ui-prefs.ts'
 
 /**
  * Load the shared Ghostty WASM instance once per page. `Ghostty.load(path)`
@@ -42,6 +43,8 @@ interface RawTerminalProps {
   onResize?: (cols: number, rows: number) => void
   /** Light/dark hint handed to the emulator (OSC 10/11, DEC 2031). */
   colorScheme?: ThemeScheme
+  /** Font size in CSS pixels, applied at init and on every change. */
+  fontSize?: number
   disabled?: boolean
 }
 
@@ -96,6 +99,19 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
     if (!this.ready || !term) return
     term.setOption('theme', theme)
     term.setOption('colorScheme', scheme)
+  }
+
+  /**
+   * Change the emulator font size live. ghostty-web remeasures the glyphs and
+   * repaints the whole viewport when the `fontSize` option changes; a fit
+   * afterwards re-derives the grid from the new metrics so the canvas keeps
+   * matching the pane.
+   */
+  public setFontSize(size: number): void {
+    const term = this.xtermInstance
+    if (!this.ready || !term) return
+    term.setOption('fontSize', size)
+    this.fit()
   }
 
   /**
@@ -178,6 +194,9 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
   }
 
   override componentDidUpdate(prevProps: RawTerminalProps) {
+    if (prevProps.fontSize !== this.props.fontSize && this.props.fontSize !== undefined) {
+      this.setFontSize(this.props.fontSize)
+    }
     if (prevProps.colorScheme === this.props.colorScheme) return
     // The token set is applied in an effect (which runs after this commit), so
     // read it on the next frame rather than immediately.
@@ -213,7 +232,7 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
       theme: readTerminalTheme(),
       colorScheme: this.props.colorScheme ?? 'dark',
       fontFamily: '"SF Mono", "Fira Code", Consolas, monospace',
-      fontSize: 14,
+      fontSize: this.props.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
       scrollback: 5000,
       // Use the explicitly-loaded external WASM rather than the module-level
       // `init()` singleton (whose bundle inlines a blocked data: URL).

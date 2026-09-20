@@ -1,3 +1,4 @@
+import type { RefObject } from 'react'
 import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
 
 import type { ThemePreference } from '../lib/theme.ts'
@@ -13,6 +14,8 @@ interface SidebarProps {
   connected: boolean
   themePreference: ThemePreference
   onThemePreferenceChange: (preference: ThemePreference) => void
+  onOpenSettings: () => void
+  settingsButtonRef: RefObject<HTMLButtonElement | null>
 }
 
 interface SessionSectionProps {
@@ -142,6 +145,8 @@ export function Sidebar({
   connected,
   themePreference,
   onThemePreferenceChange,
+  onOpenSettings,
+  settingsButtonRef,
 }: SidebarProps) {
   const liveSessions = sessions.filter(isLive)
   const finishedSessions = sessions.filter((session) => !isLive(session))
@@ -150,7 +155,19 @@ export function Sidebar({
     <div className="sidebar">
       <div className="sidebar-header">
         <h1>PTY Sessions</h1>
-        <ThemeSwitch preference={themePreference} onChange={onThemePreferenceChange} />
+        <div className="sidebar-header-controls">
+          <ThemeSwitch preference={themePreference} onChange={onThemePreferenceChange} />
+          <button
+            type="button"
+            ref={settingsButtonRef}
+            className="settings-btn"
+            onClick={onOpenSettings}
+            aria-haspopup="dialog"
+            title="Settings (Ctrl+,)"
+          >
+            Settings
+          </button>
+        </div>
       </div>
       <div className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
         {connected ? '● Connected' : '○ Disconnected'}
