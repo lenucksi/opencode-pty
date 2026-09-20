@@ -22,6 +22,10 @@ export const routes = {
       path: '/api/sessions/:id/cleanup',
       methods: ['DELETE'] as const,
     },
+    log: {
+      path: '/api/sessions/:id/log',
+      methods: ['GET'] as const,
+    },
     buffer: {
       raw: {
         path: '/api/sessions/:id/buffer/raw',
