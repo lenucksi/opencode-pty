@@ -70,6 +70,10 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
   // replayed once the emulator is ready.
   private ready = false
   private pendingIntents: RenderIntent[] = []
+  // A fit requested before the WASM module finished loading is remembered and
+  // replayed once ready; otherwise the grid (and with it the canvas, the only
+  // selectable surface) stays stale until another resize happens.
+  private pendingFit = false
   // Monotonic init generation. React StrictMode mounts, unmounts and remounts
   // the same component instance, so a single `disposed` boolean races with the
   // async `init()`: the first mount's await can resume *after* the remount and
@@ -83,7 +87,11 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
    * yet (fit errors are swallowed and zero dimensions are not reported).
    */
   public fit(): void {
-    if (!this.ready || !this.fitAddon || !this.xtermInstance) return
+    if (!this.ready || !this.fitAddon || !this.xtermInstance) {
+      this.pendingFit = true
+      return
+    }
+    this.pendingFit = false
     try {
       this.fitAddon.fit()
     } catch {
@@ -171,7 +179,7 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
       // Theme is applied at renderer construction; the fork does not reliably
       // update colors after `open()`.
       theme: readAppTheme(),
-      fontFamily: 'monospace',
+      fontFamily: '"SF Mono", "Fira Code", Consolas, monospace',
       fontSize: 14,
       scrollback: 5000,
       // Use the explicitly-loaded external WASM rather than the module-level
@@ -203,7 +211,19 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
       this.applyIntent(intent)
     }
 
+    if (this.pendingFit) {
+      // A fit was requested while the WASM was still loading; honour it now.
+      this.fit()
+    }
+    // Cold-mount fit: the pane may have been laid out before the emulator was
+    // ready, in which case no fit has run yet.
     this.fit()
+
+    // Layout (fonts, flex sizing) can settle after the ready callback, so run a
+    // couple of late fits. Without this a cold mount can leave the grid smaller
+    // than the pane until the user triggers another resize.
+    requestAnimationFrame(() => this.fit())
+    setTimeout(() => this.fit(), 300)
 
     // Expose terminal and serialize addon for E2E testing. Gated behind a
     // build-time flag so production bundles never leak test hooks; dev builds
