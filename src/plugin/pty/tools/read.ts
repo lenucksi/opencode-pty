@@ -13,6 +13,7 @@ const NOTIFY_ON_EXIT_REMINDER = [
   `If you only need to know whether the command finished, stop polling and wait for \`<pty_exited>\`.`,
   `Do not use sleep plus \`pty_read\` loops to check completion.`,
   `Use \`pty_read\` only when you need live output now, the user explicitly asks for logs, or the exit notification reports a non-zero status and you need to investigate.`,
+  `If no \`<pty_exited>\` arrives (exit notifications are unavailable on some hosts), do not wait indefinitely: call \`pty_wait\` to block until the session exits.`,
   `</system_reminder>`,
 ].join('\n')
 

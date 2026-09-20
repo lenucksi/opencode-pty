@@ -1,5 +1,6 @@
 import { createV2Adapter } from '../adapters/v2/index.ts'
 import { installHostAdapter } from '../adapters/index.ts'
+import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
 import { getOrCreateServer, registerV2Commands } from './commands.ts'
 import { V2SessionNotifier } from './notifier.ts'
 import { PTY_USAGE_SKILL } from './skill.ts'
@@ -27,9 +28,15 @@ export const Plugin: PluginV2 = define({
     const notifier =
       typeof ctx.session?.prompt === 'function' ? new V2SessionNotifier(ctx.session) : undefined
     if (!notifier) {
+      logPtyEvent('warn', 'v2 exit notifications disabled: ctx.session.prompt is unavailable', {
+        hasSession: ctx.session !== undefined,
+        promptType: typeof ctx.session?.prompt,
+      })
       console.warn(
         '[opencode-pty] host does not expose ctx.session.prompt — exit notifications disabled'
       )
+    } else {
+      logPtyEvent('info', 'v2 exit notifications enabled')
     }
 
     const adapter = createV2Adapter({ notifier })

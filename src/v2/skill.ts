@@ -77,7 +77,8 @@ Two supported strategies. Pick one; never invent a third.
    forever.
 2. **\`notifyOnExit: true\` + the future \`<pty_exited>\` message.** Use this for
    fire-and-forget processes while you do other work. Do not poll while you
-   wait.
+   wait. If the message never arrives (notifications are unavailable on some
+   hosts), do not wait indefinitely - use \`pty_wait\` instead.
 
 **Anti-patterns**
 - \`sleep\` + \`pty_read\` loops to detect completion - always wrong.
