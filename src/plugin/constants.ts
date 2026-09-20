@@ -9,3 +9,7 @@ export const MAX_TERMINAL_COLS = 1000
 export const MAX_TERMINAL_ROWS = 1000
 export const NOTIFICATION_LINE_TRUNCATE = 250
 export const NOTIFICATION_TITLE_TRUNCATE = 64
+/** Non-empty output lines appended to an exit notification, so the summary
+ * (ansible's `PLAY RECAP`, a failing task, ...) reaches the model without a
+ * follow-up `pty_read`. */
+export const NOTIFICATION_TAIL_LINES = 8

@@ -1,7 +1,12 @@
 import type { SessionNotifier } from '../../adapters/types.ts'
 import type { PTYSession } from './types.ts'
 import type { OpencodeClient } from '@opencode-ai/sdk'
-import { NOTIFICATION_LINE_TRUNCATE, NOTIFICATION_TITLE_TRUNCATE } from '../constants.ts'
+import {
+  NOTIFICATION_LINE_TRUNCATE,
+  NOTIFICATION_TAIL_LINES,
+  NOTIFICATION_TITLE_TRUNCATE,
+} from '../constants.ts'
+import { logPtyEvent } from './plugin-log.ts'
 
 export class NotificationManager implements SessionNotifier {
   private client: OpencodeClient | null = null
@@ -12,6 +17,10 @@ export class NotificationManager implements SessionNotifier {
 
   async sendExitNotification(session: PTYSession, exitCode: number): Promise<void> {
     if (!this.client) {
+      // A V2 host installs its own notifier; reaching this path means none was
+      // wired, and returning silently here used to hide the lost notification
+      // completely.
+      logPtyEvent('warn', `no opencode client available for the exit notification of ${session.id}`)
       return
     }
 
@@ -58,7 +67,7 @@ export class NotificationManager implements SessionNotifier {
       // Surface delivery failures instead of swallowing them silently; the V2
       // notifier already warns, and a lost exit notification would otherwise be
       // invisible to the user.
-      console.warn('[opencode-pty] failed to send exit notification:', error)
+      logPtyEvent('error', `failed to send exit notification for ${session.id}`, error)
     }
   }
 }
@@ -72,20 +81,8 @@ export class NotificationManager implements SessionNotifier {
  */
 export function buildExitNotification(session: PTYSession, exitCode: number): string {
   const lineCount = session.buffer.length
-  let lastLine = ''
-  if (lineCount > 0) {
-    for (let i = lineCount - 1; i >= 0; i--) {
-      const bufferLines = session.buffer.read(i, 1)
-      const line = bufferLines[0]
-      if (line !== undefined && line.trim() !== '') {
-        lastLine =
-          line.length > NOTIFICATION_LINE_TRUNCATE
-            ? `${line.slice(0, NOTIFICATION_LINE_TRUNCATE)}...`
-            : line
-        break
-      }
-    }
-  }
+  const tail = collectTailLines(session, NOTIFICATION_TAIL_LINES)
+  const lastLine = tail.at(-1) ?? ''
 
   const displayTitle = session.description ?? session.title
   const truncatedTitle =
@@ -102,9 +99,19 @@ export function buildExitNotification(session: PTYSession, exitCode: number): st
     `Timed Out: ${session.timedOut ? 'yes' : 'no'}`,
     `Output Lines: ${lineCount}`,
     `Last Line: ${lastLine}`,
-    '</pty_exited>',
-    '',
   ]
+
+  if (tail.length > 1) {
+    // The tail is what the model actually needs (ansible's `PLAY RECAP`, the
+    // failing task, ...) and it arrives ANSI-free; previously only the last
+    // line was sent, colour codes and all.
+    lines.push('', `Tail (last ${tail.length} non-empty lines):`)
+    for (const line of tail) {
+      lines.push(`  ${line}`)
+    }
+  }
+
+  lines.push('</pty_exited>', '')
 
   if (session.timedOut) {
     lines.push(
@@ -119,4 +126,31 @@ export function buildExitNotification(session: PTYSession, exitCode: number): st
   }
 
   return lines.join('\n')
+}
+
+/** `Bun.stripANSI` when available; raw text otherwise (never throw). */
+function stripAnsi(text: string): string {
+  return typeof Bun !== 'undefined' && typeof Bun.stripANSI === 'function'
+    ? Bun.stripANSI(text)
+    : text
+}
+
+/** One notification line: ANSI-free, right-trimmed and length-capped. */
+function truncateLine(line: string): string {
+  const clean = stripAnsi(line).replace(/\s+$/, '')
+  return clean.length > NOTIFICATION_LINE_TRUNCATE
+    ? `${clean.slice(0, NOTIFICATION_LINE_TRUNCATE)}...`
+    : clean
+}
+
+/** The last `count` non-empty output lines, oldest first. */
+function collectTailLines(session: PTYSession, count: number): string[] {
+  const lines: string[] = []
+  for (let i = session.buffer.length - 1; i >= 0 && lines.length < count; i--) {
+    const line = session.buffer.read(i, 1)[0]
+    if (line !== undefined && line.trim() !== '') {
+      lines.unshift(truncateLine(line))
+    }
+  }
+  return lines
 }

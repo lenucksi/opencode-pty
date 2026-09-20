@@ -3,6 +3,7 @@ import type { OpencodeClient } from '@opencode-ai/sdk'
 import { Terminal } from 'bun-pty'
 import { NotificationManager } from './notification-manager.ts'
 import { OutputManager } from './output-manager.ts'
+import { logPtyEvent } from './plugin-log.ts'
 import { SessionLifecycleManager } from './session-lifecycle.ts'
 import type { PTYSessionInfo, ReadResult, SearchResult, SpawnOptions } from './types.ts'
 import { withSession } from './utils.ts'
@@ -137,6 +138,10 @@ class PTYManager {
         notifySessionUpdate(this.lifecycleManager.toInfo(session))
         if (session?.notifyOnExit) {
           const activeNotifier = this.notifier ?? this.notificationManager
+          logPtyEvent('info', `delivering exit notification for ${session.id}`, {
+            notifier: activeNotifier.constructor?.name ?? typeof activeNotifier,
+            exitCode,
+          })
           await activeNotifier.sendExitNotification(session, exitCode || 0)
         }
       }

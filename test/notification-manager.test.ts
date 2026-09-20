@@ -188,4 +188,33 @@ describe('NotificationManager', () => {
     expect(text).toContain('Timed Out: yes')
     expect(text).toContain('Process reached its PTY timeout and was stopped automatically.')
   })
+
+  it('sends an ANSI-free tail so a summary like a PLAY RECAP reaches the model', async () => {
+    const promptAsync = mock(async (_payload: PromptPayload) => {})
+    const manager = new NotificationManager()
+
+    manager.init({ session: { promptAsync } } as unknown as OpencodeClient)
+
+    const session = createSession()
+    session.buffer.append(
+      '\u001b[0;33m192.168.4.20\u001b[0m : \u001b[0;32mok=38\u001b[0m changed=13 failed=0\n'
+    )
+
+    await manager.sendExitNotification(session, 0)
+
+    const payload = promptAsync.mock.calls[0]?.[0]
+    if (!payload) throw new Error('Expected a prompt payload')
+    const text = payload.body.parts[0]?.text ?? ''
+
+    expect(text).toMatch(/Tail \(last \d+ non-empty lines\):/)
+    expect(text).toContain('ok=38 changed=13 failed=0')
+    // Colour codes made the previous one-line notification hard to read.
+    expect(text).not.toContain('\u001b[')
+  })
+
+  it('does not throw when no client was ever initialised', async () => {
+    const manager = new NotificationManager()
+
+    await expect(manager.sendExitNotification(createSession(), 0)).resolves.toBeUndefined()
+  })
 })
