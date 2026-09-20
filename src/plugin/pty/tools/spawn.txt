@@ -1,31 +1,14 @@
-Creates a PTY session for any command that should run in the background, needs to persist beyond the current response, requires interactive input, or is long-running.
+Creates a PTY session for any command that should run in the background, needs interactive input, persists beyond the current response, or is long-running.
 
-Use pty_spawn instead of the built-in bash tool when you need to:
-- Run long-running processes (dev servers, watch modes)
-- Send interactive input (including Ctrl+C and arrow keys)
-- Read output at any time
-- Manage multiple concurrent terminal sessions
+Use it instead of the built-in bash tool for dev servers, watch modes, local APIs, REPLs and TUIs - anything you may need to send input to, or read while it runs.
 
 Usage:
-- `command` (required), e.g. "bun", "python3", "bash"
-- `args` to pass arguments (e.g. ["run", "dev"])
-- `workdir`, `env`, `title` as needed
+- `command` (required), `args`, `workdir`, `env`, `title`
 - `description` (required): a clear, concise 5-10 word description
-- `notifyOnExit` to receive a message when the process exits (default: false)
-- `timeoutSeconds` to auto-kill the PTY after N seconds. Do not set it for processes meant to keep running (dev servers, watch modes, local APIs, REPLs) unless the user asks; do set it for long builds, test suites, e2e runs or migrations you are waiting on.
+- `notifyOnExit`: receive a `<pty_exited>` message when the process exits
+- `timeoutSeconds`: hard cap. Skip it for processes meant to keep running unless the user asks; set it for builds, tests, e2e runs or migrations you are waiting on
 
-After spawning, use:
-- `pty_write` to send input, `pty_read` to read output, `pty_list` to list sessions, `pty_kill` to terminate
-- `pty_wait` to block until the session exits and get the exit code plus the latest output in one call
+Then use `pty_write` (input), `pty_read` (output), `pty_wait` (block until it exits), `pty_list`, `pty_kill`.
+To wait for completion prefer `pty_wait`, or `notifyOnExit` + `<pty_exited>`; never sleep+poll.
 
-Waiting for completion:
-- Prefer `pty_wait` when you need the result to continue: it blocks inside the tool call (no idle state) and returns the exit code and recent output synchronously.
-- If `notifyOnExit` is true, the completion signal is the future `<pty_exited>` message; do not poll with `pty_read` and never use sleep + `pty_read` loops.
-- Use `pty_read` before exit only if you need live output now, the user explicitly asks for logs, or a non-zero exit needs investigation.
-
-Examples:
-- Dev server: command="bun", args=["run", "dev"], title="Dev Server"
-- Watch mode: command="bun", args=["test", "--watch"]
-- Build with timeout and notification: command="bun", args=["run", "build"], notifyOnExit=true, timeoutSeconds=900
-- E2E with timeout: command="bun", args=["run", "test:e2e"], notifyOnExit=true, timeoutSeconds=1800
-- Python REPL: command="python3", title="Python REPL"
+See the `pty-usage` skill for the full guide.
