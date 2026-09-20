@@ -5,7 +5,10 @@ import { useWebSocket } from '../hooks/use-web-socket.ts'
 import { useSessionManager } from '../hooks/use-session-manager.ts'
 import { useRawStream } from '../hooks/use-raw-stream.ts'
 import { useTerminalResize } from '../hooks/use-terminal-resize.ts'
+import { useTheme } from '../hooks/use-theme.ts'
+import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
+import type { ThemeScheme } from '../lib/theme.ts'
 
 import { Sidebar } from './sidebar.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
@@ -32,8 +35,12 @@ interface ActiveSessionViewProps {
   charCount: number
   wsMessageCount: number
   sessionUpdateCount: number
+  colorScheme: ThemeScheme
+  copyFeedback: string
   onTerminalResize: (cols: number, rows: number) => void
   onSendInput: (data: string) => void
+  onCopy: () => void
+  onCopyAll: () => void
   onKillSession: () => void
   onRemoveSession: () => void
 }
@@ -45,8 +52,12 @@ function ActiveSessionView({
   charCount,
   wsMessageCount,
   sessionUpdateCount,
+  colorScheme,
+  copyFeedback,
   onTerminalResize,
   onSendInput,
+  onCopy,
+  onCopyAll,
   onKillSession,
   onRemoveSession,
 }: ActiveSessionViewProps) {
@@ -54,15 +65,36 @@ function ActiveSessionView({
     <>
       <div className="output-header">
         <div className="output-title">{activeSession.description ?? activeSession.title}</div>
-        {activeSession.status === 'running' ? (
-          <button type="button" className="kill-btn" onClick={onKillSession}>
-            Kill Session
+        <div className="output-actions">
+          <span className="copy-feedback" aria-live="polite" data-testid="copy-feedback">
+            {copyFeedback}
+          </span>
+          <button
+            type="button"
+            className="copy-btn"
+            onClick={onCopy}
+            title="Copy the selection, or what is on screen (Ctrl+Shift+C)"
+          >
+            Copy
           </button>
-        ) : (
-          <button type="button" className="remove-btn" onClick={onRemoveSession}>
-            Remove
+          <button
+            type="button"
+            className="copy-btn"
+            onClick={onCopyAll}
+            title="Copy the whole transcript, including scrollback"
+          >
+            Copy all
           </button>
-        )}
+          {activeSession.status === 'running' ? (
+            <button type="button" className="kill-btn" onClick={onKillSession}>
+              Kill Session
+            </button>
+          ) : (
+            <button type="button" className="remove-btn" onClick={onRemoveSession}>
+              Remove
+            </button>
+          )}
+        </div>
       </div>
       <div className="output-container" ref={outputContainerRef}>
         <RawTerminal
@@ -70,6 +102,7 @@ function ActiveSessionView({
           onSendInput={onSendInput}
           onInterrupt={onKillSession}
           onResize={onTerminalResize}
+          colorScheme={colorScheme}
           disabled={activeSession.status !== 'running'}
         />
       </div>
@@ -87,7 +120,11 @@ export function App() {
   const [wsMessageCount, setWsMessageCount] = useState(0)
   const [sessionUpdateCount, setSessionUpdateCount] = useState(0)
 
+  const { preference: themePreference, scheme, setPreference: setThemePreference } = useTheme()
+
   const terminalRef = useRef<RawTerminal>(null)
+  const [copyFeedback, setCopyFeedback] = useState('')
+  const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleSessionRemoved = useCallback((sessionId: string) => {
     setSessions((prevSessions) => prevSessions.filter((session) => session.id !== sessionId))
@@ -134,6 +171,73 @@ export function App() {
     },
     [getOffset, applySnapshot]
   )
+
+  const showCopyFeedback = useCallback((message: string) => {
+    setCopyFeedback(message)
+    if (copyFeedbackTimerRef.current) {
+      clearTimeout(copyFeedbackTimerRef.current)
+    }
+    copyFeedbackTimerRef.current = setTimeout(() => setCopyFeedback(''), 2500)
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (copyFeedbackTimerRef.current) {
+        clearTimeout(copyFeedbackTimerRef.current)
+      }
+    },
+    []
+  )
+
+  const reportCopy = useCallback(
+    async (text: string, emptyLabel: string, doneLabel: string) => {
+      if (!text) {
+        showCopyFeedback(emptyLabel)
+        return
+      }
+      const copied = await copyTextToClipboard(text)
+      const lineCount = text.split('\n').length
+      showCopyFeedback(
+        copied ? `${doneLabel} ${lineCount} line${lineCount === 1 ? '' : 's'}` : 'Copy failed'
+      )
+    },
+    [showCopyFeedback]
+  )
+
+  /** Selection if there is one, otherwise what is on screen. */
+  const handleCopy = useCallback(async () => {
+    const text = terminalRef.current?.getCopyText() ?? ''
+    await reportCopy(text, 'Nothing to copy', 'Copied')
+  }, [reportCopy])
+
+  /** The whole transcript, including what the emulator no longer holds. */
+  const handleCopyAll = useCallback(async () => {
+    const sessionId = activeSessionIdRef.current
+    if (!sessionId) return
+    try {
+      const data = await api.session.buffer.plain({ id: sessionId })
+      await reportCopy(data.plain ?? '', 'Nothing to copy', 'Copied all')
+    } catch (error) {
+      console.error('Failed to copy the session transcript', error)
+      showCopyFeedback('Copy failed')
+    }
+  }, [reportCopy, showCopyFeedback])
+
+  // Ctrl+Shift+C - and Cmd+C, where that is the platform convention - copy the
+  // terminal. Plain Ctrl+C is left alone so it keeps sending SIGINT.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'KeyC' || !(event.metaKey || (event.ctrlKey && event.shiftKey))) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      void handleCopy()
+    }
+
+    document.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => document.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [handleCopy])
 
   const {
     connected: wsConnected,
@@ -252,6 +356,8 @@ export function App() {
         onRemoveSession={handleRemoveSessionClick}
         onClearFinished={handleClearFinishedClick}
         connected={wsConnected}
+        themePreference={themePreference}
+        onThemePreferenceChange={setThemePreference}
       />
       <div className="main">
         {activeSession ? (
@@ -262,6 +368,10 @@ export function App() {
             charCount={charCount}
             wsMessageCount={wsMessageCount}
             sessionUpdateCount={sessionUpdateCount}
+            colorScheme={scheme}
+            copyFeedback={copyFeedback}
+            onCopy={handleCopy}
+            onCopyAll={handleCopyAll}
             onTerminalResize={handleTerminalResize}
             onSendInput={handleSendInput}
             onKillSession={handleKillSession}

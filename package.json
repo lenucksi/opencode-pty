@@ -103,5 +103,8 @@
     "@opencode/plugin": "^2.0.10",
     "bun-pty": "^0.4.10",
     "open": "^11.0.4"
+  },
+  "patchedDependencies": {
+    "ghostty-web@github:anomalyco/ghostty-web#83c0a07": "patches/ghostty-web.patch"
   }
 }

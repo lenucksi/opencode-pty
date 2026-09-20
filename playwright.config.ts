@@ -44,5 +44,8 @@ export default defineConfig({
     actionTimeout: 5000,
     // Increase navigation timeout
     navigationTimeout: 10000,
+    // The app follows `prefers-color-scheme`; pin dark so the suite keeps
+    // testing the default look. Theme-specific tests override this per file.
+    colorScheme: 'dark',
   },
 })

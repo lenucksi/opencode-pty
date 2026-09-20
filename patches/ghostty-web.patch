@@ -1,0 +1,43 @@
+diff --git a/lib/selection-manager.ts b/lib/selection-manager.ts
+index 56d460598720180f492a1dc993aa6cc86ba94e23..6ae4fe2d7c3d381af739f08b86b9725b429ab936 100644
+--- a/lib/selection-manager.ts
++++ b/lib/selection-manager.ts
+@@ -114,6 +114,23 @@ export class SelectionManager {
+     this.attachEventListeners();
+   }
+ 
++  /**
++   * Point the manager at a new WASM terminal instance.
++   *
++   * `Terminal.reset()` frees the terminal it was constructed with and creates a
++   * replacement, so a manager that keeps the old reference afterwards reads a
++   * freed buffer: cells come back empty (copying yields blank lines) and the
++   * reported dimensions fall back to the size the old instance was created
++   * with, which clamps the selection to that smaller area.
++   */
++  setWasmTerm(wasmTerm: GhosttyTerminal): void {
++    this.wasmTerm = wasmTerm;
++    this.selectionStart = null;
++    this.selectionEnd = null;
++    this.isSelecting = false;
++    this.requestRender();
++  }
++
+   // ==========================================================================
+   // Public API
+   // ==========================================================================
+diff --git a/lib/terminal.ts b/lib/terminal.ts
+index a62e34a12f4b04984c5b362be412036d26b1c868..3f7bac5cce756b9f9cffb2efffd41d4f00217ada 100644
+--- a/lib/terminal.ts
++++ b/lib/terminal.ts
+@@ -766,6 +766,10 @@ export class Terminal implements ITerminalCore {
+     this.wasmTerm = this.ghostty!.createTerminal(this.cols, this.rows, config);
+     this.wasmTerm.setColorScheme(this.options.colorScheme);
+ 
++    // The selection manager captured the previous instance at construction time;
++    // re-point it so selections read the live buffer (and its dimensions).
++    this.selectionManager?.setWasmTerm(this.wasmTerm);
++
+     // Clear renderer
+     this.renderer!.clear();
+ 
