@@ -114,7 +114,7 @@ describe('OpenCode V2 Plugin API', () => {
       expect(registered).toHaveLength(1)
 
       const [first] = registered
-      if (!first || first.type !== 'embedded') {
+      if (first?.type !== 'embedded') {
         throw new Error('expected an embedded skill source')
       }
       expect(first.skill.name).toBe('pty-usage')
