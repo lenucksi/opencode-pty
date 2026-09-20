@@ -19,6 +19,41 @@ const SECURITY_HEADERS = {
     "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self';",
 } as const
 const STATIC_DIR = join(PROJECT_ROOT, 'dist/web')
+const INDEX_HTML = join(STATIC_DIR, 'index.html')
+
+/** Content-hashed build output: safe to cache forever. */
+const IMMUTABLE_CACHE = 'public, max-age=31536000, immutable'
+/** Anything else static (favicon, ...): cache briefly, revalidate often. */
+const SHORT_CACHE = 'public, max-age=300'
+/**
+ * `index.html` must never be cached hard: it is what points at the hashed
+ * assets, so an immutable copy keeps a browser on an old build until its cache
+ * expires - the deployed UI looked stale even though the new bundle was served.
+ */
+const HTML_CACHE = 'no-cache'
+
+export function cacheControlFor(routeKey: string): string {
+  return routeKey.startsWith('/assets/') ? IMMUTABLE_CACHE : SHORT_CACHE
+}
+
+/**
+ * Serve `index.html` from disk on every request (it is tiny), so a new build
+ * takes effect on the next reload instead of the next server restart.
+ */
+export async function serveIndexHtml(): Promise<Response> {
+  const file = Bun.file(INDEX_HTML)
+  if (!(await file.exists())) {
+    return new Response('Not found', { status: 404, headers: SECURITY_HEADERS })
+  }
+
+  return new Response(await file.bytes(), {
+    headers: {
+      'Content-Type': 'text/html;charset=utf-8',
+      'Cache-Control': HTML_CACHE,
+      ...SECURITY_HEADERS,
+    },
+  })
+}
 
 export async function buildStaticRoutes(): Promise<Record<string, Response>> {
   const routes: Record<string, Response> = {}
@@ -27,6 +62,12 @@ export async function buildStaticRoutes(): Promise<Record<string, Response>> {
     if (typeof file === 'string' && !statSync(join(STATIC_DIR, file)).isDirectory()) {
       const ext = extname(file)
       const routeKey = `/${file.replace(/\\/g, '/')}` // e.g., /assets/js/bundle.js
+      // HTML is served per request (see serveIndexHtml) with a revalidating
+      // cache header instead of being frozen into the route map.
+      if (ext === '.html') {
+        continue
+      }
+
       const fullPath = join(STATIC_DIR, file)
       const fileObj = Bun.file(fullPath)
       const contentType = fileObj.type || ASSET_CONTENT_TYPES[ext] || 'application/octet-stream'
@@ -35,7 +76,7 @@ export async function buildStaticRoutes(): Promise<Record<string, Response>> {
       routes[routeKey] = new Response(await fileObj.bytes(), {
         headers: {
           'Content-Type': contentType,
-          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Cache-Control': cacheControlFor(routeKey),
           ...SECURITY_HEADERS,
         },
       })
