@@ -340,7 +340,8 @@ body {
   align-items: center;
   gap: 8px;
 }
-.download-btn {
+.download-btn,
+.copy-btn {
   padding: 8px 16px;
   background: var(--bg-raised);
   color: var(--fg);
@@ -350,12 +351,17 @@ body {
   font-weight: 600;
   font-size: 14px;
 }
-.download-btn:hover:not(:disabled) {
+.download-btn:hover:not(:disabled),
+.copy-btn:hover {
   background: var(--bg-hover);
 }
 .download-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.copy-feedback {
+  font-size: 12px;
+  color: var(--fg-muted);
 }
 .remove-btn {
   padding: 8px 16px;

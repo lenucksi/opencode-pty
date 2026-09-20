@@ -8,6 +8,7 @@ import { FitAddon, Ghostty, Terminal, type ITheme } from 'ghostty-web'
 import ghosttyWasmUrl from 'ghostty-web/ghostty-vt.wasm?url'
 import { SerializeAddon } from '../addons/serialize/index.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
+import { linesToText, visibleScreenRange } from '../lib/terminal-text.ts'
 import { readTerminalTheme, type ThemeScheme } from '../lib/theme.ts'
 
 /**
@@ -87,6 +88,31 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
     if (!this.ready || !term) return
     term.setOption('theme', theme)
     term.setOption('colorScheme', scheme)
+  }
+
+  /**
+   * Text the copy action should put on the clipboard: the current selection
+   * when there is one, otherwise what is on screen.
+   *
+   * Reading the buffer directly (instead of only `getSelection()`) keeps the
+   * action useful even when nothing is selected, and works without a selection
+   * at all on a touch device.
+   */
+  public getCopyText(): string {
+    const term = this.xtermInstance
+    if (!this.ready || !term) return ''
+
+    const selection = term.getSelection()
+    if (selection) return selection
+
+    const buffer = term.buffer.active
+    const { start, end } = visibleScreenRange(buffer.length, term.rows, term.viewportY)
+    const lines: string[] = []
+    for (let index = start; index <= end; index++) {
+      lines.push(buffer.getLine(index)?.translateToString(true) ?? '')
+    }
+
+    return linesToText(lines)
   }
 
   /**
