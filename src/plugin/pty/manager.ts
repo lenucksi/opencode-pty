@@ -4,10 +4,35 @@ import { Terminal } from 'bun-pty'
 import { NotificationManager } from './notification-manager.ts'
 import { OutputManager } from './output-manager.ts'
 import { logPtyEvent } from './plugin-log.ts'
-import { mergePersistedSessions, type PersistSessionInput, SessionStore } from './session-store.ts'
+import {
+  mergePersistedSessions,
+  type PersistedSession,
+  type PersistSessionInput,
+  SessionStore,
+} from './session-store.ts'
 import { SessionLifecycleManager } from './session-lifecycle.ts'
 import type { PTYSessionInfo, ReadResult, SearchResult, SpawnOptions } from './types.ts'
 import { withSession } from './utils.ts'
+
+/** Details about a session that is only left on disk. */
+export interface MissingSessionInfo {
+  id: string
+  archived: true
+  generation: string
+  status: string
+  lineCount: number
+  lost?: boolean
+  tail: string
+}
+
+/** Compact "which boot am I talking to" header for tool results and the API. */
+export interface ServerDescription {
+  generation: string
+  sessions: number
+  running: number
+  archived: number
+  persist: boolean
+}
 
 type StartReadLoop = (this: InstanceType<typeof Terminal>, ...args: unknown[]) => unknown
 
@@ -224,11 +249,39 @@ class PTYManager {
   }
 
   /** Archive entries restored at startup, marked lost if they were running. */
-  loadPersistedSessions(): PTYSessionInfo[] {
-    return this.sessionStore.markStaleAsLost().map((entry) => {
-      const [merged] = mergePersistedSessions([], [entry])
-      return merged as PTYSessionInfo
-    })
+  loadPersistedSessions(): PersistedSession[] {
+    return this.sessionStore.markStaleAsLost()
+  }
+
+  /**
+   * What a caller needs when a session id is unknown: whether it exists in the
+   * archive, which boot owned it, and its last output.
+   */
+  describeMissingSession(id: string): MissingSessionInfo | null {
+    const archived = this.sessionStore.get(id)
+    if (!archived) return null
+
+    return {
+      id,
+      archived: true,
+      generation: archived.generation,
+      status: archived.status,
+      lineCount: archived.lineCount,
+      ...(archived.lost ? { lost: true } : {}),
+      tail: this.getSessionLog(id, { tail: 5 }) ?? '',
+    }
+  }
+
+  /** Orientation for tool results: which boot this is and what is on disk. */
+  describeServer(): ServerDescription {
+    const sessions = this.list()
+    return {
+      generation: this.sessionStore.getGeneration(),
+      sessions: sessions.length,
+      running: sessions.filter((session) => session.status === 'running').length,
+      archived: sessions.filter((session) => session.archived).length,
+      persist: this.sessionStore.isEnabled(),
+    }
   }
 
   /** Session info plus the fields the archive needs to reach the parent later. */

@@ -8,12 +8,23 @@ export const ptyList = tool({
   args: {},
   async execute() {
     const sessions = manager.list()
+    const server = manager.describeServer()
 
     if (sessions.length === 0) {
-      return '<pty_list>\nNo active PTY sessions.\n</pty_list>'
+      return [
+        '<pty_list>',
+        `Generation: ${server.generation}`,
+        'No active PTY sessions.',
+        '</pty_list>',
+      ].join('\n')
     }
 
-    const lines = ['<pty_list>']
+    const lines = [
+      '<pty_list>',
+      `Generation: ${server.generation} | ${server.running} running, ${
+        server.sessions - server.running
+      } finished${server.archived > 0 ? `, ${server.archived} archived` : ''}`,
+    ]
     for (const session of sessions) {
       lines.push(...formatSessionInfo(session))
     }

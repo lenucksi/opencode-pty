@@ -85,6 +85,15 @@ export interface SkillDraft {
 
 export interface PluginContextV2 {
   readonly options?: OpencodePtyOptions & Record<string, unknown>
+  /**
+   * Host application info (name/version/channel). Used in restart notices so a
+   * reader knows which opencode build the sessions were lost to.
+   */
+  readonly app?: {
+    readonly name?: string
+    readonly version?: string
+    readonly channel?: string
+  }
   readonly command?: {
     transform(
       callback: (commands: CommandDraft) => Promise<void> | void

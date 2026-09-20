@@ -7,6 +7,10 @@ export const routes = {
     path: '/health',
     methods: ['GET'] as const,
   },
+  server: {
+    path: '/api/server',
+    methods: ['GET'] as const,
+  },
   sessions: {
     path: '/api/sessions',
     methods: ['GET', 'POST', 'DELETE'] as const,

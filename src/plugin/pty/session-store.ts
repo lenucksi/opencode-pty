@@ -124,6 +124,15 @@ export class SessionStore {
     return this.generation
   }
 
+  /** Directory the archive lives in (also where the restart marker goes). */
+  getRoot(): string {
+    return this.root
+  }
+
+  getRetention(): RetentionPolicy {
+    return { ...this.retention }
+  }
+
   // ---------------------------------------------------------------- lifecycle
 
   startSession(info: PersistSessionInput): void {

@@ -2,6 +2,7 @@ import type { Server } from 'bun'
 import { routes } from '../shared/routes.ts'
 import { CallbackManager } from './callback-manager.ts'
 import { handleHealth } from './handlers/health.ts'
+import { handleServerInfo } from './handlers/server-info.ts'
 import {
   cleanupSession,
   clearSessions,
@@ -179,6 +180,7 @@ export class PTYServer implements Disposable {
         '/index.html': () => serveIndexHtml(),
         [routes.websocket.path]: (req: Request) => handleUpgrade(this.server, req),
         [routes.health.path]: () => handleHealth(this.server),
+        [routes.server.path]: () => handleServerInfo(this.server),
         [routes.sessions.path]: {
           GET: getSessions,
           POST: createSession,

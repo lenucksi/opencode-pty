@@ -2,6 +2,7 @@ import { createV2Adapter } from '../adapters/v2/index.ts'
 import { installHostAdapter } from '../adapters/index.ts'
 import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
 import { manager } from '../plugin/pty/manager.ts'
+import { announceRestart } from './restart-announce.ts'
 import { getOrCreateServer, registerV2Commands } from './commands.ts'
 import { V2SessionNotifier } from './notifier.ts'
 import { PTY_USAGE_SKILL } from './skill.ts'
@@ -75,9 +76,19 @@ export const Plugin: PluginV2 = define({
 
     if (ctx.options?.autostart) {
       try {
-        await getOrCreateServer({
+        const server = await getOrCreateServer({
           port: ctx.options.port,
           hostname: ctx.options.hostname,
+        })
+
+        // Sessions that the previous run left behind are announced once per
+        // boot, with the address a human can look at.
+        await announceRestart({
+          store: manager.getSessionStore(),
+          ...(notifier ? { notifier } : {}),
+          restored,
+          webUrl: `${server.server.url.origin}/`,
+          ...(ctx.app?.version ? { hostVersion: ctx.app.version } : {}),
         })
       } catch (error) {
         // Never let web-server startup failure crash plugin setup: the PTY
