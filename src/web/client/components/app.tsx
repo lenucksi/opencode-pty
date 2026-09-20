@@ -6,11 +6,13 @@ import { useSessionManager } from '../hooks/use-session-manager.ts'
 import { useRawStream } from '../hooks/use-raw-stream.ts'
 import { useTerminalResize } from '../hooks/use-terminal-resize.ts'
 import { useTheme } from '../hooks/use-theme.ts'
+import { useUiPrefs } from '../hooks/use-ui-prefs.ts'
 import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
 import type { ThemeScheme } from '../lib/theme.ts'
 
 import { Sidebar } from './sidebar.tsx'
+import { SettingsModal } from './settings-modal.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
 import { api } from '../../shared/api-client.ts'
 
@@ -22,6 +24,8 @@ interface ActiveSessionViewProps {
   wsMessageCount: number
   sessionUpdateCount: number
   colorScheme: ThemeScheme
+  terminalFontSize: number
+  showDebugBar: boolean
   copyFeedback: string
   onTerminalResize: (cols: number, rows: number) => void
   onSendInput: (data: string) => void
@@ -39,6 +43,8 @@ function ActiveSessionView({
   wsMessageCount,
   sessionUpdateCount,
   colorScheme,
+  terminalFontSize,
+  showDebugBar,
   copyFeedback,
   onTerminalResize,
   onSendInput,
@@ -89,13 +95,16 @@ function ActiveSessionView({
           onInterrupt={onKillSession}
           onResize={onTerminalResize}
           colorScheme={colorScheme}
+          fontSize={terminalFontSize}
           disabled={activeSession.status !== 'running'}
         />
       </div>
-      <div className="debug-info" data-testid="debug-info">
-        Debug: chars: {charCount}, active: {activeSession.id || 'none'}, WS raw_data:{' '}
-        {wsMessageCount}, session_updates: {sessionUpdateCount}
-      </div>
+      {showDebugBar ? (
+        <div className="debug-info" data-testid="debug-info">
+          Debug: chars: {charCount}, active: {activeSession.id || 'none'}, WS raw_data:{' '}
+          {wsMessageCount}, session_updates: {sessionUpdateCount}
+        </div>
+      ) : null}
     </>
   )
 }
@@ -105,8 +114,13 @@ export function App() {
   const [activeSession, setActiveSession] = useState<PTYSessionInfo | null>(null)
   const [wsMessageCount, setWsMessageCount] = useState(0)
   const [sessionUpdateCount, setSessionUpdateCount] = useState(0)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const { preference: themePreference, scheme, setPreference: setThemePreference } = useTheme()
+  const { prefs, setTerminalFontSize, setShowDebugBar } = useUiPrefs()
+
+  const appShellRef = useRef<HTMLDivElement>(null)
+  const settingsButtonRef = useRef<HTMLButtonElement>(null)
 
   const terminalRef = useRef<RawTerminal>(null)
   const [copyFeedback, setCopyFeedback] = useState('')
@@ -225,6 +239,21 @@ export function App() {
     return () => document.removeEventListener('keydown', onKeyDown, { capture: true })
   }, [handleCopy])
 
+  // Ctrl+, / Cmd+, open the settings dialog. Capture phase so the shortcut wins
+  // even while the terminal canvas has focus.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== ',' || !(event.metaKey || event.ctrlKey)) {
+        return
+      }
+      event.preventDefault()
+      setSettingsOpen(true)
+    }
+
+    document.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => document.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [])
+
   const {
     connected: wsConnected,
     subscribeWithRetry,
@@ -331,40 +360,58 @@ export function App() {
   }, [sessions, handleClearFinished])
 
   return (
-    <div className="container" data-active-session={activeSession?.id}>
-      <Sidebar
-        sessions={sessions}
-        activeSession={activeSession}
-        onSessionClick={handleSessionClick}
-        onKillSession={handleKillSessionById}
-        onRemoveSession={handleRemoveSessionClick}
-        onClearFinished={handleClearFinishedClick}
-        connected={wsConnected}
+    <>
+      <div className="container" ref={appShellRef} data-active-session={activeSession?.id}>
+        <Sidebar
+          sessions={sessions}
+          activeSession={activeSession}
+          onSessionClick={handleSessionClick}
+          onKillSession={handleKillSessionById}
+          onRemoveSession={handleRemoveSessionClick}
+          onClearFinished={handleClearFinishedClick}
+          connected={wsConnected}
+          themePreference={themePreference}
+          onThemePreferenceChange={setThemePreference}
+          onOpenSettings={() => setSettingsOpen(true)}
+          settingsButtonRef={settingsButtonRef}
+        />
+        <div className="main">
+          {activeSession ? (
+            <ActiveSessionView
+              activeSession={activeSession}
+              terminalRef={terminalRef}
+              outputContainerRef={outputContainerRef}
+              charCount={charCount}
+              wsMessageCount={wsMessageCount}
+              sessionUpdateCount={sessionUpdateCount}
+              colorScheme={scheme}
+              terminalFontSize={prefs.terminalFontSize}
+              showDebugBar={prefs.showDebugBar}
+              copyFeedback={copyFeedback}
+              onCopy={handleCopy}
+              onCopyAll={handleCopyAll}
+              onTerminalResize={handleTerminalResize}
+              onSendInput={handleSendInput}
+              onKillSession={handleKillSession}
+              onRemoveSession={() => handleRemoveSessionClick(activeSession)}
+            />
+          ) : (
+            <div className="empty-state">Select a session from the sidebar to view its output</div>
+          )}
+        </div>
+      </div>
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        returnFocusRef={settingsButtonRef}
+        inertTarget={appShellRef}
         themePreference={themePreference}
         onThemePreferenceChange={setThemePreference}
+        terminalFontSize={prefs.terminalFontSize}
+        onTerminalFontSizeChange={setTerminalFontSize}
+        showDebugBar={prefs.showDebugBar}
+        onShowDebugBarChange={setShowDebugBar}
       />
-      <div className="main">
-        {activeSession ? (
-          <ActiveSessionView
-            activeSession={activeSession}
-            terminalRef={terminalRef}
-            outputContainerRef={outputContainerRef}
-            charCount={charCount}
-            wsMessageCount={wsMessageCount}
-            sessionUpdateCount={sessionUpdateCount}
-            colorScheme={scheme}
-            copyFeedback={copyFeedback}
-            onCopy={handleCopy}
-            onCopyAll={handleCopyAll}
-            onTerminalResize={handleTerminalResize}
-            onSendInput={handleSendInput}
-            onKillSession={handleKillSession}
-            onRemoveSession={() => handleRemoveSessionClick(activeSession)}
-          />
-        ) : (
-          <div className="empty-state">Select a session from the sidebar to view its output</div>
-        )}
-      </div>
-    </div>
+    </>
   )
 }

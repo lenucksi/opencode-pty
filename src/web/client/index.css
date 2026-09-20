@@ -458,3 +458,140 @@ body {
 .connection-status.disconnected {
   color: var(--danger);
 }
+.sidebar-header-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sidebar-header-controls .theme-switch {
+  flex: 1;
+  margin-top: 0;
+}
+.settings-btn {
+  padding: 4px 12px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.settings-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.settings-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.settings-dialog {
+  margin: auto;
+  padding: 0;
+  width: min(420px, calc(100vw - 32px));
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.settings-dialog::backdrop {
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.settings-dialog[open] {
+  animation: settings-dialog-in 140ms ease-out;
+}
+@keyframes settings-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-dialog[open] {
+    animation: none;
+  }
+}
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+.settings-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.settings-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.settings-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.settings-close:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.settings-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+.settings-font-size {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settings-font-size input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.settings-font-size-value {
+  min-width: 44px;
+  color: var(--fg);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+  font-size: 14px;
+  cursor: pointer;
+}
+.settings-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
