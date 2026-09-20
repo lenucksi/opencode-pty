@@ -13,7 +13,7 @@ import {
   killSession,
   sendInput,
 } from './handlers/sessions.ts'
-import { buildStaticRoutes } from './handlers/static.ts'
+import { buildStaticRoutes, serveIndexHtml } from './handlers/static.ts'
 import { handleUpgrade } from './handlers/upgrade.ts'
 import { handleWebSocketMessage } from './handlers/websocket.ts'
 
@@ -172,6 +172,10 @@ export class PTYServer implements Disposable {
 
       routes: {
         ...this.staticRoutes,
+        // The HTML shell is served from disk per request (revalidating cache),
+        // so a new build is picked up on reload instead of the next restart.
+        '/': () => serveIndexHtml(),
+        '/index.html': () => serveIndexHtml(),
         [routes.websocket.path]: (req: Request) => handleUpgrade(this.server, req),
         [routes.health.path]: () => handleHealth(this.server),
         [routes.sessions.path]: {
