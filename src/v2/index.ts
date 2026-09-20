@@ -2,11 +2,13 @@ import { createV2Adapter } from '../adapters/v2/index.ts'
 import { installHostAdapter } from '../adapters/index.ts'
 import { getOrCreateServer, registerV2Commands } from './commands.ts'
 import { V2SessionNotifier } from './notifier.ts'
+import { PTY_USAGE_SKILL } from './skill.ts'
 import { registerV2Tools } from './tools.ts'
 import { define, type OpencodePtyOptions, type PluginContextV2, type PluginV2 } from './types.ts'
 
 export * from './commands.ts'
 export * from './notifier.ts'
+export * from './skill.ts'
 export * from './tools.ts'
 export * from './types.ts'
 
@@ -42,6 +44,14 @@ export const Plugin: PluginV2 = define({
     if (ctx.command && typeof ctx.command.transform === 'function') {
       await ctx.command.transform((draft) => {
         registerV2Commands(draft, ctx.options as OpencodePtyOptions | undefined)
+      })
+    }
+
+    // Ship the detailed pty usage guide as an on-demand skill, so the
+    // always-on tool descriptions can stay terse without losing guidance.
+    if (ctx.skill && typeof ctx.skill.transform === 'function') {
+      await ctx.skill.transform((draft) => {
+        draft.source({ type: 'embedded', skill: PTY_USAGE_SKILL })
       })
     }
 

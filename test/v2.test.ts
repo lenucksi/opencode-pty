@@ -13,6 +13,8 @@ import type {
   CommandDefinition,
   CommandDraft,
   PluginContextV2,
+  SkillDraft,
+  SkillSourceV2,
   ToolDraft,
   ToolInfoV2,
 } from '../src/v2/types.ts'
@@ -79,6 +81,50 @@ describe('OpenCode V2 Plugin API', () => {
     })
 
     it('does not fail when the tool transform is unavailable', async () => {
+      const ctx: PluginContextV2 = { options: {} }
+      await Plugin.setup(ctx)
+      expect(getActiveServer()).toBeNull()
+    })
+  })
+
+  describe('Skill Registration via ctx.skill.transform', () => {
+    it('registers the embedded pty-usage skill', async () => {
+      const registered: SkillSourceV2[] = []
+
+      const draft: SkillDraft = {
+        source: (source) => {
+          registered.push(source)
+        },
+      }
+
+      const mockTransform = mock(async (callback: (draft: SkillDraft) => void) => {
+        callback(draft)
+      })
+
+      const ctx: PluginContextV2 = {
+        options: {},
+        skill: {
+          transform: mockTransform,
+        },
+      }
+
+      await Plugin.setup(ctx)
+
+      expect(mockTransform).toHaveBeenCalled()
+      expect(registered).toHaveLength(1)
+
+      const [first] = registered
+      if (!first || first.type !== 'embedded') {
+        throw new Error('expected an embedded skill source')
+      }
+      expect(first.skill.name).toBe('pty-usage')
+      expect(first.skill.description?.length ?? 0).toBeGreaterThan(20)
+      // The detailed guide lives in the skill, so it should be substantial.
+      expect(first.skill.content.length).toBeGreaterThan(500)
+      expect(first.skill.content).toContain('pty_wait')
+    })
+
+    it('does not fail when the skill transform is unavailable', async () => {
       const ctx: PluginContextV2 = { options: {} }
       await Plugin.setup(ctx)
       expect(getActiveServer()).toBeNull()
