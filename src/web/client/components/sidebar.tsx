@@ -1,5 +1,8 @@
 import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
 
+import type { ThemePreference } from '../lib/theme.ts'
+import { ThemeSwitch } from './theme-switch.tsx'
+
 interface SidebarProps {
   sessions: PTYSessionInfo[]
   activeSession: PTYSessionInfo | null
@@ -8,6 +11,8 @@ interface SidebarProps {
   onRemoveSession: (session: PTYSessionInfo) => void
   onClearFinished: () => void
   connected: boolean
+  themePreference: ThemePreference
+  onThemePreferenceChange: (preference: ThemePreference) => void
 }
 
 interface SessionSectionProps {
@@ -135,6 +140,8 @@ export function Sidebar({
   onRemoveSession,
   onClearFinished,
   connected,
+  themePreference,
+  onThemePreferenceChange,
 }: SidebarProps) {
   const liveSessions = sessions.filter(isLive)
   const finishedSessions = sessions.filter((session) => !isLive(session))
@@ -143,6 +150,7 @@ export function Sidebar({
     <div className="sidebar">
       <div className="sidebar-header">
         <h1>PTY Sessions</h1>
+        <ThemeSwitch preference={themePreference} onChange={onThemePreferenceChange} />
       </div>
       <div className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
         {connected ? '● Connected' : '○ Disconnected'}

@@ -8,6 +8,7 @@ import { FitAddon, Ghostty, Terminal, type ITheme } from 'ghostty-web'
 import ghosttyWasmUrl from 'ghostty-web/ghostty-vt.wasm?url'
 import { SerializeAddon } from '../addons/serialize/index.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
+import { readTerminalTheme, type ThemeScheme } from '../lib/theme.ts'
 
 /**
  * Load the shared Ghostty WASM instance once per page. `Ghostty.load(path)`
@@ -34,28 +35,12 @@ declare global {
   }
 }
 
-/**
- * Resolve the terminal palette from the application theme. The colors are
- * defined once as CSS custom properties (`--app-bg` / `--app-fg`) so the
- * emulator stays in sync with the rest of the UI instead of hardcoding a
- * separate dark palette.
- *
- * ghostty-web applies the theme when the renderer is created (`open()`), so the
- * palette has to be passed to the constructor rather than set afterwards.
- */
-function readAppTheme(): ITheme {
-  const rootStyles = getComputedStyle(document.documentElement)
-  const bodyStyles = getComputedStyle(document.body)
-  return {
-    background: rootStyles.getPropertyValue('--app-bg').trim() || bodyStyles.backgroundColor,
-    foreground: rootStyles.getPropertyValue('--app-fg').trim() || bodyStyles.color,
-  }
-}
-
 interface RawTerminalProps {
   onSendInput?: (data: string) => void
   onInterrupt?: () => void
   onResize?: (cols: number, rows: number) => void
+  /** Light/dark hint handed to the emulator (OSC 10/11, DEC 2031). */
+  colorScheme?: ThemeScheme
   disabled?: boolean
 }
 
@@ -90,6 +75,18 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
       // Container may not be laid out yet; fit throws on zero dimensions.
     }
     this.emitResize()
+  }
+
+  /**
+   * Swap the palette of a live terminal. ghostty-web rebuilds its color palette
+   * and repaints the whole viewport when the `theme` option changes, so the
+   * transcript survives and no re-initialisation is needed.
+   */
+  public applyTheme(theme: ITheme, scheme: ThemeScheme): void {
+    const term = this.xtermInstance
+    if (!this.ready || !term) return
+    term.setOption('theme', theme)
+    term.setOption('colorScheme', scheme)
   }
 
   /**
@@ -146,6 +143,15 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
     })
   }
 
+  override componentDidUpdate(prevProps: RawTerminalProps) {
+    if (prevProps.colorScheme === this.props.colorScheme) return
+    // The token set is applied in an effect (which runs after this commit), so
+    // read it on the next frame rather than immediately.
+    requestAnimationFrame(() => {
+      this.applyTheme(readTerminalTheme(), this.props.colorScheme ?? 'dark')
+    })
+  }
+
   override componentWillUnmount() {
     // Invalidate any in-flight init so it cannot install a terminal after the
     // component (or this mount pass) is gone.
@@ -168,9 +174,10 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
 
     const term = new Terminal({
       cursorBlink: true,
-      // Theme is applied at renderer construction; the fork does not reliably
-      // update colors after `open()`.
-      theme: readAppTheme(),
+      // Seed with the palette the app is currently rendering; `applyTheme`
+      // swaps it live when the user changes the theme.
+      theme: readTerminalTheme(),
+      colorScheme: this.props.colorScheme ?? 'dark',
       fontFamily: 'monospace',
       fontSize: 14,
       scrollback: 5000,
@@ -204,6 +211,13 @@ export class RawTerminal extends React.Component<RawTerminalProps> {
     }
 
     this.fit()
+
+    // The palette is read from CSS, and the theme hook updates the token set in
+    // an effect that runs after this commit. Re-read it on the next frame so a
+    // mount that races a theme switch still ends up with the right colors.
+    requestAnimationFrame(() => {
+      this.applyTheme(readTerminalTheme(), this.props.colorScheme ?? 'dark')
+    })
 
     // Expose terminal and serialize addon for E2E testing. Gated behind a
     // build-time flag so production bundles never leak test hooks; dev builds

@@ -5,7 +5,9 @@ import { useWebSocket } from '../hooks/use-web-socket.ts'
 import { useSessionManager } from '../hooks/use-session-manager.ts'
 import { useRawStream } from '../hooks/use-raw-stream.ts'
 import { useTerminalResize } from '../hooks/use-terminal-resize.ts'
+import { useTheme } from '../hooks/use-theme.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
+import type { ThemeScheme } from '../lib/theme.ts'
 
 import { Sidebar } from './sidebar.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
@@ -32,6 +34,7 @@ interface ActiveSessionViewProps {
   charCount: number
   wsMessageCount: number
   sessionUpdateCount: number
+  colorScheme: ThemeScheme
   onTerminalResize: (cols: number, rows: number) => void
   onSendInput: (data: string) => void
   onKillSession: () => void
@@ -45,6 +48,7 @@ function ActiveSessionView({
   charCount,
   wsMessageCount,
   sessionUpdateCount,
+  colorScheme,
   onTerminalResize,
   onSendInput,
   onKillSession,
@@ -70,6 +74,7 @@ function ActiveSessionView({
           onSendInput={onSendInput}
           onInterrupt={onKillSession}
           onResize={onTerminalResize}
+          colorScheme={colorScheme}
           disabled={activeSession.status !== 'running'}
         />
       </div>
@@ -86,6 +91,8 @@ export function App() {
   const [activeSession, setActiveSession] = useState<PTYSessionInfo | null>(null)
   const [wsMessageCount, setWsMessageCount] = useState(0)
   const [sessionUpdateCount, setSessionUpdateCount] = useState(0)
+
+  const { preference: themePreference, scheme, setPreference: setThemePreference } = useTheme()
 
   const terminalRef = useRef<RawTerminal>(null)
 
@@ -252,6 +259,8 @@ export function App() {
         onRemoveSession={handleRemoveSessionClick}
         onClearFinished={handleClearFinishedClick}
         connected={wsConnected}
+        themePreference={themePreference}
+        onThemePreferenceChange={setThemePreference}
       />
       <div className="main">
         {activeSession ? (
@@ -262,6 +271,7 @@ export function App() {
             charCount={charCount}
             wsMessageCount={wsMessageCount}
             sessionUpdateCount={sessionUpdateCount}
+            colorScheme={scheme}
             onTerminalResize={handleTerminalResize}
             onSendInput={handleSendInput}
             onKillSession={handleKillSession}
