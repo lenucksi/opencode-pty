@@ -7,6 +7,7 @@ import {
   clearSessions,
   createSession,
   getPlainBuffer,
+  getSessionLog,
   getRawBuffer,
   getSession,
   getSessions,
@@ -192,6 +193,9 @@ export class PTYServer implements Disposable {
         },
         [routes.session.input.path]: {
           POST: sendInput,
+        },
+        [routes.session.log.path]: {
+          GET: getSessionLog,
         },
         [routes.session.buffer.raw.path]: {
           GET: getRawBuffer,

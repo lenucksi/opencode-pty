@@ -46,6 +46,9 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         env: {
           ...process.env,
           TEST_WORKER_INDEX: workerInfo.workerIndex.toString(),
+          // Keep the archived sessions of a test run out of the developer's
+          // real state directory.
+          OPENCODE_PTY_STATE_DIR: `/tmp/opencode-pty-e2e/state-${workerIndex}`,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       })

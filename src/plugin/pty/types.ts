@@ -41,6 +41,13 @@ export interface PTYSessionInfo {
   pid: number
   createdAt: string
   lineCount: number
+  /**
+   * Session read back from the on-disk store after its process (and the plugin
+   * that owned it) is gone. `lost` marks one that was still running when the
+   * previous instance stopped.
+   */
+  archived?: boolean
+  lost?: boolean
 }
 
 export interface SpawnOptions {

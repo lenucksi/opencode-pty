@@ -4,6 +4,7 @@ import { Terminal } from 'bun-pty'
 import { NotificationManager } from './notification-manager.ts'
 import { OutputManager } from './output-manager.ts'
 import { logPtyEvent } from './plugin-log.ts'
+import { mergePersistedSessions, type PersistSessionInput, SessionStore } from './session-store.ts'
 import { SessionLifecycleManager } from './session-lifecycle.ts'
 import type { PTYSessionInfo, ReadResult, SearchResult, SpawnOptions } from './types.ts'
 import { withSession } from './utils.ts'
@@ -106,6 +107,7 @@ class PTYManager {
   private outputManager = new OutputManager()
   private notificationManager = new NotificationManager()
   private notifier: SessionNotifier | null = null
+  private sessionStore = new SessionStore()
 
   setNotifier(notifier: SessionNotifier | null): void {
     this.notifier = notifier
@@ -123,6 +125,7 @@ class PTYManager {
   clearAllSessions(): void {
     const removedIds = this.lifecycleManager.listSessions().map((session) => session.id)
     this.lifecycleManager.clearAllSessions()
+    this.sessionStore.clear()
     for (const id of removedIds) {
       notifySessionRemoved(id)
     }
@@ -132,10 +135,13 @@ class PTYManager {
     const session = this.lifecycleManager.spawn(
       opts,
       (session, data, offset) => {
+        this.sessionStore.appendOutput(session.id, data)
         notifyRawOutput(session.id, data, offset)
       },
       async (session, exitCode) => {
-        notifySessionUpdate(this.lifecycleManager.toInfo(session))
+        const info = this.lifecycleManager.toInfo(session)
+        this.sessionStore.endSession(this.persistInput(info, session), exitCode)
+        notifySessionUpdate(info)
         if (session?.notifyOnExit) {
           const activeNotifier = this.notifier ?? this.notificationManager
           logPtyEvent('info', `delivering exit notification for ${session.id}`, {
@@ -146,6 +152,7 @@ class PTYManager {
         }
       }
     )
+    this.sessionStore.startSession(this.persistInput(session, opts))
     notifySessionUpdate(session)
     return session
   }
@@ -160,34 +167,89 @@ class PTYManager {
   }
 
   read(id: string, offset: number = 0, limit?: number): ReadResult | null {
-    return withSession(
+    const live = withSession(
       this.lifecycleManager,
       id,
       (session) => this.outputManager.read(session, offset, limit),
       null
     )
+    return live ?? this.sessionStore.read(id, offset, limit)
   }
 
   search(id: string, pattern: RegExp, offset: number = 0, limit?: number): SearchResult | null {
-    return withSession(
+    const live = withSession(
       this.lifecycleManager,
       id,
       (session) => this.outputManager.search(session, pattern, offset, limit),
       null
     )
+    return live ?? this.sessionStore.search(id, pattern, offset, limit)
   }
 
   list(): PTYSessionInfo[] {
-    return this.lifecycleManager.listSessions().map((s) => this.lifecycleManager.toInfo(s))
+    const live = this.lifecycleManager.listSessions().map((s) => this.lifecycleManager.toInfo(s))
+    return mergePersistedSessions(live, this.sessionStore.list())
   }
 
   get(id: string): PTYSessionInfo | null {
-    return withSession(
+    const live = withSession(
       this.lifecycleManager,
       id,
       (session) => this.lifecycleManager.toInfo(session),
       null
     )
+    if (live) return live
+
+    const archived = this.sessionStore.get(id)
+    if (!archived) return null
+    const [merged] = mergePersistedSessions([], [archived])
+    return merged ?? null
+  }
+
+  /** Archived output as plain text, used by the log endpoint and `pty_read`. */
+  getSessionLog(id: string, options: { tail?: number } = {}): string | null {
+    const live = withSession(
+      this.lifecycleManager,
+      id,
+      (session) => session.buffer.read(0).join('\n'),
+      null
+    )
+    const raw = live ?? this.sessionStore.readRaw(id)
+    if (raw === null) return null
+    if (options.tail === undefined) return raw
+
+    const lines = raw.split('\n')
+    if (lines.at(-1) === '') lines.pop()
+    return lines.slice(Math.max(0, lines.length - options.tail)).join('\n')
+  }
+
+  /** Archive entries restored at startup, marked lost if they were running. */
+  loadPersistedSessions(): PTYSessionInfo[] {
+    return this.sessionStore.markStaleAsLost().map((entry) => {
+      const [merged] = mergePersistedSessions([], [entry])
+      return merged as PTYSessionInfo
+    })
+  }
+
+  /** Session info plus the fields the archive needs to reach the parent later. */
+  private persistInput(
+    info: PTYSessionInfo,
+    parent: { parentSessionId?: string; parentAgent?: string }
+  ): PersistSessionInput {
+    return {
+      ...info,
+      ...(parent.parentSessionId === undefined ? {} : { parentSessionId: parent.parentSessionId }),
+      ...(parent.parentAgent === undefined ? {} : { parentAgent: parent.parentAgent }),
+    }
+  }
+
+  setSessionStore(store: SessionStore): void {
+    this.sessionStore.close()
+    this.sessionStore = store
+  }
+
+  getSessionStore(): SessionStore {
+    return this.sessionStore
   }
 
   /**
@@ -199,7 +261,7 @@ class PTYManager {
     id: string,
     since?: number
   ): { raw: string; byteLength: number; offset: number } | null {
-    return withSession(
+    const live = withSession(
       this.lifecycleManager,
       id,
       (session) => {
@@ -212,11 +274,27 @@ class PTYManager {
       },
       null
     )
+
+    if (live) return live
+
+    const text = this.sessionStore.readRaw(id)
+    if (text === null) return null
+    const from = Math.min(Math.max(0, since ?? 0), text.length)
+    const raw = text.slice(from)
+    return { raw, byteLength: new TextEncoder().encode(raw).length, offset: text.length }
   }
 
   kill(id: string, cleanup: boolean = false): boolean {
     const success = this.lifecycleManager.kill(id, cleanup)
-    if (success && cleanup) {
+    if (!success) {
+      // Not live (anymore), but maybe archived: removing it there is what makes
+      // it disappear from the UI for good.
+      const removedArchive = this.sessionStore.remove(id)
+      if (removedArchive) notifySessionRemoved(id)
+      return removedArchive
+    }
+    if (cleanup) {
+      this.sessionStore.remove(id)
       notifySessionRemoved(id)
     }
     return success
@@ -234,6 +312,11 @@ class PTYManager {
     this.lifecycleManager.cleanupBySession(parentSessionId)
     for (const id of removedIds) {
       notifySessionRemoved(id)
+    }
+    for (const entry of this.sessionStore.list()) {
+      if (entry.parentSessionId === parentSessionId && this.sessionStore.remove(entry.id)) {
+        notifySessionRemoved(entry.id)
+      }
     }
   }
 }

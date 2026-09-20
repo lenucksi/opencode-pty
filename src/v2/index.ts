@@ -1,6 +1,7 @@
 import { createV2Adapter } from '../adapters/v2/index.ts'
 import { installHostAdapter } from '../adapters/index.ts'
 import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
+import { manager } from '../plugin/pty/manager.ts'
 import { getOrCreateServer, registerV2Commands } from './commands.ts'
 import { V2SessionNotifier } from './notifier.ts'
 import { PTY_USAGE_SKILL } from './skill.ts'
@@ -59,6 +60,16 @@ export const Plugin: PluginV2 = define({
     if (ctx.skill && typeof ctx.skill.transform === 'function') {
       await ctx.skill.transform((draft) => {
         draft.source({ type: 'embedded', skill: PTY_USAGE_SKILL })
+      })
+    }
+
+    // Sessions archived by a previous run come back as read-only history, and
+    // anything that was still running is marked as lost instead of silently
+    // disappearing from listings.
+    const restored = manager.loadPersistedSessions()
+    if (restored.length > 0) {
+      logPtyEvent('info', `restored ${restored.length} archived session(s)`, {
+        ids: restored.map((session) => session.id),
       })
     }
 

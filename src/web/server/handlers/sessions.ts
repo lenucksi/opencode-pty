@@ -114,6 +114,35 @@ export function getRawBuffer(req: BunRequest<typeof routes.session.buffer.raw.pa
   return new JsonResponse(bufferData)
 }
 
+/**
+ * The archived transcript of a session as plain text, with an optional tail.
+ * Works for live sessions too, so a caller has one place to fetch output from
+ * (useful after a restart, when only the archive is left).
+ */
+export function getSessionLog(req: BunRequest<typeof routes.session.log.path>) {
+  const url = new URL(req.url)
+  const tailParam = url.searchParams.get('tail')
+  const parsedTail = tailParam === null ? undefined : Number.parseInt(tailParam, 10)
+  const tail =
+    parsedTail !== undefined && Number.isSafeInteger(parsedTail) && parsedTail > 0
+      ? parsedTail
+      : undefined
+
+  const text = manager.getSessionLog(req.params.id, tail === undefined ? {} : { tail })
+  if (text === null) {
+    return new ErrorResponse('Session not found', 404)
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-store',
+  }
+  if (url.searchParams.get('download') === '1') {
+    headers['Content-Disposition'] = `attachment; filename="${req.params.id}.log"`
+  }
+  return new Response(text, { headers })
+}
+
 export function getPlainBuffer(req: BunRequest<typeof routes.session.buffer.plain.path>) {
   const bufferData = manager.getRawBuffer(req.params.id)
   if (!bufferData) {
