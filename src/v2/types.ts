@@ -58,6 +58,31 @@ export interface ToolDraft {
   [key: string]: unknown
 }
 
+/**
+ * Skill definition accepted by opencode v2's skill editor.
+ *
+ * Mirrors `SkillV2Info` from @opencode-ai/sdk/v2/types. A skill is loaded on
+ * demand, so detailed guidance can live here instead of in the always-on tool
+ * descriptions.
+ */
+export interface SkillInfoV2 {
+  name: string
+  description?: string
+  slash?: boolean
+  location: string
+  content: string
+}
+
+export type SkillSourceV2 =
+  | { type: 'directory'; path: string }
+  | { type: 'url'; url: string }
+  | { type: 'embedded'; skill: SkillInfoV2 }
+
+export interface SkillDraft {
+  source(source: SkillSourceV2): void
+  list?(): readonly SkillSourceV2[]
+}
+
 export interface PluginContextV2 {
   readonly options?: OpencodePtyOptions & Record<string, unknown>
   readonly command?: {
@@ -68,6 +93,10 @@ export interface PluginContextV2 {
   }
   readonly tool?: {
     transform(callback: (tools: ToolDraft) => Promise<void> | void): Promise<unknown> | undefined
+    reload?(): Promise<void> | void
+  }
+  readonly skill?: {
+    transform(callback: (skill: SkillDraft) => Promise<void> | void): Promise<unknown> | undefined
     reload?(): Promise<void> | void
   }
   /**

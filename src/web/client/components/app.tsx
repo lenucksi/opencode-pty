@@ -14,20 +14,6 @@ import { Sidebar } from './sidebar.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
 import { api } from '../../shared/api-client.ts'
 
-function usePeriodicSessionSync(setSessions: (sessions: PTYSessionInfo[]) => void): void {
-  useEffect(() => {
-    const syncInterval = setInterval(async () => {
-      try {
-        setSessions(await api.sessions.list())
-      } catch (error) {
-        console.error('Failed to sync sessions', error)
-      }
-    }, 10000)
-
-    return () => clearInterval(syncInterval)
-  }, [setSessions])
-}
-
 interface ActiveSessionViewProps {
   activeSession: PTYSessionInfo
   terminalRef: RefObject<RawTerminal | null>
@@ -296,8 +282,6 @@ export function App() {
     sendResize,
     terminalRef,
   })
-
-  usePeriodicSessionSync(setSessions)
 
   const {
     handleSessionClick,

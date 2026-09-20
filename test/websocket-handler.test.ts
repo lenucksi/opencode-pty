@@ -51,7 +51,7 @@ function buildSession(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
 
 function lastError(sent: WSMessageServer[]): WSMessageServerError {
   const message = sent.at(-1)
-  if (!message || message.type !== 'error') throw new Error('expected an error message')
+  if (message?.type !== 'error') throw new Error('expected an error message')
   return message as WSMessageServerError
 }
 
