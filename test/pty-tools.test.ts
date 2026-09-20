@@ -459,7 +459,9 @@ describe('PTY Tools', () => {
         }
       )
 
-      expect(result).toBe('<pty_list>\nNo active PTY sessions.\n</pty_list>')
+      // The listing opens with the generation so a caller can tell which boot
+      // its session ids belong to.
+      expect(result).toMatch(/^<pty_list>\nGeneration: .+\nNo active PTY sessions\.\n<\/pty_list>$/)
     })
   })
 

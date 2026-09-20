@@ -1,4 +1,4 @@
-import type { SessionNotifier } from '../../adapters/types.ts'
+import type { SessionNotifier, SessionNoticeTarget } from '../../adapters/types.ts'
 import type { PTYSession } from './types.ts'
 import type { OpencodeClient } from '@opencode-ai/sdk'
 import {
@@ -16,16 +16,36 @@ export class NotificationManager implements SessionNotifier {
   }
 
   async sendExitNotification(session: PTYSession, exitCode: number): Promise<void> {
+    await this.sendNotice(
+      {
+        id: session.id,
+        parentSessionId: session.parentSessionId,
+        ...(session.parentAgent ? { parentAgent: session.parentAgent } : {}),
+      },
+      buildExitNotification(session, exitCode),
+      'exited'
+    )
+  }
+
+  /**
+   * Wake a session with arbitrary text (exit, restart, ...).
+   *
+   * The parent session's current agent/model is looked up so a notice cannot
+   * flip the session back to a stale agent.
+   */
+  async sendNotice(target: SessionNoticeTarget, text: string, kind: string): Promise<void> {
     if (!this.client) {
       // A V2 host installs its own notifier; reaching this path means none was
       // wired, and returning silently here used to hide the lost notification
       // completely.
-      logPtyEvent('warn', `no opencode client available for the exit notification of ${session.id}`)
+      logPtyEvent(
+        'warn',
+        `no opencode client available for the ${kind} notification of ${target.id}`
+      )
       return
     }
 
     try {
-      const message = buildExitNotification(session, exitCode)
       let modelContext: {
         model?: { providerID: string; modelID: string }
         variant?: string
@@ -33,7 +53,7 @@ export class NotificationManager implements SessionNotifier {
       let currentAgent: string | undefined
       try {
         const parent = await this.client.session.get({
-          path: { id: session.parentSessionId },
+          path: { id: target.parentSessionId },
         })
         const info = parent.data as
           | (typeof parent.data & {
@@ -52,22 +72,20 @@ export class NotificationManager implements SessionNotifier {
       } catch {
         // Older OpenCode versions may not expose the session agent or model.
       }
-      // Prefer the parent session's current agent over the spawn-time snapshot
-      // so an exit notification can't flip the session back to a stale agent.
-      const agent = currentAgent ?? session.parentAgent
+
+      const agent = currentAgent ?? target.parentAgent
       await this.client.session.promptAsync({
-        path: { id: session.parentSessionId },
+        path: { id: target.parentSessionId },
         body: {
-          parts: [{ type: 'text', text: message }],
+          parts: [{ type: 'text', text }],
           ...(agent ? { agent } : {}),
           ...modelContext,
         },
       })
     } catch (error) {
-      // Surface delivery failures instead of swallowing them silently; the V2
-      // notifier already warns, and a lost exit notification would otherwise be
-      // invisible to the user.
-      logPtyEvent('error', `failed to send exit notification for ${session.id}`, error)
+      // Surface delivery failures instead of swallowing them silently; a lost
+      // notification would otherwise be invisible to the user.
+      logPtyEvent('error', `failed to send ${kind} notification for ${target.id}`, error)
     }
   }
 }
