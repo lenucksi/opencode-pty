@@ -5,7 +5,7 @@ import { manager } from '../plugin/pty/manager.ts'
 import { announceRestart } from './restart-announce.ts'
 import { getOrCreateServer, registerV2Commands } from './commands.ts'
 import { V2SessionNotifier } from './notifier.ts'
-import { PTY_USAGE_SKILL } from './skill.ts'
+import { registerUsageSkill } from './skill.ts'
 import { registerV2Tools } from './tools.ts'
 import { define, type OpencodePtyOptions, type PluginContextV2, type PluginV2 } from './types.ts'
 
@@ -14,6 +14,24 @@ export * from './notifier.ts'
 export * from './skill.ts'
 export * from './tools.ts'
 export * from './types.ts'
+
+/**
+ * Run one optional registration step in isolation.
+ *
+ * The host disables a plugin whose transform throws, so a feature that a given
+ * opencode build does not support has to degrade to a log line instead of
+ * taking tools, commands and notifications down with it.
+ */
+async function runRegistration(
+  feature: string,
+  run: () => Promise<unknown> | undefined
+): Promise<void> {
+  try {
+    await run()
+  } catch (error) {
+    logPtyEvent('error', `${feature} registration failed; continuing without it`, error)
+  }
+}
 
 /**
  * OpenCode V2 Plugin definition for opencode-pty.
@@ -44,24 +62,36 @@ export const Plugin: PluginV2 = define({
     const adapter = createV2Adapter({ notifier })
     installHostAdapter(adapter)
 
-    if (ctx.tool && typeof ctx.tool.transform === 'function') {
-      await ctx.tool.transform((draft) => {
-        registerV2Tools(draft)
-      })
+    // Each registration step is optional and isolated: a host that does not
+    // implement one of them must not lose the tools (a single failing
+    // transform used to make the host disable the entire plugin).
+    const toolDomain = ctx.tool
+    if (toolDomain && typeof toolDomain.transform === 'function') {
+      await runRegistration('tool', () =>
+        toolDomain.transform((draft) => {
+          registerV2Tools(draft)
+        })
+      )
     }
 
-    if (ctx.command && typeof ctx.command.transform === 'function') {
-      await ctx.command.transform((draft) => {
-        registerV2Commands(draft, ctx.options as OpencodePtyOptions | undefined)
-      })
+    const commandDomain = ctx.command
+    if (commandDomain && typeof commandDomain.transform === 'function') {
+      await runRegistration('command', () =>
+        commandDomain.transform((draft) => {
+          registerV2Commands(draft, ctx.options as OpencodePtyOptions | undefined)
+        })
+      )
     }
 
     // Ship the detailed pty usage guide as an on-demand skill, so the
     // always-on tool descriptions can stay terse without losing guidance.
-    if (ctx.skill && typeof ctx.skill.transform === 'function') {
-      await ctx.skill.transform((draft) => {
-        draft.source({ type: 'embedded', skill: PTY_USAGE_SKILL })
-      })
+    const skillDomain = ctx.skill
+    if (skillDomain && typeof skillDomain.transform === 'function') {
+      await runRegistration('skill', () =>
+        skillDomain.transform((draft) => {
+          registerUsageSkill(draft)
+        })
+      )
     }
 
     // Sessions archived by a previous run come back as read-only history, and
