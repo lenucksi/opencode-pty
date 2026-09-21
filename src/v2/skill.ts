@@ -1,4 +1,5 @@
-import type { SkillInfoV2 } from './types.ts'
+import { logPtyEvent, type PtyLogger } from '../plugin/pty/plugin-log.ts'
+import type { SkillDraft, SkillInfoV2 } from './types.ts'
 
 /**
  * Embedded skill shipped with the plugin.
@@ -148,4 +149,45 @@ next free port if taken):
 | See all sessions | \`pty_list\` |
 | Stop a process (keep logs) | \`pty_kill\` |
 `,
+}
+
+/** Id the pty-usage skill is registered under. */
+export const PTY_USAGE_SKILL_ID = 'pty-usage'
+
+/**
+ * Register the embedded skill with whichever API the host exposes.
+ *
+ * `source()` is the current one; the 2.0.x skill editor only knows `add()`. A
+ * host with neither is reported and skipped: registering an optional skill must
+ * never take the tools down with it.
+ */
+export function registerUsageSkill(
+  draft: SkillDraft,
+  log: PtyLogger = logPtyEvent
+): 'source' | 'add' | 'none' {
+  if (typeof draft.source === 'function') {
+    draft.source({ type: 'embedded', skill: PTY_USAGE_SKILL })
+    log('info', 'pty-usage skill registered via draft.source()')
+    return 'source'
+  }
+
+  if (typeof draft.add === 'function') {
+    draft.add({
+      id: PTY_USAGE_SKILL_ID,
+      name: PTY_USAGE_SKILL.name,
+      ...(PTY_USAGE_SKILL.description === undefined
+        ? {}
+        : { description: PTY_USAGE_SKILL.description }),
+      path: PTY_USAGE_SKILL.location,
+      content: PTY_USAGE_SKILL.content,
+    })
+    log('info', 'pty-usage skill registered via draft.add()')
+    return 'add'
+  }
+
+  log(
+    'warn',
+    'host skill draft exposes neither source() nor add(): the pty-usage skill is not registered'
+  )
+  return 'none'
 }

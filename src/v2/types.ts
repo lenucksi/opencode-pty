@@ -78,9 +78,31 @@ export type SkillSourceV2 =
   | { type: 'url'; url: string }
   | { type: 'embedded'; skill: SkillInfoV2 }
 
+/**
+ * A fully described skill, as the 2.0.x skill editor accepts it
+ * (`SkillEditor.add(skill: Skill.Info)`).
+ */
+export interface SkillEditorEntryV2 {
+  id: string
+  name: string
+  description?: string
+  /** Absolute path; hosts use it as the skill's identity/location. */
+  path: string
+  content: string
+}
+
+/**
+ * The skill draft handed to `ctx.skill.transform`.
+ *
+ * Hosts differ: `source()` exists on newer opencode builds, while the 2.0.x
+ * editor exposes `add()`. Both are optional here and detected at runtime - a
+ * draft that has neither must not be a fatal error, or the host disables the
+ * whole plugin (which is exactly what happened once).
+ */
 export interface SkillDraft {
-  source(source: SkillSourceV2): void
-  list?(): readonly SkillSourceV2[]
+  source?(source: SkillSourceV2): void
+  add?(skill: SkillEditorEntryV2): void
+  list?(): readonly unknown[]
 }
 
 export interface PluginContextV2 {
