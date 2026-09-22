@@ -3,6 +3,7 @@ import type { OpencodeClient } from '@opencode-ai/sdk'
 import { Terminal } from 'bun-pty'
 import { NotificationManager } from './notification-manager.ts'
 import { OutputManager } from './output-manager.ts'
+import { sortSessionsByTime } from '../../web/shared/session-meta.ts'
 import { logPtyEvent } from './plugin-log.ts'
 import {
   mergePersistedSessions,
@@ -213,7 +214,7 @@ class PTYManager {
 
   list(): PTYSessionInfo[] {
     const live = this.lifecycleManager.listSessions().map((s) => this.lifecycleManager.toInfo(s))
-    return mergePersistedSessions(live, this.sessionStore.list())
+    return sortSessionsByTime(mergePersistedSessions(live, this.sessionStore.list()))
   }
 
   get(id: string): PTYSessionInfo | null {

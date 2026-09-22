@@ -148,6 +148,7 @@ export class SessionLifecycleManager {
       }
       session.exitCode = exitCode
       session.exitSignal = signal
+      session.endedAt = new Date()
       onExit(session, exitCode)
     })
   }
@@ -253,6 +254,7 @@ export class SessionLifecycleManager {
       args: session.args,
       workdir: session.workdir,
       status: session.status,
+      ...(session.endedAt === undefined ? {} : { endedAt: session.endedAt.toISOString() }),
       notifyOnExit: session.notifyOnExit,
       timeoutSeconds: session.timeoutSeconds,
       timedOut: session.timedOut,
