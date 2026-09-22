@@ -1,7 +1,26 @@
 import { tool } from '@opencode-ai/plugin'
 import { manager } from '../manager.ts'
 import { checkCommandPermission, checkWorkdirPermission } from '../permissions.ts'
+import { describeError } from '../utils.ts'
 import DESCRIPTION from './spawn.txt'
+
+/**
+ * Run the spawn and, when it fails, report the cause.
+ *
+ * The previous bare failure left the model guessing (it invented a "session
+ * limit" after a script that was not executable). The reason plus the usual
+ * fixes is more useful than the exception alone.
+ */
+function spawnOrExplain<R>(command: string, run: () => R): R {
+  try {
+    return run()
+  } catch (error) {
+    throw new Error(
+      `PTY spawn failed for '${command}': ${describeError(error)}. ` +
+        'Check that the command exists and is executable, and start scripts through their interpreter (e.g. `bash /path/script.sh`).'
+    )
+  }
+}
 
 const NOTIFY_ON_EXIT_INSTRUCTIONS = [
   `<system_reminder>`,
@@ -48,18 +67,21 @@ export const ptySpawn = tool({
     }
 
     const sessionId = ctx.sessionID
-    const info = manager.spawn({
-      command: args.command,
-      args: args.args,
-      workdir: args.workdir,
-      env: args.env,
-      title: args.title,
-      description: args.description,
-      parentSessionId: sessionId,
-      parentAgent: ctx.agent,
-      notifyOnExit: args.notifyOnExit,
-      timeoutSeconds: args.timeoutSeconds,
-    })
+    const rendered = [args.command, ...(args.args ?? [])].join(' ')
+    const info = spawnOrExplain(rendered, () =>
+      manager.spawn({
+        command: args.command,
+        args: args.args,
+        workdir: args.workdir,
+        env: args.env,
+        title: args.title,
+        description: args.description,
+        parentSessionId: sessionId,
+        parentAgent: ctx.agent,
+        notifyOnExit: args.notifyOnExit,
+        timeoutSeconds: args.timeoutSeconds,
+      })
+    )
 
     const output = [
       `<pty_spawned>`,

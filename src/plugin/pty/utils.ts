@@ -1,6 +1,16 @@
 import { manager } from './manager.ts'
 
 /**
+ * Readable reason for a failure, so a tool result can say why something broke
+ * instead of leaving the model to guess (an opaque "spawn failed" once made a
+ * model invent a session limit that never existed).
+ */
+export function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message.trim() || error.name
+  return String(error)
+}
+
+/**
  * Error for an unknown session id.
  *
  * A session that lives on in the archive is reported as `<pty_session_lost>`:
