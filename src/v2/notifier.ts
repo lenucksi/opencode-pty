@@ -65,7 +65,10 @@ export class V2SessionNotifier implements SessionNotifier {
       return
     }
 
-    const messageId = `pty_${target.id}_${kind}`
+    // Hosts validate a supplied prompt id against the message-id brand, which
+    // requires this prefix; without it the prompt is rejected with a schema
+    // error and the wake-up silently never happens.
+    const messageId = `msg_pty_${target.id}_${kind}`
 
     try {
       const result: unknown = this.session.prompt({
@@ -88,7 +91,40 @@ export class V2SessionNotifier implements SessionNotifier {
         sessionID: target.parentSessionId,
         messageID: messageId,
       })
+      return
     } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+
+      // A host that dislikes our id should still get the notification: retry
+      // once without an id and let it mint one.
+      if (/msg_|schema/i.test(reason)) {
+        this.log(
+          'warn',
+          `${kind} notification for ${target.id} rejected (${reason}); retrying without a message id`
+        )
+
+        try {
+          const retry: unknown = this.session.prompt({ sessionID: target.parentSessionId, text })
+          if (!isPromiseLike(retry)) {
+            this.log(
+              'error',
+              `${kind} notification for ${target.id} was not delivered: prompt() returned a non-promise value`,
+              { returned: describe(retry), sessionID: target.parentSessionId }
+            )
+            return
+          }
+          await retry
+          this.log('info', `${kind} notification delivered for ${target.id}`, {
+            sessionID: target.parentSessionId,
+            messageID: null,
+          })
+          return
+        } catch (retryError) {
+          this.log('error', `failed to deliver ${kind} notification for ${target.id}`, retryError)
+          return
+        }
+      }
+
       this.log('error', `failed to deliver ${kind} notification for ${target.id}`, error)
     }
   }

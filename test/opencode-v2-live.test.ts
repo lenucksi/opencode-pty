@@ -156,7 +156,7 @@ describe('OpenCode V2 Live Integration', () => {
     expect(prompt).toBeDefined()
     // Delivered to the spawning session with a deterministic, idempotent id.
     expect(prompt?.sessionID).toBe('ses_parent')
-    expect(prompt?.id).toBe(`pty_${spawned.id}_exited`)
+    expect(prompt?.id).toBe(`msg_pty_${spawned.id}_exited`)
     expect(prompt?.text).toContain('<pty_exited>')
     expect(prompt?.text).toContain(`ID: ${spawned.id}`)
     expect(prompt?.text).toContain('Exit Code: 3')

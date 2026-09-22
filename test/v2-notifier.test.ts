@@ -47,10 +47,29 @@ describe('V2SessionNotifier', () => {
 
     const input = prompt.mock.calls[0]?.[0] as { sessionID: string; id: string; text: string }
     expect(input.sessionID).toBe('parent-session')
-    expect(input.id).toBe('pty_pty_test_exited')
+    // Hosts validate prompt ids against the message-id brand (`msg_`).
+    expect(input.id).toBe('msg_pty_pty_test_exited')
     expect(input.text).toContain('<pty_exited>')
     expect(input.text).toContain('Exit Code: 3')
     expect(input.text).toContain('ok=38')
+    expect(entries.some((entry) => entry.includes('delivered'))).toBe(true)
+  })
+
+  it('retries without a message id when the host rejects the id format', async () => {
+    const prompt = mock(async (input: unknown) => {
+      if ((input as { id?: string }).id !== undefined) {
+        throw new Error('SchemaError: Expected a string starting with "msg_"')
+      }
+    })
+    const { log, entries } = captureLogger()
+    const notifier = new V2SessionNotifier({ prompt } as unknown as V2SessionPrompt, log)
+
+    await notifier.sendExitNotification(createSession(), 0)
+
+    expect(prompt).toHaveBeenCalledTimes(2)
+    const retryInput = prompt.mock.calls[1]?.[0] as { id?: string } | undefined
+    expect(retryInput?.id).toBeUndefined()
+    expect(entries.some((entry) => entry.includes('retrying without a message id'))).toBe(true)
     expect(entries.some((entry) => entry.includes('delivered'))).toBe(true)
   })
 

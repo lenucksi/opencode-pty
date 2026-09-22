@@ -40,6 +40,30 @@ describe('PTY Tools', () => {
       }))
     })
 
+    it('reports the cause when the spawn fails', async () => {
+      spyOn(manager, 'spawn').mockImplementation(() => {
+        throw new Error('ENOEXEC: script is not executable')
+      })
+
+      const ctx = {
+        sessionID: 'parent-session-id',
+        messageID: 'msg-1',
+        agent: 'test-agent',
+        abort: new AbortController().signal,
+        metadata: () => {},
+        ask: async () => {},
+        directory: '/tmp',
+        worktree: '/tmp',
+      }
+
+      await expect(
+        ptySpawn.execute(
+          { command: '/tmp/opencode/esp_monitor.sh', args: [], description: 'Monitor' },
+          ctx
+        )
+      ).rejects.toThrow(/ENOEXEC/)
+    })
+
     it('should spawn a PTY session with minimal args', async () => {
       const ctx = {
         sessionID: 'parent-session-id',
