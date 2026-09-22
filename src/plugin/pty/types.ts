@@ -16,6 +16,8 @@ export interface PTYSession {
   exitSignal?: number | string
   pid: number
   createdAt: Date
+  /** Set when the process ends (exit or kill). */
+  endedAt?: Date
   parentSessionId: string
   parentAgent?: string
   notifyOnExit: boolean
@@ -40,6 +42,8 @@ export interface PTYSessionInfo {
   exitSignal?: number | string
   pid: number
   createdAt: string
+  /** ISO timestamp of the end, when the session is no longer running. */
+  endedAt?: string
   lineCount: number
   /**
    * Session read back from the on-disk store after its process (and the plugin

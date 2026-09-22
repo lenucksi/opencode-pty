@@ -1,6 +1,11 @@
 import type { RefObject } from 'react'
 import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
 
+import {
+  sessionCommandLine,
+  sessionSidebarMeta,
+  sessionTooltip,
+} from '../../shared/session-meta.ts'
 import type { ThemePreference } from '../lib/theme.ts'
 import { ThemeSwitch } from './theme-switch.tsx'
 
@@ -64,12 +69,15 @@ function SessionItem({
       >
         <div className="session-title">{label}</div>
         <div className="session-info">
-          <span>{session.command}</span>
+          <span className="session-command" title={sessionTooltip(session)}>
+            {sessionCommandLine(session)}
+          </span>
           <span className={`status-badge status-${session.status}`}>{session.status}</span>
         </div>
-        <div className="session-info" style={{ marginTop: '4px' }}>
-          <span>PID: {session.pid}</span>
-          <span>{session.lineCount} lines</span>
+        <div className="session-meta" title={sessionTooltip(session)}>
+          {/* One bounded line; the tooltip carries the full command and workdir. */}
+          <span className="session-detail">{sessionSidebarMeta(session)}</span>
+          {session.lost ? <span className="session-lost">lost in a restart</span> : null}
         </div>
       </button>
       <div className="session-actions">

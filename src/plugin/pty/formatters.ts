@@ -1,3 +1,4 @@
+import { formatDuration } from '../../web/shared/session-meta.ts'
 import type { PTYSessionInfo } from './types.ts'
 
 export function formatSessionInfo(session: PTYSessionInfo): string[] {
@@ -13,7 +14,13 @@ export function formatSessionInfo(session: PTYSessionInfo): string[] {
     `  PID: ${session.pid}${timeoutInfo}`,
     `  Lines: ${session.lineCount}`,
     `  Workdir: ${session.workdir}`,
-    `  Created: ${session.createdAt}`,
+    `  Started: ${session.createdAt}`,
+    ...(session.endedAt === undefined
+      ? []
+      : [
+          `  Ended: ${session.endedAt}`,
+          `  Duration: ${formatDuration(session.createdAt, session.endedAt)}`,
+        ]),
     '',
   ]
 }

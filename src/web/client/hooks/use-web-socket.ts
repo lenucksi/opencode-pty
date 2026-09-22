@@ -21,6 +21,13 @@ interface UseWebSocketOptions {
 
 const RECONNECT_MIN_DELAY = RETRY_DELAY
 const RECONNECT_MAX_DELAY = 10_000
+/**
+ * Silence threshold before a socket is treated as dead. A half-open connection
+ * (laptop suspend, network drop) never fires `close`, and without this the
+ * session list would freeze with no way to notice.
+ */
+const STALE_SOCKET_MS = 45_000
+const WATCHDOG_INTERVAL_MS = 5_000
 
 export function useWebSocket({
   activeSession,
@@ -32,6 +39,8 @@ export function useWebSocket({
   const [connected, setConnected] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
+  /** Last time any message arrived; the watchdog and the tab-return check use it. */
+  const lastMessageAtRef = useRef(0)
   const activeSessionRef = useRef<PTYSessionInfo | null>(activeSession)
   // Handlers live in a ref so changing them (props change on every render)
   // never tears down the socket. The connection is created once and kept for
@@ -50,6 +59,7 @@ export function useWebSocket({
   useEffect(() => {
     let closedByUs = false
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+    let watchdogTimer: ReturnType<typeof setInterval> | undefined
     let attempts = 0
 
     const send = (message: unknown) => {
@@ -62,9 +72,22 @@ export function useWebSocket({
     const connect = () => {
       const ws = new WebSocket(`ws://${location.host}/ws`)
       wsRef.current = ws
+      lastMessageAtRef.current = Date.now()
+
+      const isStale = () => Date.now() - lastMessageAtRef.current >= STALE_SOCKET_MS
+
+      // Closing a stale socket runs the normal close path, which reconnects and
+      // resyncs the session list.
+      const dropIfStale = () => {
+        if (wsRef.current !== ws) return
+        if (ws.readyState === WebSocket.OPEN && isStale()) ws.close()
+      }
+
+      watchdogTimer = setInterval(dropIfStale, WATCHDOG_INTERVAL_MS)
 
       ws.onopen = () => {
         attempts = 0
+        lastMessageAtRef.current = Date.now()
         setConnected(true)
         // The server does not replay events that happened while we were
         // disconnected, so resync the list and re-subscribe the active session.
@@ -76,6 +99,7 @@ export function useWebSocket({
       }
 
       ws.onmessage = (event) => {
+        lastMessageAtRef.current = Date.now()
         try {
           const data = JSON.parse(event.data) as WSMessageServer
           const handlers = handlersRef.current
@@ -115,6 +139,10 @@ export function useWebSocket({
       }
 
       ws.onclose = () => {
+        if (watchdogTimer !== undefined) {
+          clearInterval(watchdogTimer)
+          watchdogTimer = undefined
+        }
         setConnected(false)
         if (closedByUs) {
           return
@@ -132,10 +160,25 @@ export function useWebSocket({
 
     connect()
 
+    // Coming back to a suspended tab should not wait for the watchdog tick.
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const ws = wsRef.current
+        if (!ws || ws.readyState !== WebSocket.OPEN) return
+        const age = Date.now() - lastMessageAtRef.current
+        if (age >= STALE_SOCKET_MS) ws.close()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
     return () => {
       closedByUs = true
+      document.removeEventListener('visibilitychange', onVisibility)
       if (reconnectTimer) {
         clearTimeout(reconnectTimer)
+      }
+      if (watchdogTimer !== undefined) {
+        clearInterval(watchdogTimer)
       }
       wsRef.current?.close()
     }

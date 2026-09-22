@@ -1,5 +1,6 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import type { PTYSessionInfo, WSMessageServerRawData } from 'opencode-pty/web/shared/types'
+import { sessionDetailLine, sessionTooltip, sortSessionsByTime } from '../../shared/session-meta.ts'
 
 import { useWebSocket } from '../hooks/use-web-socket.ts'
 import { useSessionManager } from '../hooks/use-session-manager.ts'
@@ -56,7 +57,12 @@ function ActiveSessionView({
   return (
     <>
       <div className="output-header">
-        <div className="output-title">{activeSession.description ?? activeSession.title}</div>
+        <div className="output-titles">
+          <div className="output-title">{activeSession.description ?? activeSession.title}</div>
+          <div className="output-subtitle" title={sessionTooltip(activeSession)}>
+            {sessionDetailLine(activeSession)}
+          </div>
+        </div>
         <div className="output-actions">
           <span className="copy-feedback" aria-live="polite" data-testid="copy-feedback">
             {copyFeedback}
@@ -254,6 +260,26 @@ export function App() {
     return () => document.removeEventListener('keydown', onKeyDown, { capture: true })
   }, [])
 
+  // Session pushes arrive over the WebSocket; a tab that was suspended (or whose
+  // socket went half-open) would otherwise keep a stale list, because the old
+  // periodic poll is gone. Refresh whenever the tab becomes visible again.
+  useEffect(() => {
+    const sync = () => {
+      if (document.visibilityState !== 'visible') return
+      api.sessions
+        .list()
+        .then((sessions) => setSessions(sortSessionsByTime(sessions)))
+        .catch((error) => console.error('Failed to resync sessions', error))
+    }
+
+    document.addEventListener('visibilitychange', sync)
+    window.addEventListener('focus', sync)
+    return () => {
+      document.removeEventListener('visibilitychange', sync)
+      window.removeEventListener('focus', sync)
+    }
+  }, [])
+
   const {
     connected: wsConnected,
     subscribeWithRetry,
@@ -273,7 +299,7 @@ export function App() {
     ),
     onSessionList: useCallback(
       (newSessions: PTYSessionInfo[], autoSelected: PTYSessionInfo | null) => {
-        setSessions(newSessions)
+        setSessions(sortSessionsByTime(newSessions))
         if (!autoSelected) {
           return
         }
@@ -294,12 +320,15 @@ export function App() {
       setSessionUpdateCount((prev) => prev + 1)
       setSessions((prevSessions) => {
         const existingIndex = prevSessions.findIndex((s) => s.id === updatedSession.id)
-        if (existingIndex >= 0) {
-          const newSessions = [...prevSessions]
-          newSessions[existingIndex] = updatedSession
-          return newSessions
-        }
-        return [...prevSessions, updatedSession]
+        const next =
+          existingIndex >= 0
+            ? prevSessions.map((session) =>
+                session.id === updatedSession.id ? updatedSession : session
+              )
+            : [...prevSessions, updatedSession]
+        // Keep the list ordered the same way the server does: a session that
+        // just finished moves up to "most recent activity".
+        return sortSessionsByTime(next)
       })
     }, []),
     onSessionRemoved: handleSessionRemoved,

@@ -32,7 +32,7 @@ describe('formatSessionInfo', () => {
       '  PID: 99',
       '  Lines: 3',
       '  Workdir: /tmp',
-      '  Created: 2026-01-01T00:00:00.000Z',
+      '  Started: 2026-01-01T00:00:00.000Z',
       '',
     ])
   })
@@ -50,6 +50,16 @@ describe('formatSessionInfo', () => {
 
     expect(lines[2]).toBe('  Status: exited | timed out | exit: 137 | signal: SIGKILL')
     expect(lines[3]).toBe('  PID: 99 | timeout: 30s')
+  })
+
+  it('reports end time and duration for a finished session', () => {
+    const lines = formatSessionInfo(
+      buildSession({ status: 'exited', endedAt: '2026-01-01T00:18:00.000Z' })
+    )
+
+    expect(lines).toContain('  Started: 2026-01-01T00:00:00.000Z')
+    expect(lines).toContain('  Ended: 2026-01-01T00:18:00.000Z')
+    expect(lines).toContain('  Duration: 18m')
   })
 })
 
