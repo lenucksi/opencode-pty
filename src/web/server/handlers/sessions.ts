@@ -1,3 +1,4 @@
+import { logFileName, normalizeLogText, parseLogFormat } from '../../shared/log-format.ts'
 import { manager } from '../../../plugin/pty/manager.ts'
 import { checkCommandPermission, checkWorkdirPermission } from '../../../plugin/pty/permissions.ts'
 import type { BunRequest } from 'bun'
@@ -127,9 +128,10 @@ export function getSessionLog(req: BunRequest<typeof routes.session.log.path>) {
     parsedTail !== undefined && Number.isSafeInteger(parsedTail) && parsedTail > 0
       ? parsedTail
       : undefined
+  const format = parseLogFormat(url.searchParams.get('format'))
 
-  const text = manager.getSessionLog(req.params.id, tail === undefined ? {} : { tail })
-  if (text === null) {
+  const raw = manager.getSessionLog(req.params.id, tail === undefined ? {} : { tail })
+  if (raw === null) {
     return new ErrorResponse('Session not found', 404)
   }
 
@@ -138,9 +140,9 @@ export function getSessionLog(req: BunRequest<typeof routes.session.log.path>) {
     'Cache-Control': 'no-store',
   }
   if (url.searchParams.get('download') === '1') {
-    headers['Content-Disposition'] = `attachment; filename="${req.params.id}.log"`
+    headers['Content-Disposition'] = `attachment; filename="${logFileName(req.params.id, format)}"`
   }
-  return new Response(text, { headers })
+  return new Response(normalizeLogText(raw, format), { headers })
 }
 
 export function getPlainBuffer(req: BunRequest<typeof routes.session.buffer.plain.path>) {

@@ -232,12 +232,15 @@ class PTYManager {
     return merged ?? null
   }
 
-  /** Archived output as plain text, used by the log endpoint and `pty_read`. */
+  /**
+   * Transcript of a session exactly as it was emitted (control characters
+   * included), live or from the archive. Callers normalise as they need.
+   */
   getSessionLog(id: string, options: { tail?: number } = {}): string | null {
     const live = withSession(
       this.lifecycleManager,
       id,
-      (session) => session.buffer.read(0).join('\n'),
+      (session) => session.buffer.sliceSince(0).raw,
       null
     )
     const raw = live ?? this.sessionStore.readRaw(id)

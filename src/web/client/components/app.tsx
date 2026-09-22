@@ -12,6 +12,7 @@ import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
 import type { ThemeScheme } from '../lib/theme.ts'
 
+import { DownloadMenu } from './download-menu.tsx'
 import { Sidebar } from './sidebar.tsx'
 import { SettingsModal } from './settings-modal.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
@@ -67,6 +68,7 @@ function ActiveSessionView({
           <span className="copy-feedback" aria-live="polite" data-testid="copy-feedback">
             {copyFeedback}
           </span>
+          <DownloadMenu sessionId={activeSession.id} />
           <button
             type="button"
             className="copy-btn"

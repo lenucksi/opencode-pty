@@ -6,6 +6,7 @@ import {
   writeAnnouncedGeneration,
 } from '../plugin/pty/restart-notice.ts'
 import type { PersistedSession, SessionStore } from '../plugin/pty/session-store.ts'
+import { normalizeLogText } from '../web/shared/log-format.ts'
 
 export interface AnnounceRestartOptions {
   store: SessionStore
@@ -70,7 +71,10 @@ export async function announceRestart(options: AnnounceRestartOptions): Promise<
         title: session.title,
         status: session.lost ? `${session.status} (lost)` : session.status,
         lineCount: session.lineCount,
-        tail: options.store.read(session.id, 0, 5)?.lines.join('\n') ?? '',
+        tail: normalizeLogText(
+          options.store.read(session.id, 0, 5)?.lines.join('\n') ?? '',
+          'plain'
+        ),
       })),
       archivedCount,
       persistEnabled: options.store.isEnabled(),

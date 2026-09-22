@@ -405,6 +405,48 @@ body {
   font-size: 12px;
   color: var(--fg-muted);
 }
+.download-menu {
+  position: relative;
+}
+.download-menu-toggle {
+  list-style: none;
+  user-select: none;
+}
+.download-menu-toggle::-webkit-details-marker {
+  display: none;
+}
+.download-menu-toggle::after {
+  content: " ▾";
+}
+.download-menu-items {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 280px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 35%);
+}
+.download-menu-item {
+  padding: 8px 10px;
+  border-radius: 4px;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.download-menu-item:hover {
+  background: var(--bg-hover);
+}
+.download-menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .remove-btn {
   padding: 8px 16px;
   background: var(--purple);
