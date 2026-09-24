@@ -1,4 +1,4 @@
-import { test as extendedTest, expect } from './fixtures'
+import { test as extendedTest, expect, selectSession } from './fixtures'
 import { waitForTerminalRegex } from './xterm-test-helpers'
 
 extendedTest.describe('Xterm Content Extraction', () => {
@@ -15,8 +15,7 @@ extendedTest.describe('Xterm Content Extraction', () => {
       })
 
       // Wait for session to appear and select it
-      await page.waitForSelector('.session-item', { timeout: 5000 })
-      await page.locator('.session-item:has-text("Manual buffer test")').click()
+      await selectSession(page, 'Manual buffer test', 5000)
       await page.waitForSelector('.output-container', { timeout: 5000 })
       await page.waitForSelector('.xterm', { timeout: 5000 })
 

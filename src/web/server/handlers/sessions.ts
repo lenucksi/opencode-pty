@@ -1,4 +1,5 @@
 import { logFileName, normalizeLogText, parseLogFormat } from '../../shared/log-format.ts'
+import { WEB_API_PARENT_SESSION_ID } from '../../../plugin/constants.ts'
 import { manager } from '../../../plugin/pty/manager.ts'
 import { checkCommandPermission, checkWorkdirPermission } from '../../../plugin/pty/permissions.ts'
 import type { BunRequest } from 'bun'
@@ -43,7 +44,7 @@ export async function createSession(req: Request) {
       description: body.description,
       workdir: body.workdir,
       timeoutSeconds: body.timeoutSeconds,
-      parentSessionId: 'web-api',
+      parentSessionId: WEB_API_PARENT_SESSION_ID,
     })
     return new JsonResponse(session)
   } catch (error) {

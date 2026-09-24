@@ -1,8 +1,12 @@
 import { OpencodeClient } from '@opencode-ai/sdk'
 import { initManager } from '../../src/plugin/pty/manager.ts'
+import { setParentSessionTitleResolver } from '../../src/plugin/pty/parent-session-title.ts'
 import { PTYServer } from '../../src/web/server/server.ts'
 
 initManager(new OpencodeClient())
+setParentSessionTitleResolver({
+  getTitle: async (sessionID) => `Parent session ${sessionID}`,
+})
 
 const server = await PTYServer.createServer()
 

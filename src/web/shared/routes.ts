@@ -15,6 +15,10 @@ export const routes = {
     path: '/api/sessions',
     methods: ['GET', 'POST', 'DELETE'] as const,
   },
+  parentSessions: {
+    path: '/api/parent-sessions',
+    methods: ['GET'] as const,
+  },
   session: {
     path: '/api/sessions/:id',
     methods: ['GET', 'DELETE'] as const,

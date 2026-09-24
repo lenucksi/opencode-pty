@@ -200,7 +200,13 @@ describe('SessionStore', () => {
 
 describe('mergePersistedSessions', () => {
   const persisted: PersistedSession = {
-    ...sessionInfo({ id: 'pty_archived', status: 'exited', lineCount: 3 }),
+    ...sessionInfo({
+      id: 'pty_archived',
+      status: 'exited',
+      lineCount: 3,
+      parentSessionId: 'ses_parent',
+      parentAgent: 'build',
+    }),
     archived: true,
     generation: 'gen-1',
     bytes: 42,
@@ -216,6 +222,9 @@ describe('mergePersistedSessions', () => {
     expect(merged[1]?.archived).toBe(true)
     expect(merged[1]?.lost).toBe(true)
     expect(merged[1]?.lineCount).toBe(3)
+    expect(merged[1]?.parentSessionId).toBe('ses_parent')
+    expect(merged[1]?.parentAgent).toBe('build')
+    expect(merged[1]?.endedAt).toBe('2026-09-20T17:30:00.000Z')
   })
 
   it('lets a live session win over its archived copy', () => {

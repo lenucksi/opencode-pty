@@ -37,8 +37,11 @@ describe('PTYManager extra behaviour', () => {
       args: ['hello searchable world'],
       description: 'manager search',
       parentSessionId: 'manager-parent',
+      parentAgent: 'build',
     })
     spawned.push(session.id)
+    expect(session.parentSessionId).toBe('manager-parent')
+    expect(session.parentAgent).toBe('build')
 
     await waitForOutput(session.id)
 

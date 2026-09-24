@@ -13,3 +13,6 @@ export const NOTIFICATION_TITLE_TRUNCATE = 64
  * (ansible's `PLAY RECAP`, a failing task, ...) reaches the model without a
  * follow-up `pty_read`. */
 export const NOTIFICATION_TAIL_LINES = 8
+
+/** Parent marker used when a PTY is created through the PTY web API itself. */
+export const WEB_API_PARENT_SESSION_ID = 'web-api'

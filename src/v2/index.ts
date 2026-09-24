@@ -2,6 +2,7 @@ import { createV2Adapter } from '../adapters/v2/index.ts'
 import { installHostAdapter } from '../adapters/index.ts'
 import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
 import { manager } from '../plugin/pty/manager.ts'
+import { setParentSessionTitleResolver } from '../plugin/pty/parent-session-title.ts'
 import { announceRestart } from './restart-announce.ts'
 import { getOrCreateServer, registerV2Commands } from './commands.ts'
 import { V2SessionNotifier } from './notifier.ts'
@@ -40,6 +41,16 @@ async function runRegistration(
 export const Plugin: PluginV2 = define({
   id: 'opencode-pty',
   setup: async (ctx: PluginContextV2) => {
+    const sessionDomain = ctx.session
+    const getSession = sessionDomain?.get
+    if (typeof getSession === 'function') {
+      setParentSessionTitleResolver({
+        getTitle: async (sessionID) => (await getSession({ sessionID })).title,
+      })
+    } else {
+      setParentSessionTitleResolver(null)
+    }
+
     // opencode v2 plugin contexts are server clients: `ctx.session.prompt`
     // wakes a session with a user prompt, preserving the session's current
     // model by construction. Pre-2.0 hosts without the session domain still

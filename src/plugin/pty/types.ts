@@ -42,6 +42,10 @@ export interface PTYSessionInfo {
   exitSignal?: number | string
   pid: number
   createdAt: string
+  /** OpenCode session that requested this PTY; absent in legacy archive rows. */
+  parentSessionId?: string
+  /** Agent active in the requesting session when the PTY was spawned. */
+  parentAgent?: string
   /** ISO timestamp of the end, when the session is no longer running. */
   endedAt?: string
   lineCount: number

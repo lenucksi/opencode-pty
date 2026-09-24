@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import type { createApiClient } from 'opencode-pty/web/shared/api-client'
-import { expect, test as extendedTest } from './fixtures'
+import { expect, selectSession, test as extendedTest } from './fixtures'
 import {
   getSerializedContentByXtermSerializeAddon,
   waitForTerminalRegex,
@@ -37,8 +37,7 @@ async function fetchBufferApi(
 }
 
 async function gotoAndSelectSession(page: Page, description: string, timeout = 10000) {
-  await page.waitForSelector('.session-item', { timeout })
-  await page.locator(`.session-item:has-text("${description}")`).click()
+  await selectSession(page, description, timeout)
   await page.waitForSelector('.output-container', { timeout })
   await page.waitForSelector('.xterm', { timeout })
 }
@@ -302,8 +301,7 @@ extendedTest.describe('PTY Buffer readRaw() Function', () => {
       args: ['SESSION_TWO_CONTENT'],
       description: 'Session Two',
     })
-    await page.waitForSelector('.session-item', { timeout: 10000 })
-    await page.locator('.session-item').filter({ hasText: 'Session One' }).click()
+    await selectSession(page, 'Session One')
     await waitForTerminalRegex(page, /SESSION_ONE_CONTENT/)
     await page.waitForFunction(
       () => {
@@ -322,7 +320,7 @@ extendedTest.describe('PTY Buffer readRaw() Function', () => {
       excludeAltBuffer: true,
     })
     expect(session1Content).toContain('SESSION_ONE_CONTENT')
-    await page.locator('.session-item').filter({ hasText: 'Session Two' }).click()
+    await selectSession(page, 'Session Two')
     await waitForTerminalRegex(page, /SESSION_TWO_CONTENT/)
     const session2Content = await getSerializedContentByXtermSerializeAddon(page, {
       excludeModes: true,

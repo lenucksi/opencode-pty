@@ -1,7 +1,11 @@
 // Type-safe API client for making HTTP requests with compile-time validation
 // Uses the structured routes to ensure correct methods and parameters
 
-import type { HealthResponse, PTYSessionInfo } from 'opencode-pty/web/shared/types'
+import type {
+  HealthResponse,
+  ParentSessionTitlesResponse,
+  PTYSessionInfo,
+} from 'opencode-pty/web/shared/types'
 import { routes } from './routes'
 
 // Extract path parameters from route pattern at compile time
@@ -113,6 +117,17 @@ export function createApiClient(baseUrl: string) {
           method: 'DELETE',
           baseUrl,
         }),
+    },
+
+    parentSessions: {
+      list: () =>
+        apiFetchJson<typeof routes.parentSessions, 'GET', ParentSessionTitlesResponse>(
+          routes.parentSessions,
+          {
+            method: 'GET',
+            baseUrl,
+          }
+        ),
     },
 
     session: {

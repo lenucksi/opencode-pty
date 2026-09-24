@@ -139,6 +139,8 @@ export interface PluginContextV2 {
    */
   readonly session?: {
     readonly prompt: Plugin.Context['session']['prompt']
+    /** Used by the web UI to label groups with the parent session title. */
+    readonly get?: Plugin.Context['session']['get']
   }
 }
 
