@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 
 import type { createApiClient } from '../../src/web/shared/api-client.ts'
-import { expect, test as extendedTest } from './fixtures'
+import { expect, selectSession, test as extendedTest } from './fixtures'
 import { waitForTerminalRegex } from './xterm-test-helpers.ts'
 
 /**
@@ -29,8 +29,7 @@ async function openTranscriptSession(
     description: 'Copy test session',
   })
 
-  await page.waitForSelector('.session-item', { timeout: 5000 })
-  await page.locator('.session-item:has-text("Copy test session")').first().click()
+  await selectSession(page, 'Copy test session', 5000)
   await page.waitForSelector('.terminal.xterm', { timeout: 5000 })
   await waitForTerminalRegex(page, new RegExp(LATE_MARKER))
 }

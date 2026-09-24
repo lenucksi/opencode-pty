@@ -2,7 +2,7 @@ import {
   getSerializedContentByXtermSerializeAddon,
   waitForTerminalRegex,
 } from './xterm-test-helpers'
-import { test as extendedTest, expect } from './fixtures'
+import { test as extendedTest, expect, selectSession } from './fixtures'
 
 extendedTest.describe(
   'Xterm Content Extraction - Visual Verification (DOM vs Serialize vs Plain API)',
@@ -22,8 +22,7 @@ extendedTest.describe(
 
         // Wait for UI
         await page.waitForSelector('h1:has-text("PTY Sessions")')
-        await page.waitForSelector('.session-item', { timeout: 5000 })
-        await page.locator('.session-item:has-text("Visual verification test")').click()
+        await selectSession(page, 'Visual verification test', 5000)
         await page.waitForSelector('.xterm', { timeout: 5000 })
         await waitForTerminalRegex(page, /More text/)
 

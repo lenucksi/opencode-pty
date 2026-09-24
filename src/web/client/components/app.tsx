@@ -119,6 +119,7 @@ function ActiveSessionView({
 
 export function App() {
   const [sessions, setSessions] = useState<PTYSessionInfo[]>([])
+  const [parentSessionTitles, setParentSessionTitles] = useState<Record<string, string>>({})
   const [activeSession, setActiveSession] = useState<PTYSessionInfo | null>(null)
   const [wsMessageCount, setWsMessageCount] = useState(0)
   const [sessionUpdateCount, setSessionUpdateCount] = useState(0)
@@ -133,6 +134,26 @@ export function App() {
   const terminalRef = useRef<RawTerminal>(null)
   const [copyFeedback, setCopyFeedback] = useState('')
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const hasParentSession = sessions.some((session) => Boolean(session.parentSessionId))
+    if (!hasParentSession) {
+      setParentSessionTitles({})
+      return
+    }
+
+    void api.parentSessions
+      .list()
+      .then((response) => {
+        if (!cancelled) setParentSessionTitles(response.titles)
+      })
+      .catch((error) => console.error('Failed to load parent session titles', error))
+
+    return () => {
+      cancelled = true
+    }
+  }, [sessions])
 
   const handleSessionRemoved = useCallback((sessionId: string) => {
     setSessions((prevSessions) => prevSessions.filter((session) => session.id !== sessionId))
@@ -395,6 +416,7 @@ export function App() {
       <div className="container" ref={appShellRef} data-active-session={activeSession?.id}>
         <Sidebar
           sessions={sessions}
+          parentSessionTitles={parentSessionTitles}
           activeSession={activeSession}
           onSessionClick={handleSessionClick}
           onKillSession={handleKillSessionById}

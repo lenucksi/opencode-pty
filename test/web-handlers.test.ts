@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import type { BunRequest } from 'bun'
 import { manager } from '../src/plugin/pty/manager.ts'
+import { setParentSessionTitleResolver } from '../src/plugin/pty/parent-session-title.ts'
 import { setPermissionAuthorizer } from '../src/plugin/pty/permissions.ts'
 import { handleHealth } from '../src/web/server/handlers/health.ts'
 import {
@@ -14,12 +15,14 @@ import {
   killSession,
   sendInput,
 } from '../src/web/server/handlers/sessions.ts'
+import { getParentSessions } from '../src/web/server/handlers/parent-sessions.ts'
 import { handleUpgrade } from '../src/web/server/handlers/upgrade.ts'
 import type { HealthResponse } from '../src/web/shared/types.ts'
 import type { routes } from '../src/web/shared/routes.ts'
 
 afterEach(() => {
   setPermissionAuthorizer(null)
+  setParentSessionTitleResolver(null)
   mock.restore()
 })
 
@@ -65,6 +68,25 @@ describe('session handlers', () => {
     spyOn(manager, 'list').mockReturnValue([sessionInfo])
     const response = getSessions()
     expect(await response.json()).toEqual([sessionInfo])
+  })
+
+  it('returns readable titles for parent OpenCode sessions', async () => {
+    spyOn(manager, 'list').mockReturnValue([
+      { ...sessionInfo, parentSessionId: 'ses_named' },
+      { ...sessionInfo, id: 'pty_web', parentSessionId: 'web-api' },
+    ])
+    const requested: string[] = []
+    setParentSessionTitleResolver({
+      getTitle: async (sessionID) => {
+        requested.push(sessionID)
+        return 'Deployment work'
+      },
+    })
+
+    const response = await getParentSessions()
+
+    expect(await response.json()).toEqual({ titles: { ses_named: 'Deployment work' } })
+    expect(requested).toEqual(['ses_named'])
   })
 
   it('rejects invalid JSON bodies', async () => {

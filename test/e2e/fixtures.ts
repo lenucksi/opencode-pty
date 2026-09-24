@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process'
-import { test as base, type WorkerInfo } from '@playwright/test'
+import { test as base, type Locator, type Page, type WorkerInfo } from '@playwright/test'
 
 import { createApiClient } from '../../src/web/shared/api-client.ts'
 import { ManagedTestClient } from '../utils'
@@ -167,5 +167,56 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await fixtureUse(page)
   },
 })
+
+/** Make a grouped session card visible, expanding a collapsed parent if needed. */
+export async function revealSession(
+  page: Page,
+  description: string,
+  timeout = 10_000
+): Promise<Locator> {
+  const item = page.locator('.session-item').filter({ hasText: description }).first()
+  await item.waitFor({ state: 'attached', timeout })
+  if (!(await item.isVisible())) {
+    await item.locator('xpath=ancestor::details[1]').locator('summary').click()
+  }
+  await item.waitFor({ state: 'visible', timeout })
+  return item
+}
+
+/** Select a PTY after making its parent-session group visible. */
+export async function selectSession(
+  page: Page,
+  description: string,
+  timeout = 10_000
+): Promise<Locator> {
+  const deadline = Date.now() + timeout
+  let lastError: unknown
+
+  while (Date.now() < deadline) {
+    const remaining = Math.max(1, deadline - Date.now())
+    const item = page.locator('.session-item').filter({ hasText: description }).first()
+    try {
+      await item.waitFor({ state: 'attached', timeout: remaining })
+      if (!(await item.isVisible())) {
+        await item
+          .locator('xpath=ancestor::details[1]')
+          .locator('summary')
+          .click({ timeout: remaining })
+        continue
+      }
+      await item.click({ timeout: Math.min(1_000, remaining) })
+      return item
+    } catch (error) {
+      // A command can finish while the click is in flight, moving its card from
+      // the open Running group to a newly mounted, collapsed Finished group.
+      // Re-resolve and reveal it once more before giving up.
+      lastError = error
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Timed out selecting PTY session ${description}`)
+}
 
 export { expect } from '@playwright/test'

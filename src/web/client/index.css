@@ -220,6 +220,79 @@ body {
   font-size: 12px;
   color: var(--fg-subtle);
 }
+.parent-session-group {
+  margin-bottom: 12px;
+}
+.parent-session-summary {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px 9px 26px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  list-style: none;
+}
+.parent-session-summary::-webkit-details-marker {
+  display: none;
+}
+.parent-session-summary::before {
+  content: "▸";
+  position: absolute;
+  top: 10px;
+  left: 9px;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+.parent-session-group[open] > .parent-session-summary::before {
+  content: "▾";
+}
+.parent-session-group[open] > .parent-session-summary {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.parent-session-summary:hover {
+  background: var(--bg-hover);
+}
+.parent-session-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.parent-session-title {
+  overflow: hidden;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.parent-session-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--fg-subtle);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.parent-session-meta > span + span::before {
+  content: "·";
+  margin-right: 5px;
+  color: var(--fg-subtle);
+}
+.parent-session-id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.parent-session-items {
+  margin-left: 8px;
+  padding: 8px 0 0 8px;
+  border-left: 1px solid var(--border);
+}
 .clear-finished-btn {
   margin-left: auto;
   padding: 2px 8px;

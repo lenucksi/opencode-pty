@@ -8,6 +8,10 @@ import {
   stopActiveServer,
 } from '../src/v2/index.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
+import {
+  resolveParentSessionTitles,
+  setParentSessionTitleResolver,
+} from '../src/plugin/pty/parent-session-title.ts'
 import { V2SessionNotifier } from '../src/v2/index.ts'
 import type {
   CommandDefinition,
@@ -30,8 +34,9 @@ async function waitFor(condition: () => boolean, timeoutMs = 5000): Promise<void
 describe('OpenCode V2 Live Integration', () => {
   afterEach(() => {
     stopActiveServer()
-    // Keep the singleton manager's notifier from leaking across simulated hosts.
+    // Keep singleton host integrations from leaking across simulated hosts.
     manager.setNotifier(null)
+    setParentSessionTitleResolver(null)
   })
 
   it('matches the Schema.Struct expected by OpenCode core external plugin loader', async () => {
@@ -120,6 +125,27 @@ describe('OpenCode V2 Live Integration', () => {
 
     expect(server.server.url.port).toBe('48999')
     expect(server.server.url.hostname).toBe('127.0.0.1')
+  })
+
+  it('resolves parent session titles through the V2 host client', async () => {
+    const requested: string[] = []
+    const simulatedContext: PluginContextV2 = {
+      options: {},
+      session: {
+        prompt: async () => ({}) as never,
+        get: async (input) => {
+          requested.push(input.sessionID)
+          return { title: 'Caching Web Server und WireGuard' } as never
+        },
+      },
+    }
+
+    await Plugin.setup(simulatedContext)
+
+    expect(await resolveParentSessionTitles(['ses_parent'])).toEqual({
+      ses_parent: 'Caching Web Server und WireGuard',
+    })
+    expect(requested).toEqual(['ses_parent'])
   })
 
   it('delivers <pty_exited> via ctx.session.prompt when notifyOnExit is set', async () => {

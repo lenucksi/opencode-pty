@@ -1,5 +1,5 @@
 import type { PTYSessionInfo } from '../../../src/plugin/pty/types'
-import { expect, test as extendedTest } from '../fixtures'
+import { expect, revealSession, test as extendedTest } from '../fixtures'
 
 extendedTest.describe('App Component', () => {
   extendedTest('renders the PTY Sessions title', async ({ page }) => {
@@ -23,12 +23,13 @@ extendedTest.describe('App Component', () => {
       description: 'Test session for WebSocket check',
     })
 
-    // Wait for session to appear in UI (indicates WebSocket session_list was processed)
-    await page.waitForSelector('.session-item', { timeout: 5000 })
-
-    // Verify session appears in the list
-    const sessionText = await page.locator('.session-item').first().textContent()
-    expect(sessionText).toContain('Test session for WebSocket check')
+    // Wait for the grouped session to be attached (a quick echo may already be
+    // inside a collapsed Finished group).
+    const sessionItem = page.locator('.session-item').filter({
+      hasText: 'Test session for WebSocket check',
+    })
+    await expect(sessionItem).toBeAttached({ timeout: 5000 })
+    expect(await sessionItem.textContent()).toContain('Test session for WebSocket check')
   })
 
   extendedTest('shows no active sessions message when empty', async ({ page }) => {
@@ -298,6 +299,7 @@ extendedTest.describe('App Component', () => {
 
         await page.reload()
 
+        await revealSession(page, 'Finished session to discard')
         const sessionRow = page.locator('.session-row:has-text("Finished session to discard")')
         await expect(sessionRow).toBeVisible({ timeout: 5000 })
 

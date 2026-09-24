@@ -3,6 +3,8 @@ import { describe, expect, it } from 'bun:test'
 import {
   formatClock,
   formatDuration,
+  groupSessionsByParent,
+  parentSessionGroupTitle,
   sessionCommandLine,
   sessionDetailLine,
   sessionSidebarMeta,
@@ -26,6 +28,11 @@ function session(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
     lineCount: 12,
     ...overrides,
   }
+}
+
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected a value in test')
+  return value
 }
 
 describe('formatDuration', () => {
@@ -118,5 +125,73 @@ describe('sessionTooltip', () => {
       'ansible-playbook site.yml --limit host',
       'workdir: /srv/ansible',
     ])
+  })
+
+  it('includes the requesting OpenCode session when known', () => {
+    const lines = sessionTooltip(
+      session({ parentSessionId: 'ses_parent', parentAgent: 'build' })
+    ).split('\n')
+
+    expect(lines).toContain('parent session: ses_parent (build)')
+  })
+})
+
+describe('groupSessionsByParent', () => {
+  it('groups by parent and orders groups and children by newest activity', () => {
+    const groups = groupSessionsByParent([
+      session({
+        id: 'b-old',
+        parentSessionId: 'ses_b',
+        parentAgent: 'build',
+        createdAt: '2026-09-21T15:00:00.000Z',
+      }),
+      session({
+        id: 'b-new',
+        parentSessionId: 'ses_b',
+        parentAgent: 'plan',
+        createdAt: '2026-09-21T15:30:00.000Z',
+      }),
+      session({
+        id: 'a-finished',
+        parentSessionId: 'ses_a',
+        status: 'exited',
+        createdAt: '2026-09-21T14:00:00.000Z',
+        endedAt: '2026-09-21T15:45:00.000Z',
+      }),
+    ])
+
+    expect(groups.map((group) => group.parentSessionId)).toEqual(['ses_a', 'ses_b'])
+    expect(groups[1]?.sessions.map((child) => child.id)).toEqual(['b-new', 'b-old'])
+    expect(groups[1]?.parentAgent).toBe('plan')
+  })
+
+  it('keeps legacy sessions without a parent together', () => {
+    const groups = groupSessionsByParent([session({ id: 'legacy' })])
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.key).toBe('')
+    expect(groups[0]?.parentSessionId).toBeUndefined()
+  })
+})
+
+describe('parentSessionGroupTitle', () => {
+  it('prefers a resolved OpenCode title', () => {
+    const groups = groupSessionsByParent([
+      session({ id: 'one', parentSessionId: 'ses_named', parentAgent: 'build' }),
+    ])
+
+    expect(parentSessionGroupTitle(required(groups[0]), { ses_named: 'Deployment work' })).toBe(
+      'Deployment work'
+    )
+  })
+
+  it('falls back to the stable id and labels manual web API sessions', () => {
+    const [missing] = groupSessionsByParent([
+      session({ id: 'one', parentSessionId: 'ses_missing' }),
+    ])
+    const [manual] = groupSessionsByParent([session({ id: 'two', parentSessionId: 'web-api' })])
+
+    expect(parentSessionGroupTitle(required(missing), {})).toBe('Session ses_missing')
+    expect(parentSessionGroupTitle(required(manual), {})).toBe('Web API / manual')
   })
 })

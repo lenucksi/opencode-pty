@@ -1,4 +1,4 @@
-import { test as extendedTest, expect } from './fixtures'
+import { test as extendedTest, expect, selectSession } from './fixtures'
 import {
   getTerminalBufferLines,
   getTerminalPlainText,
@@ -19,8 +19,7 @@ extendedTest.describe('Xterm Content Extraction', () => {
       })
 
       // Wait for session to appear and select it
-      await page.waitForSelector('.session-item', { timeout: 5000 })
-      await page.locator('.session-item:has-text("Content extraction validation test")').click()
+      await selectSession(page, 'Content extraction validation test', 5000)
       await page.waitForSelector('.output-container', { timeout: 5000 })
       await page.waitForSelector('.xterm', { timeout: 5000 })
 

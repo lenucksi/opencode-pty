@@ -1,4 +1,13 @@
+import { WEB_API_PARENT_SESSION_ID } from '../../plugin/constants.ts'
 import type { PTYSessionInfo } from './types.ts'
+
+export interface PTYSessionGroup {
+  /** Stable React/group key; the empty key represents legacy ungrouped rows. */
+  key: string
+  parentSessionId?: string
+  parentAgent?: string
+  sessions: PTYSessionInfo[]
+}
 
 /** Local wall-clock time with seconds; empty for a missing or invalid value. */
 export function formatClock(iso: string | undefined): string {
@@ -61,7 +70,12 @@ export function sessionTiming(session: PTYSessionInfo): string {
 
 /** Hover text with the details that do not fit on one line. */
 export function sessionTooltip(session: PTYSessionInfo): string {
-  return [session.id, sessionCommandLine(session), `workdir: ${session.workdir}`]
+  const parent = session.parentSessionId
+    ? `parent session: ${session.parentSessionId}${
+        session.parentAgent ? ` (${session.parentAgent})` : ''
+      }`
+    : ''
+  return [session.id, parent, sessionCommandLine(session), `workdir: ${session.workdir}`]
     .filter((line) => line.trim() !== '')
     .join('\n')
 }
@@ -105,4 +119,45 @@ export function sortSessionsByTime(sessions: PTYSessionInfo[]): PTYSessionInfo[]
  */
 export function sessionSidebarMeta(session: PTYSessionInfo): string {
   return [`PID ${session.pid}`, sessionTiming(session)].filter((part) => part !== '').join(' · ')
+}
+
+/**
+ * Group already time-sorted sessions by the OpenCode session that spawned them.
+ * The first child carries the group's newest activity, so Map insertion order is
+ * also the desired newest-group-first order.
+ */
+export function groupSessionsByParent(sessions: PTYSessionInfo[]): PTYSessionGroup[] {
+  const groups = new Map<string, PTYSessionGroup>()
+
+  for (const session of sortSessionsByTime(sessions)) {
+    const parentSessionId = session.parentSessionId?.trim() || undefined
+    const key = parentSessionId ?? ''
+    const group = groups.get(key)
+    if (group) {
+      group.sessions.push(session)
+      group.parentAgent ??= session.parentAgent
+      continue
+    }
+
+    groups.set(key, {
+      key,
+      ...(parentSessionId === undefined ? {} : { parentSessionId }),
+      ...(session.parentAgent === undefined ? {} : { parentAgent: session.parentAgent }),
+      sessions: [session],
+    })
+  }
+
+  return [...groups.values()]
+}
+
+/** Human-readable group heading, falling back when the parent no longer exists. */
+export function parentSessionGroupTitle(
+  group: PTYSessionGroup,
+  titles: Readonly<Record<string, string>>
+): string {
+  if (group.parentSessionId === WEB_API_PARENT_SESSION_ID) return 'Web API / manual'
+  if (!group.parentSessionId) return 'Ungrouped'
+
+  const title = titles[group.parentSessionId]?.trim()
+  return title || `Session ${group.parentSessionId}`
 }

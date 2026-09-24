@@ -1,7 +1,11 @@
-import type { RefObject } from 'react'
+import { useEffect, useState, type RefObject } from 'react'
 import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
 
+import { WEB_API_PARENT_SESSION_ID } from '../../../plugin/constants.ts'
 import {
+  groupSessionsByParent,
+  parentSessionGroupTitle,
+  type PTYSessionGroup,
   sessionCommandLine,
   sessionSidebarMeta,
   sessionTooltip,
@@ -11,6 +15,7 @@ import { ThemeSwitch } from './theme-switch.tsx'
 
 interface SidebarProps {
   sessions: PTYSessionInfo[]
+  parentSessionTitles: Record<string, string>
   activeSession: PTYSessionInfo | null
   onSessionClick: (session: PTYSessionInfo) => void
   onKillSession: (session: PTYSessionInfo) => void
@@ -23,10 +28,13 @@ interface SidebarProps {
   settingsButtonRef: RefObject<HTMLButtonElement | null>
 }
 
-interface SessionSectionProps {
+interface SessionGroupSectionProps {
   title: string
-  sessions: PTYSessionInfo[]
+  sectionClassName: string
+  groups: PTYSessionGroup[]
   emptyText: string
+  groupsStartOpen: boolean
+  parentSessionTitles: Record<string, string>
   activeSession: PTYSessionInfo | null
   onSessionClick: (session: PTYSessionInfo) => void
   onKillSession: (session: PTYSessionInfo) => void
@@ -108,30 +116,105 @@ function SessionItem({
   )
 }
 
-function SessionSection({
+function SessionGroup({
+  group,
+  startOpen,
+  parentSessionTitles,
+  activeSession,
+  onSessionClick,
+  onKillSession,
+  onRemoveSession,
+}: {
+  group: PTYSessionGroup
+  startOpen: boolean
+  parentSessionTitles: Record<string, string>
+  activeSession: PTYSessionInfo | null
+  onSessionClick: (session: PTYSessionInfo) => void
+  onKillSession: (session: PTYSessionInfo) => void
+  onRemoveSession: (session: PTYSessionInfo) => void
+}) {
+  const title = parentSessionGroupTitle(group, parentSessionTitles)
+  const containsActiveSession = group.sessions.some((session) => session.id === activeSession?.id)
+  const shouldBeOpen = startOpen || containsActiveSession
+  const [open, setOpen] = useState(shouldBeOpen)
+  useEffect(() => {
+    if (shouldBeOpen) setOpen(true)
+  }, [shouldBeOpen])
+  const showParentID =
+    group.parentSessionId !== undefined && group.parentSessionId !== WEB_API_PARENT_SESSION_ID
+  const tooltip = [
+    title,
+    showParentID ? `parent session: ${group.parentSessionId}` : '',
+    group.parentAgent ? `agent: ${group.parentAgent}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  return (
+    <details
+      className="parent-session-group"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      data-parent-session-id={group.parentSessionId ?? 'ungrouped'}
+      data-testid="parent-session-group"
+    >
+      <summary className="parent-session-summary" title={tooltip}>
+        <span className="parent-session-title">{title}</span>
+        <span className="parent-session-meta">
+          {group.parentAgent ? <span>{group.parentAgent}</span> : null}
+          {showParentID ? <span className="parent-session-id">{group.parentSessionId}</span> : null}
+          <span>
+            {group.sessions.length} session{group.sessions.length === 1 ? '' : 's'}
+          </span>
+        </span>
+      </summary>
+      <div className="parent-session-items">
+        {group.sessions.map((session) => (
+          <SessionItem
+            key={session.id}
+            session={session}
+            activeSession={activeSession}
+            onSessionClick={onSessionClick}
+            onKillSession={onKillSession}
+            onRemoveSession={onRemoveSession}
+          />
+        ))}
+      </div>
+    </details>
+  )
+}
+
+function SessionGroupSection({
   title,
-  sessions,
+  sectionClassName,
+  groups,
   emptyText,
+  groupsStartOpen,
+  parentSessionTitles,
   activeSession,
   onSessionClick,
   onKillSession,
   onRemoveSession,
   action,
-}: SessionSectionProps) {
+}: SessionGroupSectionProps) {
+  const sessionCount = groups.reduce((count, group) => count + group.sessions.length, 0)
+
   return (
-    <section className="session-section">
+    <section className={`session-section ${sectionClassName}`}>
       <div className="session-section-header">
         <span className="session-section-title">{title}</span>
-        <span className="session-section-count">{sessions.length}</span>
+        <span className="session-section-count">{sessionCount}</span>
         {action}
       </div>
-      {sessions.length === 0 ? (
+      {groups.length === 0 ? (
         <div className="session-section-empty">{emptyText}</div>
       ) : (
-        sessions.map((session) => (
-          <SessionItem
-            key={session.id}
-            session={session}
+        groups.map((group) => (
+          <SessionGroup
+            key={group.key}
+            group={group}
+            startOpen={groupsStartOpen}
+            parentSessionTitles={parentSessionTitles}
             activeSession={activeSession}
             onSessionClick={onSessionClick}
             onKillSession={onKillSession}
@@ -145,6 +228,7 @@ function SessionSection({
 
 export function Sidebar({
   sessions,
+  parentSessionTitles,
   activeSession,
   onSessionClick,
   onKillSession,
@@ -158,6 +242,8 @@ export function Sidebar({
 }: SidebarProps) {
   const liveSessions = sessions.filter(isLive)
   const finishedSessions = sessions.filter((session) => !isLive(session))
+  const liveGroups = groupSessionsByParent(liveSessions)
+  const finishedGroups = groupSessionsByParent(finishedSessions)
 
   return (
     <div className="sidebar">
@@ -185,19 +271,25 @@ export function Sidebar({
           <div className="session-empty">No active sessions</div>
         ) : (
           <>
-            <SessionSection
+            <SessionGroupSection
               title="Running"
-              sessions={liveSessions}
+              sectionClassName="session-section-running"
+              groups={liveGroups}
               emptyText="No running sessions"
+              groupsStartOpen
+              parentSessionTitles={parentSessionTitles}
               activeSession={activeSession}
               onSessionClick={onSessionClick}
               onKillSession={onKillSession}
               onRemoveSession={onRemoveSession}
             />
-            <SessionSection
+            <SessionGroupSection
               title="Finished"
-              sessions={finishedSessions}
+              sectionClassName="session-section-finished"
+              groups={finishedGroups}
               emptyText="No finished sessions"
+              groupsStartOpen={false}
+              parentSessionTitles={parentSessionTitles}
               activeSession={activeSession}
               onSessionClick={onSessionClick}
               onKillSession={onKillSession}
