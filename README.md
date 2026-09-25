@@ -2,6 +2,8 @@
 
 A plugin for [OpenCode](https://opencode.ai) that provides interactive PTY (pseudo-terminal) management, enabling the AI agent to run background processes, send interactive input, and read output on demand.
 
+> **Upstream:** [shekohex/opencode-pty](https://github.com/shekohex/opencode-pty) is the upstream project. This repository is a fork. The features documented here are kept in a shape that can be contributed upstream, and the currently maintained version of this fork lives on the `local/modernized` branch.
+
 ## Why?
 
 OpenCode's built-in `bash` tool runs commands synchronously—the agent waits for completion. This works for quick commands, but not for:
@@ -21,10 +23,13 @@ This plugin gives the agent full control over multiple terminal sessions, like t
 - **Output Buffer**: Read output anytime with pagination (offset/limit)
 - **Pattern Filtering**: Search output using regex (like `grep`)
 - **Exit Notifications**: Get notified when processes finish (eliminates polling)
+- **Wait for Completion**: Block on a session until it exits, with an optional timeout
 - **Permission Support**: Respects OpenCode's bash permission settings
 - **Session Lifecycle**: Sessions persist until explicitly killed
 - **Auto-cleanup**: PTYs are cleaned up when OpenCode sessions end
 - **Web UI**: Modern React-based interface for session management
+- **Session Groups**: The Web UI groups sessions by their parent OpenCode session
+- **Accurate Terminal Emulation**: Mouse reporting, selection and true-color queries
 - **Real-time Streaming**: WebSocket-based live output updates
 
 ## Setup
@@ -103,7 +108,7 @@ This plugin provides slash commands that can be used in OpenCode chat:
 
 This plugin includes a modern React-based web interface for monitoring and interacting with PTY sessions.
 
-[![opencode-pty Web UI Demo](https://img.youtube.com/vi/wPqmTPnzvVY/0.jpg)](https://youtu.be/wPqmTPnzvVY)
+![opencode-pty Web UI](docs/media/web-ui-demo.gif)
 
 If you instruct the coding agent to run something in background, you have to name it "session",
 i.e. "run xy as a background SESSION".
@@ -118,10 +123,16 @@ This will start the background sessions observer cockpit server and launch the b
 
 ### Features
 
-- **Session List**: View all active PTY sessions with status indicators
+- **Session List**: View all PTY sessions with status indicators, split into running and finished
+- **Session Groups**: Sessions are grouped by their parent OpenCode session, with the parent title, agent and child count
 - **Real-time Output**: Live streaming of process output via WebSocket
 - **Interactive Input**: Send commands and input to running processes
+- **Mouse Selection**: Select text with the mouse, including applications that capture the mouse, and copy the selection
+- **Themes**: Light and dark theme, following the system preference by default
+- **Accurate Colors**: Terminals answer OSC 10/11 color queries, so themes and prompts report true colors
+- **Download**: Save the visible buffer or a range of it as a file
 - **Session Management**: Kill sessions directly from the UI
+- **Settings**: Configure viewport, scrollback and display preferences
 - **Connection Status**: Visual indicator of WebSocket connection status
 
 ### REST API
@@ -388,6 +399,19 @@ bunx socket@1.1.180 login
 `test:local` then runs `socket ci` through the stored CLI login. A missing or
 invalid login fails the gate; no token environment variable or repository
 secret is required. Socket scans consume Socket API quota.
+
+### Recording the demo
+
+The animation at the top of this README is generated, not hand-captured:
+
+```bash
+bun run capture:demo
+```
+
+This records the Web UI at 1920x1080 against a throwaway server with an
+isolated state directory, then writes `docs/media/web-ui-demo.gif` plus a
+poster frame. Session output comes from the canned scripts in
+`test/e2e/demo-*.py`, so the recording never contains real data.
 
 ### Manual TUI resize check
 

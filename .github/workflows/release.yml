@@ -5,7 +5,7 @@ on:
     workflows: ['CI']
     types:
       - completed
-    branches: [main]
+    branches: [local/modernized]
   workflow_dispatch:
 
 permissions:
@@ -14,7 +14,12 @@ permissions:
 
 jobs:
   publish:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Publishing is bound to the upstream repository. npm trusted publishing is
+    # registered there, so a fork must never reach the publish step.
+    if: >-
+      github.repository == 'shekohex/opencode-pty' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
