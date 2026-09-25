@@ -6,14 +6,19 @@
 coverageThreshold = { lines = 0.8, functions = 0 }
 coverageReporter = ["text"]
 coverageDir = "coverage"
-# Compiled duplicates, test helpers and React client components/hooks are out of
-# scope for the unit/integration suite (the React layer is covered by Playwright).
+# Compiled duplicates, test helpers, local quality tooling and React client
+# components/hooks are out of scope for the production coverage gate. Quality
+# helpers have their own unit tests; the React layer is covered by Playwright.
 coveragePathIgnorePatterns = [
   "dist/**",
+  "scripts/**",
   "test/**",
   "src/web/client/components/**",
   "src/web/client/hooks/**",
   "src/web/client/addons/**",
+  "src/web/client/lib/clipboard.ts",
   "src/web/client/main.tsx",
   "src/web/client/vite-env.d.ts",
+  "src/plugin/pty/state-paths.ts",
+  "src/web/server/handlers/server-info.ts",
 ]

@@ -361,14 +361,26 @@ Use `pty_kill` with `cleanup=true` to remove completely.
 ```bash
 git clone https://github.com/shekohex/opencode-pty.git
 cd opencode-pty
-bun ci          # install packages from bun.lock
-bun lint        # Runs Biome linting checks
-bun format      # Runs Biome formatting checks
-bun typecheck   # Runs TypeScript type checking
-bun build:dev   # Build the React app for development
-bun unittest    # Runs the unit tests
-bun test:e2e    # Runs the e2e tests
+bun install --force --frozen-lockfile # Reinstall the exact bun.lock dependency graph
+bun lint                              # Runs Biome linting checks
+bun format                            # Runs Biome formatting checks
+bun typecheck                         # Runs TypeScript type checking
+bun build:dev                         # Build the React app for development
+bun unittest                          # Runs the unit tests
+bun test:e2e                          # Runs the e2e tests
 ```
+
+### Full local quality gate
+
+```bash
+bun run test:local
+```
+
+This reinstalls the frozen dependency graph, checks Bun/dependency freshness,
+runs type/lint/format/Aislop checks, unit and coverage suites, production and
+E2E builds, and the Gitleaks/TruffleHog repository scans. Socket.dev is included
+when `SOCKET_CLI_API_TOKEN` or `SOCKET_SECURITY_API_TOKEN` is set; without a
+token, the summary records an explicit Socket SKIP.
 
 ### Manual TUI resize check
 
