@@ -1,3 +1,97 @@
+diff --git a/node_modules/ghostty-web/lib/color-query-parser.ts b/lib/color-query-parser.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..e63086c6f7e0fbaf747239094c0cd711d52ffb78
+--- /dev/null
++++ b/lib/color-query-parser.ts
+@@ -0,0 +1,88 @@
++type State = 'text' | 'escape' | 'osc' | 'osc-escape' | 'string';
++interface ColorQuery {
++  slot: 10 | 11;
++  terminator: string;
++}
++
++// Stateful, bounded observer of 7-bit control sequences in the UTF-8 stream.
++// Binary writes are scanned without decoding or altering split UTF-8 codepoints.
++export class ColorQueryParser {
++  private state: State = 'text';
++  private body: string | null = '';
++
++  reset(): void {
++    this.state = 'text';
++    this.body = '';
++  }
++
++  read(data: string | Uint8Array): ColorQuery[] {
++    const queries: ColorQuery[] = [];
++    for (let index = 0; index < data.length; index++) {
++      const byte = typeof data === 'string' ? data.charCodeAt(index) : data[index];
++      if (byte === 0x18 || byte === 0x1a) {
++        this.reset(); // CAN / SUB cancel an incomplete control sequence.
++        continue;
++      }
++      switch (this.state) {
++        case 'text':
++          if (byte === 0x1b) this.state = 'escape';
++          break;
++        case 'escape':
++          this.escape(byte);
++          break;
++        case 'osc':
++          if (byte === 0x07) this.finish('\x07', queries);
++          else if (byte === 0x1b) this.state = 'osc-escape';
++          else if (byte < 0x20) {
++            // Ghostty ignores other C0 controls inside OSC.
++          } else if (this.body !== null) {
++            // Longer / non-ASCII payloads cannot be the queries we support.
++            // Stay inside OSC until its terminator without retaining the data.
++            this.body =
++              this.body.length < 32 && byte >= 0x20 && byte < 0x7f
++                ? this.body + String.fromCharCode(byte)
++                : null;
++          }
++          break;
++        case 'osc-escape':
++          if (byte === 0x5c) this.finish('\x1b\\', queries);
++          else {
++            this.body = '';
++            this.escape(byte);
++          }
++          break;
++        case 'string':
++          // Like Ghostty's VT parser, ESC ends DCS / SOS / PM / APC and
++          // begins a new escape sequence (which may itself be an OSC).
++          if (byte === 0x1b) this.state = 'escape';
++          break;
++      }
++    }
++    return queries;
++  }
++
++  private escape(byte: number): void {
++    // Embedded C0 controls and DEL do not end an escape sequence.
++    if ((byte < 0x20 && byte !== 0x1b) || byte === 0x7f) return;
++    if (byte === 0x5d) {
++      this.state = 'osc';
++      this.body = '';
++    } else if ([0x50, 0x58, 0x5e, 0x5f].includes(byte)) {
++      this.state = 'string';
++    } else {
++      this.state = byte === 0x1b ? 'escape' : 'text';
++    }
++  }
++
++  private finish(terminator: string, queries: ColorQuery[]): void {
++    const match = this.body?.match(/^(10|11);(\?(?:;\?)*)$/);
++    if (match) {
++      const start = Number(match[1]);
++      const count = match[2].split(';').length;
++      for (let slot = start; slot < start + count && slot <= 11; slot++) {
++        queries.push({ slot: slot as 10 | 11, terminator });
++      }
++    }
++    this.reset();
++  }
++}
 diff --git a/lib/renderer.ts b/lib/renderer.ts
 index 902a5d216003425b5d885d0bd0dceb699b712d67..a04c0277560efc0f047829d86f86f6ac2e999592 100644
 --- a/lib/renderer.ts
@@ -50,10 +144,27 @@ index 3d39ea4bcde5cbef25ee4d8c6353c994f0821185..e80dc4e9bc3f9ebeece26a387e03ff67
 
      // Attach mouse event listeners
 diff --git a/lib/terminal.ts b/lib/terminal.ts
-index 26058b723e4163fb728511393086121418330a67..c68084ecd32c15b3f792f10b46c4371761a14575 100644
+index 26058b723e4163fb728511393086121418330a67..99cc3a7f7dcbe31c3bb7f2f25ce6421b159da1fd 100644
 --- a/lib/terminal.ts
 +++ b/lib/terminal.ts
-@@ -472,10 +472,9 @@ export class Terminal implements ITerminalCore {
+@@ -16,6 +16,7 @@
+  */
+
+ import { BufferNamespace } from './buffer';
++import { ColorQueryParser } from './color-query-parser';
+ import { EventEmitter } from './event-emitter';
+ import type { Ghostty, GhosttyCell, GhosttyTerminal, GhosttyTerminalConfig } from './ghostty';
+ import { getGhostty } from './index';
+@@ -103,7 +104,7 @@ export class Terminal implements ITerminalCore {
+   private animationFrameId?: number;
+   private writeQueue: Uint8Array[] = [];
+   private fontLoadGeneration = 0;
+-  private colorQueryBuffer = '';
++  private colorQueryParser = new ColorQueryParser();
+
+   // Addons
+   private addons: ITerminalAddon[] = [];
+@@ -472,10 +473,9 @@ export class Terminal implements ITerminalCore {
        // Create mouse tracking configuration
        const canvas = this.canvas;
        const renderer = this.renderer;
@@ -66,13 +177,49 @@ index 26058b723e4163fb728511393086121418330a67..c68084ecd32c15b3f792f10b46c43717
          getCellDimensions: () => ({
            width: renderer.charWidth,
            height: renderer.charHeight,
-@@ -758,6 +757,9 @@ export class Terminal implements ITerminalCore {
+@@ -757,6 +757,10 @@ export class Terminal implements ITerminalCore {
+    */
    reset(): void {
      this.assertOpen();
-
++    this.colorQueryParser.reset();
++
 +    // Selection coordinates belong to the current buffer and must not survive replacement.
 +    this.selectionManager?.clearSelection();
-+
+
      // Free old WASM terminal and create new one
      if (this.wasmTerm) {
-       this.wasmTerm.free();
+@@ -1885,25 +1889,18 @@ export class Terminal implements ITerminalCore {
+   }
+
+   private processColorQueries(data: string | Uint8Array): void {
+-    const input = this.colorQueryBuffer + (typeof data === 'string' ? data : new TextDecoder().decode(data));
+-    const query = /(?:\x1b\]|\x9d)(10|11);\?(?:\x07|\x1b\\|\x9c)/g;
+-    let consumed = 0;
+-    let match: RegExpExecArray | null = null;
+-
+-    while ((match = query.exec(input)) !== null) {
+-      consumed = query.lastIndex;
+-      const colors = this.wasmTerm!.getColors();
+-      const color = match[1] === '10' ? colors.foreground : colors.background;
+-      const component = (value: number) => value.toString(16).padStart(2, '0').repeat(2);
++    const queries = this.colorQueryParser.read(data);
++    if (queries.length === 0) return;
++    // getColors() reads cached render state; a query can arrive before a frame.
++    this.wasmTerm!.update();
++    const colors = this.wasmTerm!.getColors();
++    const component = (value: number) => value.toString(16).padStart(2, '0').repeat(2);
++    for (const { slot, terminator } of queries) {
++      const color = slot === 10 ? colors.foreground : colors.background;
+       this.dataEmitter.fire(
+-        `\x1b]${match[1]};rgb:${component(color.r)}/${component(color.g)}/${component(color.b)}\x1b\\`
++        `\x1b]${slot};rgb:${component(color.r)}/${component(color.g)}/${component(color.b)}${terminator}`
+       );
+     }
+-
+-    const tail = input.slice(consumed);
+-    const start = Math.max(tail.lastIndexOf('\x1b]'), tail.lastIndexOf('\x9d'));
+-    this.colorQueryBuffer = start >= 0 && tail.length - start <= 16 ? tail.slice(start) : '';
+-    if (!this.colorQueryBuffer && tail.endsWith('\x1b')) this.colorQueryBuffer = '\x1b';
+   }
+
+   /**

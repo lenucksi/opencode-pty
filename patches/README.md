@@ -34,3 +34,17 @@ application's requested color. The patch paints that cell as real black while
 preserving selection and inverse-video precedence.
 
 Remove this hunk when the pin points to a commit containing the upstream fix.
+
+### Backport: fragmented OSC color queries
+
+`anomalyco/ghostty-web#9` (`5006e8e`) replaces the regex-based OSC 10/11
+observer with bounded byte-wise parser state. The backport handles fragmented
+string and binary writes, combined foreground/background queries, matching BEL
+or ST reply terminators, cancellation, escape interruption, and terminal reset.
+It also refreshes Ghostty's render state before returning resolved colors.
+
+The scope remains 7-bit OSC foreground/background queries. Raw C1 controls,
+additional color slots, and per-query snapshots interleaved with color changes
+inside one WASM write remain outside this patch.
+
+Remove this hunk when the pin points to a commit containing the upstream fix.
