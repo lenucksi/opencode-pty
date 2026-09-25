@@ -85,7 +85,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "ghostty-web": "github:anomalyco/ghostty-web#83c0a07b8628b748aed073b232cb4b52a6ca11c1",
+    "ghostty-web": "github:anomalyco/ghostty-web#6e24d040458ddd7aae81572fe2901deec32f9fe7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "^7.0.2",
@@ -105,6 +105,6 @@
     "open": "^11.0.4"
   },
   "patchedDependencies": {
-    "ghostty-web@github:anomalyco/ghostty-web#83c0a07": "patches/ghostty-web.patch"
+    "ghostty-web@github:anomalyco/ghostty-web#6e24d04": "patches/ghostty-web.patch"
   }
 }

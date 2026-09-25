@@ -5,8 +5,8 @@ Dependency patches applied by `bun install` (see `patchedDependencies` in
 
 ## `ghostty-web.patch`
 
-**Upstream:** `anomalyco/ghostty-web` (pinned to `83c0a07`).
-**Remove when:** the fix is released upstream and the pin is bumped.
+**Upstream:** `anomalyco/ghostty-web` (pinned to `6e24d04`).
+**Remove when:** the fix is released upstream and the pin points to a commit that contains it.
 
 `Terminal.reset()` frees the WASM terminal it was built with and creates a
 replacement. `SelectionManager` stores that instance in its constructor, so
