@@ -1,8 +1,10 @@
 import { existsSync } from 'node:fs'
 
 import { runAislopCheck } from './aislop.ts'
-import { runBunToolchainCheck, runDependencyCheck, socketToken } from './dependencies.ts'
+import { runBunToolchainCheck, runDependencyCheck } from './dependencies.ts'
 import { CommandFailure, runInherited } from './process.ts'
+
+export const SOCKET_SCAN_COMMAND = ['bunx', 'socket@1.1.180', 'ci'] as const
 
 interface StepResult {
   name: string
@@ -72,15 +74,10 @@ function requireLocalTools(): void {
 }
 
 async function runSocketStep(recorder: StepRecorder): Promise<void> {
-  if (!socketToken(process.env)) {
-    recorder.skip(
-      'Socket.dev policy scan',
-      'set SOCKET_CLI_API_TOKEN or SOCKET_SECURITY_API_TOKEN to enable; a successful scan consumes Socket API quota'
-    )
-    return
-  }
+  const [command, ...args] = SOCKET_SCAN_COMMAND
+  if (!command) throw new Error('Socket scan command is empty')
   await recorder.run('Socket.dev policy scan', async () => {
-    await runInherited('bunx', ['socket@1.1.180', 'ci'], { CI: 'true' })
+    await runInherited(command, args, { CI: 'true' })
   })
 }
 

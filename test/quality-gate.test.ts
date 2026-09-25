@@ -9,9 +9,9 @@ import {
 import {
   compareVersions,
   parseOutdatedDependencies,
-  socketToken,
   validateBunToolchain,
 } from '../scripts/quality/dependencies.ts'
+import { SOCKET_SCAN_COMMAND } from '../scripts/quality/local-gate.ts'
 
 function aislopReport(overrides: Partial<AislopReport> = {}): AislopReport {
   return {
@@ -58,15 +58,8 @@ describe('local quality gate helpers', () => {
     ).toEqual(['Package  Current  Wanted  Latest', 'vite     8.3.0   8.3.1   8.4.0'])
   })
 
-  test('prefers the current Socket token and accepts the legacy name', () => {
-    expect(
-      socketToken({
-        SOCKET_CLI_API_TOKEN: ' current ',
-        SOCKET_SECURITY_API_TOKEN: 'legacy',
-      })
-    ).toBe('current')
-    expect(socketToken({ SOCKET_SECURITY_API_TOKEN: 'legacy' })).toBe('legacy')
-    expect(socketToken({})).toBeUndefined()
+  test('pins Socket to the authenticated CLI policy scan', () => {
+    expect([...SOCKET_SCAN_COMMAND]).toEqual(['bunx', 'socket@1.1.180', 'ci'])
   })
 
   test('parses Aislop JSON and applies the selected score gate', () => {

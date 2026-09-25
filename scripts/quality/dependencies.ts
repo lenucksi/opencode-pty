@@ -3,8 +3,6 @@ import { captureCommand, runInherited } from './process.ts'
 export const MINIMUM_BUN_VERSION = '1.4.2'
 export const EXPECTED_PACKAGE_MANAGER = `bun@${MINIMUM_BUN_VERSION}`
 
-export type SocketTokenEnvironment = Readonly<Record<string, string | undefined>>
-
 function versionParts(version: string): [number, number, number] | null {
   const match = version.trim().match(/^(\d+)\.(\d+)\.(\d+)/)
   if (!match) return null
@@ -39,14 +37,6 @@ export function parseOutdatedDependencies(output: string): string[] {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
   return lines.slice(1)
-}
-
-export function socketToken(environment: SocketTokenEnvironment): string | undefined {
-  return (
-    environment.SOCKET_CLI_API_TOKEN?.trim() ||
-    environment.SOCKET_SECURITY_API_TOKEN?.trim() ||
-    undefined
-  )
 }
 
 export async function runBunToolchainCheck(): Promise<void> {
