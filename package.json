@@ -31,6 +31,7 @@
     "dist"
   ],
   "license": "MIT",
+  "packageManager": "bun@1.4.2",
   "type": "module",
   "exports": {
     "./v2": {
@@ -64,10 +65,16 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "unittest": "bun test",
-    "test:coverage": "bun test --coverage",
+    "unittest": "bun test --max-concurrency=1",
+    "test:coverage": "bun test --coverage --max-concurrency=1",
     "test:e2e": "PW_DISABLE_TS_ESM=1 NODE_ENV=test bun --bun playwright test",
-    "test:all": "bun unittest && bun test:e2e",
+    "test:local": "bun scripts/test-local.ts",
+    "test:all": "bun run test:local",
+    "aislop": "bunx aislop@0.16.1 scan . --json",
+    "aislop:check": "bun scripts/check-aislop.ts",
+    "deps:check": "bun scripts/check-dependencies.ts",
+    "secrets:gitleaks": "gitleaks git --no-banner --redact --log-opts='--all' .",
+    "secrets:trufflehog": "trufflehog git file://$PWD --results=verified --no-update --no-color --fail",
     "build:plugin": "tsc -p tsconfig.build.json && bun x copyfiles -u 0 \"src/**/*.txt\" dist",
     "build:dev": "bun clean && bun build:plugin && vite build --mode development",
     "build:prod": "bun clean && bun build:plugin && vite build --mode production",
@@ -95,6 +102,7 @@
     "typescript": "^7.0.2"
   },
   "engines": {
+    "bun": ">=1.4.2",
     "opencode": ">=1.18.31"
   },
   "dependencies": {
