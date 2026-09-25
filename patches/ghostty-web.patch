@@ -1,43 +1,55 @@
 diff --git a/lib/selection-manager.ts b/lib/selection-manager.ts
-index 56d460598720180f492a1dc993aa6cc86ba94e23..6ae4fe2d7c3d381af739f08b86b9725b429ab936 100644
+index 3d39ea4bcde5cbef25ee4d8c6353c994f0821185..e80dc4e9bc3f9ebeece26a387e03ff67975ee68e 100644
 --- a/lib/selection-manager.ts
 +++ b/lib/selection-manager.ts
-@@ -114,6 +114,23 @@ export class SelectionManager {
-     this.attachEventListeners();
-   }
- 
-+  /**
-+   * Point the manager at a new WASM terminal instance.
-+   *
-+   * `Terminal.reset()` frees the terminal it was constructed with and creates a
-+   * replacement, so a manager that keeps the old reference afterwards reads a
-+   * freed buffer: cells come back empty (copying yields blank lines) and the
-+   * reported dimensions fall back to the size the old instance was created
-+   * with, which clamps the selection to that smaller area.
-+   */
-+  setWasmTerm(wasmTerm: GhosttyTerminal): void {
-+    this.wasmTerm = wasmTerm;
-+    this.selectionStart = null;
-+    this.selectionEnd = null;
-+    this.isSelecting = false;
-+    this.requestRender();
+@@ -35,9 +35,13 @@ export interface SelectionCoordinates {
+ export class SelectionManager {
+   private terminal: Terminal;
+   private renderer: CanvasRenderer;
+-  private wasmTerm: GhosttyTerminal;
++  private initialWasmTerm: GhosttyTerminal;
+   private textarea: HTMLTextAreaElement;
+
++  private get wasmTerm(): GhosttyTerminal {
++    return this.terminal.wasmTerm ?? this.initialWasmTerm;
 +  }
 +
-   // ==========================================================================
-   // Public API
-   // ==========================================================================
+   // Selection state - coordinates are in ABSOLUTE buffer space (viewportY + viewportRow)
+   // This ensures selection persists correctly when scrolling
+   private selectionStart: { col: number; absoluteRow: number } | null = null;
+@@ -107,7 +111,7 @@ export class SelectionManager {
+   ) {
+     this.terminal = terminal;
+     this.renderer = renderer;
+-    this.wasmTerm = wasmTerm;
++    this.initialWasmTerm = wasmTerm;
+     this.textarea = textarea;
+
+     // Attach mouse event listeners
 diff --git a/lib/terminal.ts b/lib/terminal.ts
-index a62e34a12f4b04984c5b362be412036d26b1c868..3f7bac5cce756b9f9cffb2efffd41d4f00217ada 100644
+index 26058b723e4163fb728511393086121418330a67..c68084ecd32c15b3f792f10b46c4371761a14575 100644
 --- a/lib/terminal.ts
 +++ b/lib/terminal.ts
-@@ -766,6 +766,10 @@ export class Terminal implements ITerminalCore {
-     this.wasmTerm = this.ghostty!.createTerminal(this.cols, this.rows, config);
-     this.wasmTerm.setColorScheme(this.options.colorScheme);
- 
-+    // The selection manager captured the previous instance at construction time;
-+    // re-point it so selections read the live buffer (and its dimensions).
-+    this.selectionManager?.setWasmTerm(this.wasmTerm);
+@@ -472,10 +472,9 @@ export class Terminal implements ITerminalCore {
+       // Create mouse tracking configuration
+       const canvas = this.canvas;
+       const renderer = this.renderer;
+-      const wasmTerm = this.wasmTerm;
+       const mouseConfig: MouseTrackingConfig = {
+-        hasMouseTracking: () => wasmTerm?.hasMouseTracking() ?? false,
+-        hasSgrMouseMode: () => wasmTerm?.getMode(1006, false) ?? true, // SGR extended mode
++        hasMouseTracking: () => this.wasmTerm?.hasMouseTracking() ?? false,
++        hasSgrMouseMode: () => this.wasmTerm?.getMode(1006, false) ?? true, // SGR extended mode
+         getCellDimensions: () => ({
+           width: renderer.charWidth,
+           height: renderer.charHeight,
+@@ -758,6 +757,9 @@ export class Terminal implements ITerminalCore {
+   reset(): void {
+     this.assertOpen();
+
++    // Selection coordinates belong to the current buffer and must not survive replacement.
++    this.selectionManager?.clearSelection();
 +
-     // Clear renderer
-     this.renderer!.clear();
- 
+     // Free old WASM terminal and create new one
+     if (this.wasmTerm) {
+       this.wasmTerm.free();
