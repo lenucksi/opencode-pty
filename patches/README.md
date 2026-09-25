@@ -24,3 +24,13 @@ WASM instance, clears selection state before freeing the old instance, and keeps
 the existing Shift override for native text selection. The application triggers
 `reset()` whenever the raw stream is re-seeded (session switch, buffer snapshot,
 gap resync), which is why the bug was easy to hit in normal use.
+
+### Backport: resolved black backgrounds
+
+`anomalyco/ghostty-web#8` (`4a7026e`) fixes explicit RGB black cell
+backgrounds on non-black themes. The renderer used to treat every resolved
+`(0, 0, 0)` cell as transparent, even though Ghostty had already resolved the
+application's requested color. The patch paints that cell as real black while
+preserving selection and inverse-video precedence.
+
+Remove this hunk when the pin points to a commit containing the upstream fix.

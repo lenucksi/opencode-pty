@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test'
 
 import type { createApiClient } from '../../src/web/shared/api-client.ts'
 import { expect, test as extendedTest } from './fixtures'
+import { waitForTerminalRegex } from './xterm-test-helpers.ts'
 
 /**
  * The app follows `prefers-color-scheme` and can be pinned to light or dark.
@@ -141,6 +142,51 @@ extendedTest.describe('adaptive theme (system light)', () => {
       await expect.poll(async () => (await readThemeState(page)).attribute).toBe('dark')
       await expect.poll(async () => (await readThemeState(page)).termBackground).toBe('#0d1117')
       expect((await readThemeState(page)).stored).toBe('dark')
+    }
+  )
+})
+
+extendedTest.describe('resolved cell backgrounds', () => {
+  extendedTest.use({ viewport: { width: 1920, height: 1080 } })
+
+  extendedTest(
+    'paints explicit RGB black instead of the light theme background',
+    async ({ page, api }, testInfo) => {
+      const command = [
+        'import sys,time',
+        "sys.stdout.write('\\x1b[11;1H\\x1b[48;2;0;0;0m' + ' ' * 80 + '\\x1b[0m\\r\\nBLACK_BACKGROUND_READY')",
+        'sys.stdout.flush()',
+        'time.sleep(30)',
+      ].join(';')
+      await api.sessions.create({
+        command: 'python3',
+        args: ['-u', '-c', command],
+        description: 'Resolved black background',
+      })
+
+      await page.locator('.session-item:has-text("Resolved black background")').first().click()
+      await page.waitForSelector('.terminal.xterm')
+      await page.waitForFunction(() => window.xtermTerminal !== undefined)
+      await clickTheme(page, 'Light')
+      await expect.poll(async () => (await readThemeState(page)).termBackground).toBe('#ffffff')
+      await waitForTerminalRegex(page, /BLACK_BACKGROUND_READY/)
+
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const terminal = window.xtermTerminal
+            const canvas = terminal?.renderer?.getCanvas()
+            if (!terminal || !canvas) return null
+            const context = canvas.getContext('2d')
+            if (!context) return null
+            const x = Math.floor((1.5 / terminal.cols) * canvas.width)
+            const y = Math.floor((10.5 / terminal.rows) * canvas.height)
+            return Array.from(context.getImageData(x, y, 1, 1).data)
+          })
+        )
+        .toEqual([0, 0, 0, 255])
+
+      await page.screenshot({ path: testInfo.outputPath('resolved-black-background.png') })
     }
   )
 })

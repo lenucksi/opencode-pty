@@ -1,3 +1,26 @@
+diff --git a/lib/renderer.ts b/lib/renderer.ts
+index 902a5d216003425b5d885d0bd0dceb699b712d67..a04c0277560efc0f047829d86f86f6ac2e999592 100644
+--- a/lib/renderer.ts
++++ b/lib/renderer.ts
+@@ -644,7 +644,7 @@ export class CanvasRenderer {
+     this.ctx.restore();
+   }
+
+-  private getCellBackground(cell: GhosttyCell, x: number, y: number): string | undefined {
++  private getCellBackground(cell: GhosttyCell, x: number, y: number): string {
+     if (this.isInSelection(x, y)) return this.theme.selectionBackground;
+
+     let bg_r = cell.bg_r,
+@@ -658,8 +658,7 @@ export class CanvasRenderer {
+       bg_b = cell.fg_b;
+     }
+
+-    // The theme background drawn for the full line shows through for default cells.
+-    if (bg_r === 0 && bg_g === 0 && bg_b === 0) return;
++    // WASM resolves default colors already. RGB black is a real background too.
+     return this.rgbToCSS(bg_r, bg_g, bg_b);
+   }
+
 diff --git a/lib/selection-manager.ts b/lib/selection-manager.ts
 index 3d39ea4bcde5cbef25ee4d8c6353c994f0821185..e80dc4e9bc3f9ebeece26a387e03ff67975ee68e 100644
 --- a/lib/selection-manager.ts
