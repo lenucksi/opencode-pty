@@ -112,6 +112,38 @@ extendedTest.describe('terminal copy', () => {
     expect(selection).not.toContain(LATE_MARKER)
   })
 
+  extendedTest(
+    'keeps programmatic selection bound to the live terminal after a switch',
+    async ({ page, api }) => {
+      const marker = 'RESET-SELECTION-OK'
+      await api.sessions.create({
+        command: 'bash',
+        args: ['-c', `printf '${marker}\\n'; sleep 30`],
+        description: 'Selection reset source',
+      })
+      await api.sessions.create({
+        command: 'bash',
+        args: ['-c', "printf 'OTHER SESSION\\n'; sleep 30"],
+        description: 'Selection reset intermediary',
+      })
+
+      await selectSession(page, 'Selection reset source')
+      await waitForTerminalRegex(page, new RegExp(marker))
+      await selectSession(page, 'Selection reset intermediary')
+      await selectSession(page, 'Selection reset source')
+      await waitForTerminalRegex(page, new RegExp(marker))
+
+      const selected = await page.evaluate((selectionLength) => {
+        const terminal = window.xtermTerminal
+        if (!terminal) return null
+        terminal.select(0, 0, selectionLength)
+        return terminal.getSelection()
+      }, marker.length)
+
+      expect(selected).toContain(marker)
+    }
+  )
+
   extendedTest('Ctrl+Shift+C copies the terminal', async ({ page, api }) => {
     await openTranscriptSession(page, api)
 
