@@ -75,6 +75,7 @@
     "deps:check": "bun scripts/check-dependencies.ts",
     "secrets:gitleaks": "gitleaks git --no-banner --redact --log-opts='--all' .",
     "secrets:trufflehog": "trufflehog git file://$PWD --results=verified --no-update --no-color --fail",
+    "capture:demo": "bun scripts/capture-demo.ts",
     "build:plugin": "tsc -p tsconfig.build.json && bun x copyfiles -u 0 \"src/**/*.txt\" dist",
     "build:dev": "bun clean && bun build:plugin && vite build --mode development",
     "build:prod": "bun clean && bun build:plugin && vite build --mode production",
