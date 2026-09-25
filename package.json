@@ -88,19 +88,19 @@
     "ghostty-web": "github:anomalyco/ghostty-web#83c0a07b8628b748aed073b232cb4b52a6ca11c1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "typescript": "^5.9.3",
-    "vite": "^8.3.0"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^7.0.2"
   },
   "engines": {
     "opencode": ">=1.18.31"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.18.31",
-    "@opencode-ai/sdk": "^1.18.31",
-    "@opencode/plugin": "^2.0.10",
+    "@opencode-ai/plugin": "^1.18.32",
+    "@opencode-ai/sdk": "^1.18.32",
+    "@opencode/plugin": "^2.0.16",
     "bun-pty": "^0.4.10",
     "open": "^11.0.4"
   },
