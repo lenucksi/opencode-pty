@@ -378,9 +378,16 @@ bun run test:local
 
 This reinstalls the frozen dependency graph, checks Bun/dependency freshness,
 runs type/lint/format/Aislop checks, unit and coverage suites, production and
-E2E builds, and the Gitleaks/TruffleHog repository scans. Socket.dev is included
-when `SOCKET_CLI_API_TOKEN` or `SOCKET_SECURITY_API_TOKEN` is set; without a
-token, the summary records an explicit Socket SKIP.
+E2E builds, the Socket.dev policy scan, and the Gitleaks/TruffleHog repository
+scans. Authenticate Socket once with:
+
+```bash
+bunx socket@1.1.180 login
+```
+
+`test:local` then runs `socket ci` through the stored CLI login. A missing or
+invalid login fails the gate; no token environment variable or repository
+secret is required. Socket scans consume Socket API quota.
 
 ### Manual TUI resize check
 
