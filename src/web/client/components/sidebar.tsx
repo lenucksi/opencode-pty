@@ -25,6 +25,8 @@ interface SidebarProps {
   themePreference: ThemePreference
   onThemePreferenceChange: (preference: ThemePreference) => void
   onOpenSettings: () => void
+  onOpenDocs: () => void
+  docsButtonRef?: RefObject<HTMLButtonElement | null>
   settingsButtonRef: RefObject<HTMLButtonElement | null>
 }
 
@@ -238,6 +240,8 @@ export function Sidebar({
   themePreference,
   onThemePreferenceChange,
   onOpenSettings,
+  onOpenDocs,
+  docsButtonRef,
   settingsButtonRef,
 }: SidebarProps) {
   const liveSessions = sessions.filter(isLive)
@@ -251,6 +255,16 @@ export function Sidebar({
         <h1>PTY Sessions</h1>
         <div className="sidebar-header-controls">
           <ThemeSwitch preference={themePreference} onChange={onThemePreferenceChange} />
+          <button
+            type="button"
+            ref={docsButtonRef}
+            className="settings-btn"
+            onClick={onOpenDocs}
+            aria-haspopup="dialog"
+            title="Documentation (Ctrl+/)"
+          >
+            Docs
+          </button>
           <button
             type="button"
             ref={settingsButtonRef}

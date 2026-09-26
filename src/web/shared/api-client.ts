@@ -7,6 +7,7 @@ import type {
   PTYSessionInfo,
 } from 'opencode-pty/web/shared/types'
 import { routes } from './routes'
+import type { UsageDocsResponse } from './usage-docs.ts'
 
 // Extract path parameters from route pattern at compile time
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- infer _ is intentional for type pattern matching
@@ -181,6 +182,12 @@ export function createApiClient(baseUrl: string) {
 
     health: () =>
       apiFetchJson<typeof routes.health, 'GET', HealthResponse>(routes.health, {
+        method: 'GET',
+        baseUrl,
+      }),
+
+    docs: () =>
+      apiFetchJson<typeof routes.docs, 'GET', UsageDocsResponse>(routes.docs, {
         method: 'GET',
         baseUrl,
       }),
