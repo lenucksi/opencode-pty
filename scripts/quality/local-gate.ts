@@ -6,6 +6,16 @@ import { CommandFailure, runInherited } from './process.ts'
 
 export const SOCKET_SCAN_COMMAND = ['bunx', 'socket@1.1.180', 'ci'] as const
 
+/**
+ * Upper bounds for the steps that talk to the network.
+ *
+ * `socket ci` and `bun outdated` both stalled indefinitely on a bad connection,
+ * which left the gate hanging with no failure and no way forward. Test suites
+ * stay unbounded: a slow suite should be slow, not killed.
+ */
+const SOCKET_TIMEOUT_MS = 5 * 60_000
+const NETWORK_STEP_TIMEOUT_MS = 3 * 60_000
+
 interface StepResult {
   name: string
   status: 'PASS' | 'SKIP' | 'FAIL'
@@ -77,7 +87,7 @@ async function runSocketStep(recorder: StepRecorder): Promise<void> {
   const [command, ...args] = SOCKET_SCAN_COMMAND
   if (!command) throw new Error('Socket scan command is empty')
   await recorder.run('Socket.dev policy scan', async () => {
-    await runInherited(command, args, { CI: 'true' })
+    await runInherited(command, args, { env: { CI: 'true' }, timeoutMs: SOCKET_TIMEOUT_MS })
   })
 }
 
@@ -102,9 +112,13 @@ export async function runLocalQualityGate(): Promise<number> {
       requireLocalTools()
     })
     await recorder.run('Frozen dependency install', () =>
-      runInherited('bun', ['install', '--force', '--frozen-lockfile'])
+      runInherited('bun', ['install', '--force', '--frozen-lockfile'], {
+        timeoutMs: NETWORK_STEP_TIMEOUT_MS,
+      })
     )
-    await recorder.run('Dependency audit and freshness', runDependencyCheck)
+    await recorder.run('Dependency audit and freshness', () =>
+      runDependencyCheck(NETWORK_STEP_TIMEOUT_MS)
+    )
     await runSocketStep(recorder)
     await recorder.run('Typecheck', () => runInherited('bun', ['run', 'typecheck']))
     await recorder.run('Lint', () => runInherited('bun', ['run', 'lint']))

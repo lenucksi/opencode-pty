@@ -752,3 +752,200 @@ body {
   height: 16px;
   accent-color: var(--accent);
 }
+
+/* Documentation dialog: same visual language as the settings dialog, but
+   sized for reading and scrollable. */
+.docs-dialog {
+  margin: auto;
+  padding: 0;
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(85vh, 900px);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.docs-dialog::backdrop {
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.docs-dialog[open] {
+  animation: settings-dialog-in 140ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .docs-dialog[open] {
+    animation: none;
+  }
+}
+.docs-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+  min-height: 0;
+}
+.docs-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 20px 0;
+}
+.docs-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.docs-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.docs-close:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.docs-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.docs-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 16px 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+.docs-tab {
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.docs-tab:hover {
+  color: var(--fg);
+}
+.docs-tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--fg);
+}
+.docs-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.docs-body {
+  /* A flex item will not shrink below its content without min-height: 0, so
+     the long human sections would be clipped by the dialog instead of
+     scrolling inside it. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px;
+}
+.docs-loading,
+.docs-error {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 14px;
+}
+.docs-error {
+  color: var(--danger, #f85149);
+}
+.docs-section + .docs-section {
+  margin-top: 22px;
+}
+.docs-section-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.docs-paragraph {
+  margin: 0 0 8px;
+  color: var(--fg-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.docs-list {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--fg-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.docs-list li + li {
+  margin-top: 6px;
+}
+.docs-footer {
+  margin: 24px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+.docs-footer a {
+  color: var(--accent);
+}
+.docs-llm-intro {
+  margin: 0 0 12px;
+  color: var(--fg-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.docs-llm-intro code {
+  padding: 1px 5px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.docs-llm-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.docs-copy {
+  padding: 6px 12px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.docs-copy:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.docs-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.docs-pre {
+  margin: 0;
+  padding: 14px;
+  max-height: 46vh;
+  overflow: auto;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--fg);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

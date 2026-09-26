@@ -12,6 +12,7 @@ import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
 import type { ThemeScheme } from '../lib/theme.ts'
 
+import { DocsModal } from './docs-modal.tsx'
 import { DownloadMenu } from './download-menu.tsx'
 import { Sidebar } from './sidebar.tsx'
 import { SettingsModal } from './settings-modal.tsx'
@@ -124,12 +125,14 @@ export function App() {
   const [wsMessageCount, setWsMessageCount] = useState(0)
   const [sessionUpdateCount, setSessionUpdateCount] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [docsOpen, setDocsOpen] = useState(false)
 
   const { preference: themePreference, scheme, setPreference: setThemePreference } = useTheme()
   const { prefs, setTerminalFontSize, setShowDebugBar } = useUiPrefs()
 
   const appShellRef = useRef<HTMLDivElement>(null)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
+  const docsButtonRef = useRef<HTMLButtonElement>(null)
 
   const terminalRef = useRef<RawTerminal>(null)
   const [copyFeedback, setCopyFeedback] = useState('')
@@ -283,6 +286,21 @@ export function App() {
     return () => document.removeEventListener('keydown', onKeyDown, { capture: true })
   }, [])
 
+  // Ctrl+/ or Cmd+/ opens the documentation dialog. The settings dialog wins
+  // ties so a stray slash does not stack a second dialog on top of it.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== '/' || !(event.metaKey || event.ctrlKey) || settingsOpen) {
+        return
+      }
+      event.preventDefault()
+      setDocsOpen(true)
+    }
+
+    document.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => document.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [settingsOpen])
+
   // Session pushes arrive over the WebSocket; a tab that was suspended (or whose
   // socket went half-open) would otherwise keep a stale list, because the old
   // periodic poll is gone. Refresh whenever the tab becomes visible again.
@@ -426,6 +444,8 @@ export function App() {
           themePreference={themePreference}
           onThemePreferenceChange={setThemePreference}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenDocs={() => setDocsOpen(true)}
+          docsButtonRef={docsButtonRef}
           settingsButtonRef={settingsButtonRef}
         />
         <div className="main">
@@ -464,6 +484,12 @@ export function App() {
         onTerminalFontSizeChange={setTerminalFontSize}
         showDebugBar={prefs.showDebugBar}
         onShowDebugBarChange={setShowDebugBar}
+      />
+      <DocsModal
+        open={docsOpen}
+        onClose={() => setDocsOpen(false)}
+        returnFocusRef={docsButtonRef}
+        inertTarget={appShellRef}
       />
     </>
   )

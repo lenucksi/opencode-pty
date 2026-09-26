@@ -11,6 +11,10 @@ export const routes = {
     path: '/api/server',
     methods: ['GET'] as const,
   },
+  docs: {
+    path: '/api/docs',
+    methods: ['GET'] as const,
+  },
   sessions: {
     path: '/api/sessions',
     methods: ['GET', 'POST', 'DELETE'] as const,

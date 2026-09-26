@@ -1,4 +1,5 @@
 import { logPtyEvent, type PtyLogger } from '../plugin/pty/plugin-log.ts'
+import { MAX_LINE_LENGTH } from '../shared/constants.ts'
 import type { SkillDraft, SkillInfoV2 } from './types.ts'
 
 /**
@@ -62,6 +63,13 @@ initial \`status\` (\`running\`). Keep the id - every other tool needs it.
   apply to the matching lines. Default limit is 500 lines.
 - \`pty_list()\` shows every session with status, PID and line count.
 - Buffers survive process exit, so reading after a session ends is fine.
+- Every returned line is truncated at ${MAX_LINE_LENGTH} characters. A long
+  line therefore ends in a cut-off, not a full payload. Re-read a narrower
+  \`offset\`/\`limit\` window rather than assuming the text ended naturally.
+- \`pattern\` is rejected with an error when it looks like catastrophic
+  backtracking (nested repeated groups, stacked non-greedy quantifiers, long
+  alternations). If a filter is rejected, simplify it or fetch the window first
+  and filter in your own reasoning.
 
 Prefer reading **after** the session finished (or when the user asks for live
 output) over babysitting it.
@@ -129,14 +137,18 @@ not try to keep the list tidy by removing things.
 
 ## Web UI (observer)
 
-The plugin also serves a web UI (default port 4200, automatically moved to the
-next free port if taken):
+The plugin also serves a web UI for a **human** to watch the sessions.
 
+- The port is chosen by the OS (ephemeral) unless the host configured a fixed
+  one, so it does not collide with a development server. An explicitly
+  configured port is moved to the next free one when it is already taken.
 - \`/pty-open-background-spy\` opens the UI in a browser.
-- \`/pty-show-server-url\` prints the actual URL (check this if 4200 was busy).
-- The UI groups sessions into **Running** and **Finished**, shows live output,
-  and lets a **human** kill or remove sessions. Agents do not need it; it exists
-  for the user to watch and to prune finished sessions.
+- \`/pty-show-server-url\` prints the URL that is actually in use. Call it when
+  you need to tell the user where the UI lives, or to check a session whose ids
+  predate the current boot.
+- The UI groups sessions by their parent OpenCode session, separates **Running**
+  from **Finished**, streams live output, and lets the human kill or discard
+  sessions. Agents do not need it: it exists for the user to observe and prune.
 
 ## Quick reference
 

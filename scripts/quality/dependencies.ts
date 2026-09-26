@@ -51,9 +51,9 @@ export async function runBunToolchainCheck(): Promise<void> {
   console.log(`Bun ${Bun.version}; packageManager ${packageManager}`)
 }
 
-export async function runDependencyCheck(): Promise<void> {
-  await runInherited('bun', ['audit'])
-  const result = await captureCommand('bun', ['outdated'])
+export async function runDependencyCheck(timeoutMs = 0): Promise<void> {
+  await runInherited('bun', ['audit'], { timeoutMs })
+  const result = await captureCommand('bun', ['outdated'], { timeoutMs })
   const outdated = parseOutdatedDependencies(result.stdout)
   if (outdated.length > 0) {
     throw new Error(`Outdated direct dependencies:\n${outdated.join('\n')}`)

@@ -18,6 +18,7 @@ import {
 } from './handlers/sessions.ts'
 import { buildStaticRoutes, serveIndexHtml } from './handlers/static.ts'
 import { handleUpgrade } from './handlers/upgrade.ts'
+import { handleUsageDocs } from './handlers/usage-docs.ts'
 import { handleWebSocketMessage } from './handlers/websocket.ts'
 
 export interface ServerOptions {
@@ -182,6 +183,9 @@ export class PTYServer implements Disposable {
         [routes.websocket.path]: (req: Request) => handleUpgrade(this.server, req),
         [routes.health.path]: () => handleHealth(this.server),
         [routes.server.path]: () => handleServerInfo(this.server),
+        [routes.docs.path]: {
+          GET: () => handleUsageDocs(),
+        },
         [routes.parentSessions.path]: {
           GET: getParentSessions,
         },

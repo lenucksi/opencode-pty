@@ -1,1 +1,21 @@
 Reads output from a running or completed PTY session.
+
+Use it to look at what a session printed - the buffer survives process exit, so
+reading a finished session is normal, not an error.
+
+Usage:
+- `id`: The PTY session ID (from `pty_spawn` or `pty_list`)
+- `offset`: 0-based line to start from (default: 0)
+- `limit`: how many lines to return (default: 500)
+- `pattern`: regex; only matching lines are returned, then `offset`/`limit` apply to the matches
+- `ignoreCase`: make `pattern` case-insensitive (default: false)
+
+Behavior:
+- Every returned line is truncated at 2000 characters, so a long line ends in a
+  cut-off rather than a full payload.
+- A `pattern` that looks like catastrophic backtracking (nested repeated groups,
+  stacked non-greedy quantifiers, long alternations) is rejected with an error.
+  Simplify it, or fetch the window first and filter yourself.
+
+To wait for a process to finish instead of polling, use `pty_wait`. See the
+`pty-usage` skill for the full guide.

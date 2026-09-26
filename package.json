@@ -109,7 +109,7 @@
   "dependencies": {
     "@opencode-ai/plugin": "^1.18.32",
     "@opencode-ai/sdk": "^1.18.32",
-    "@opencode/plugin": "^2.0.16",
+    "@opencode/plugin": "^2.0.18",
     "bun-pty": "^0.4.10",
     "open": "^11.0.4"
   },
