@@ -5,7 +5,58 @@ import { ptyList } from '../src/plugin/pty/tools/list.ts'
 import { ptyWait } from '../src/plugin/pty/tools/wait.ts'
 import { RingBuffer } from '../src/plugin/pty/buffer.ts'
 import { manager, sessionUpdateCallbacks } from '../src/plugin/pty/manager.ts'
+import type { BoundedReadResult, BoundedSearchResult } from '../src/plugin/pty/output-manager.ts'
+import type { SearchMatch } from '../src/plugin/pty/buffer.ts'
 import type { PTYSessionInfo } from '../src/plugin/pty/types.ts'
+
+/**
+ * A `manager.read` result for a buffer of whole lines.
+ *
+ * The accounting fields are not optional decoration: `pty_read` decides whether
+ * to claim "end of buffer" from them, so a mock that omitted them would have let
+ * a regression in that decision pass.
+ */
+function boundedRead(
+  lines: string[],
+  overrides: Partial<BoundedReadResult> = {}
+): BoundedReadResult {
+  const shownChars = lines.reduce((sum, line) => sum + line.length, 0)
+  return {
+    lines,
+    slices: lines.map((text) => ({
+      text,
+      shownChars: text.length,
+      totalChars: text.length,
+      truncated: false,
+    })),
+    totalLines: lines.length,
+    offset: 0,
+    hasMore: false,
+    shownChars,
+    bufferChars: shownChars,
+    truncatedLines: 0,
+    nextSince: null,
+    since: 0,
+    ...overrides,
+  }
+}
+
+/** A `manager.search` result for a set of whole matching lines. */
+function boundedSearch(
+  matches: SearchMatch[],
+  overrides: Partial<BoundedSearchResult> = {}
+): BoundedSearchResult {
+  return {
+    matches,
+    totalMatches: matches.length,
+    totalLines: matches.length,
+    hasMore: false,
+    offset: 0,
+    shownChars: matches.reduce((sum, match) => sum + match.text.length, 0),
+    truncatedLines: 0,
+    ...overrides,
+  }
+}
 
 const readCtx = {
   sessionID: 'parent',
@@ -37,6 +88,7 @@ describe('PTY Tools', () => {
         timedOut: false,
         createdAt: new Date().toISOString(),
         lineCount: 0,
+        charCount: 0,
       }))
     })
 
@@ -179,20 +231,12 @@ describe('PTY Tools', () => {
         pid: 12345,
         createdAt: new Date().toISOString(),
         lineCount: 2,
+        charCount: 80,
       })
-      spyOn(manager, 'read').mockReturnValue({
-        lines: ['line 1', 'line 2'],
-        offset: 0,
-        hasMore: false,
-        totalLines: 2,
-      })
-      spyOn(manager, 'search').mockReturnValue({
-        matches: [{ lineNumber: 1, text: 'line 1' }],
-        totalMatches: 1,
-        totalLines: 2,
-        hasMore: false,
-        offset: 0,
-      })
+      spyOn(manager, 'read').mockReturnValue(boundedRead(['line 1', 'line 2']))
+      spyOn(manager, 'search').mockReturnValue(
+        boundedSearch([{ lineNumber: 1, text: 'line 1' }], { totalLines: 2 })
+      )
     })
 
     it('should read output without pattern', async () => {
@@ -211,11 +255,11 @@ describe('PTY Tools', () => {
       const result = await ptyRead.execute(args, ctx)
 
       expect(manager.get).toHaveBeenCalledWith('test-session-id')
-      expect(manager.read).toHaveBeenCalledWith('test-session-id', 0, 500)
-      expect(result).toContain('<pty_output id="test-session-id" status="running">')
+      expect(manager.read).toHaveBeenCalledWith('test-session-id', 0, 500, 100000)
+      expect(result).toContain('<pty_output id="test-session-id" status="running" chars="12/12">')
       expect(result).toContain('00001| line 1')
       expect(result).toContain('00002| line 2')
-      expect(result).toContain('(End of buffer - total 2 lines)')
+      expect(result).toContain('(End of buffer - 2 lines, 12 chars)')
       expect(result).toContain('</pty_output>')
     })
 
@@ -234,6 +278,7 @@ describe('PTY Tools', () => {
         pid: 12345,
         createdAt: new Date().toISOString(),
         lineCount: 2,
+        charCount: 80,
       })
 
       const args = { id: 'test-session-id' }
@@ -276,7 +321,7 @@ describe('PTY Tools', () => {
 
       const result = await ptyRead.execute(args, ctx)
 
-      expect(manager.search).toHaveBeenCalledWith('test-session-id', /line/, 0, 500)
+      expect(manager.search).toHaveBeenCalledWith('test-session-id', /line/, 0, 500, 100000)
       expect(result).toContain('<pty_output id="test-session-id" status="running" pattern="line">')
       expect(result).toContain('00001| line 1')
       expect(result).toContain('(1 match from 2 total lines)')
@@ -319,13 +364,7 @@ describe('PTY Tools', () => {
     })
 
     it('reports when no lines match the pattern', async () => {
-      spyOn(manager, 'search').mockReturnValue({
-        matches: [],
-        totalMatches: 0,
-        totalLines: 2,
-        hasMore: false,
-        offset: 0,
-      })
+      spyOn(manager, 'search').mockReturnValue(boundedSearch([], { totalLines: 2 }))
 
       const result = await ptyRead.execute({ id: 'test-session-id', pattern: 'zzz' }, readCtx)
 
@@ -341,13 +380,7 @@ describe('PTY Tools', () => {
         pattern: RegExp
       ): ReturnType<typeof manager.search> => {
         captured = pattern
-        return {
-          matches: [{ lineNumber: 1, text: 'LINE 1' }],
-          totalMatches: 1,
-          totalLines: 2,
-          hasMore: false,
-          offset: 0,
-        }
+        return boundedSearch([{ lineNumber: 1, text: 'LINE 1' }], { totalLines: 2 })
       }) as typeof manager.search)
 
       await ptyRead.execute({ id: 'test-session-id', pattern: 'line', ignoreCase: true }, readCtx)
@@ -356,25 +389,18 @@ describe('PTY Tools', () => {
     })
 
     it('paginates plain reads when more lines are available', async () => {
-      spyOn(manager, 'read').mockReturnValue({
-        lines: ['line 1'],
-        offset: 0,
-        hasMore: true,
-        totalLines: 10,
-      })
+      spyOn(manager, 'read').mockReturnValue(
+        boundedRead(['line 1'], { hasMore: true, totalLines: 10, nextSince: 6 })
+      )
 
       const result = await ptyRead.execute({ id: 'test-session-id' }, readCtx)
 
-      expect(result).toContain('Buffer has more lines. Use offset=1 to read beyond line 1')
+      expect(result).toContain('Buffer has more. Use offset=1 to read beyond line 1')
+      expect(result).toContain('since=6 to continue exactly where this result stopped')
     })
 
     it('reports an empty buffer', async () => {
-      spyOn(manager, 'read').mockReturnValue({
-        lines: [],
-        offset: 0,
-        hasMore: false,
-        totalLines: 0,
-      })
+      spyOn(manager, 'read').mockReturnValue(boundedRead([]))
 
       const result = await ptyRead.execute({ id: 'test-session-id' }, readCtx)
 
@@ -396,6 +422,7 @@ describe('PTY Tools', () => {
         pid: 12345,
         createdAt: new Date().toISOString(),
         lineCount: 2,
+        charCount: 80,
       })
 
       const result = await ptyRead.execute({ id: 'test-session-id' }, readCtx)
@@ -434,6 +461,7 @@ describe('PTY Tools', () => {
           timedOut: false,
           pid: 12345,
           lineCount: 10,
+          charCount: 400,
           workdir: '/tmp',
           createdAt: new Date('2023-01-01T00:00:00Z').toISOString(),
         },
@@ -506,6 +534,7 @@ describe('PTY Tools', () => {
         pid: 12345,
         createdAt: new Date().toISOString(),
         lineCount: 2,
+        charCount: 80,
         ...overrides,
       } as PTYSessionInfo
     }
@@ -527,16 +556,11 @@ describe('PTY Tools', () => {
 
     it('returns a complete <pty_waited> block for an exited session', async () => {
       spyOn(manager, 'get').mockReturnValue(makeSession())
-      spyOn(manager, 'read').mockReturnValue({
-        lines: ['build succeeded', 'server started'],
-        offset: 0,
-        hasMore: false,
-        totalLines: 2,
-      })
+      spyOn(manager, 'read').mockReturnValue(boundedRead(['build succeeded', 'server started']))
 
       const result = await ptyWait.execute({ id: 'test-session-id' }, ctx)
 
-      expect(result).toContain('<pty_waited>')
+      expect(result).toContain('<pty_waited id="test-session-id"')
       expect(result).toContain('ID: test-session-id')
       expect(result).toContain('Title: Test Session')
       expect(result).toContain('Command: echo hello')
@@ -549,16 +573,13 @@ describe('PTY Tools', () => {
 
     it('includes a tail of the last 20 buffer lines', async () => {
       spyOn(manager, 'get').mockReturnValue(makeSession({ lineCount: 25 }))
-      spyOn(manager, 'read').mockReturnValue({
-        lines: ['line 6', 'line 7', 'line 8'],
-        offset: 5,
-        hasMore: false,
-        totalLines: 25,
-      })
+      spyOn(manager, 'read').mockReturnValue(
+        boundedRead(['line 6', 'line 7', 'line 8'], { offset: 5, totalLines: 25, since: 30 })
+      )
 
       const result = await ptyWait.execute({ id: 'test-session-id' }, ctx)
 
-      expect(manager.read).toHaveBeenCalledWith('test-session-id', 5, 20)
+      expect(manager.read).toHaveBeenCalledWith('test-session-id', 5, 20, 100000)
       expect(result).toContain('00006| line 6')
       expect(result).toContain('00007| line 7')
       expect(sessionUpdateCallbacks).toHaveLength(0)
@@ -566,12 +587,7 @@ describe('PTY Tools', () => {
 
     it('waits for a running session until it exits', async () => {
       spyOn(manager, 'get').mockReturnValue(makeSession({ status: 'running', exitCode: undefined }))
-      spyOn(manager, 'read').mockReturnValue({
-        lines: [],
-        offset: 0,
-        hasMore: false,
-        totalLines: 0,
-      })
+      spyOn(manager, 'read').mockReturnValue(boundedRead([]))
 
       const pending = ptyWait.execute({ id: 'test-session-id' }, ctx)
       expect(sessionUpdateCallbacks).toHaveLength(1)
@@ -605,12 +621,7 @@ describe('PTY Tools', () => {
       spyOn(manager, 'get').mockReturnValue(
         makeSession({ exitCode: undefined, exitSignal: 15, lineCount: 0 })
       )
-      spyOn(manager, 'read').mockReturnValue({
-        lines: [],
-        offset: 0,
-        hasMore: false,
-        totalLines: 0,
-      })
+      spyOn(manager, 'read').mockReturnValue(boundedRead([]))
 
       const result = await ptyWait.execute({ id: 'test-session-id' }, ctx)
 

@@ -50,6 +50,14 @@ export interface PTYSessionInfo {
   endedAt?: string
   lineCount: number
   /**
+   * Characters currently retained in the buffer.
+   *
+   * A line count alone is misleading: a full-screen TUI repaints as a single
+   * line of escape sequences, so an 85 kB screen reports `lineCount: 1`. This is
+   * what makes such a stream diagnosable from `pty_list` alone.
+   */
+  charCount: number
+  /**
    * Session read back from the on-disk store after its process (and the plugin
    * that owned it) is gone. `lost` marks one that was still running when the
    * previous instance stopped.

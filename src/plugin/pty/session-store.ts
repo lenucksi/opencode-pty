@@ -11,9 +11,11 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import type { BoundedReadResult, BoundedSearchResult } from './output-manager.ts'
 import { logPtyEvent } from './plugin-log.ts'
+import { applyLineBudget } from './read-budget.ts'
 import { sessionsRoot } from './state-paths.ts'
-import type { PTYSessionInfo, ReadResult, SearchResult } from './types.ts'
+import type { PTYSessionInfo } from './types.ts'
 
 /** Everything worth keeping about a session, including who asked for it. */
 export interface PersistSessionInput extends PTYSessionInfo {
@@ -22,7 +24,12 @@ export interface PersistSessionInput extends PTYSessionInfo {
 }
 
 /** A session that only exists on disk now. */
-export interface PersistedSession extends PersistSessionInput {
+export interface PersistedSession extends Omit<PersistSessionInput, 'charCount'> {
+  /**
+   * Absent in archives written before char counts were recorded. Those rows fall
+   * back to `bytes`, see `mergePersistedSessions`.
+   */
+  charCount?: number
   archived: true
   generation: string
   endedAt?: string
@@ -252,7 +259,14 @@ export class SessionStore {
     return this.index.find((entry) => entry.id === id) ?? null
   }
 
-  read(id: string, offset = 0, limit?: number): ReadResult | null {
+  /**
+   * Archived sessions go through the same budget as live ones.
+   *
+   * The archived path used to slice by lines only, so a cut line in a stored
+   * transcript reported "end of buffer" exactly like the live path did. Sharing
+   * `applyLineBudget` keeps the two from drifting apart again.
+   */
+  read(id: string, offset = 0, limit?: number, budget?: number): BoundedReadResult | null {
     const lines = this.lines(id)
     if (lines === null) return null
 
@@ -260,15 +274,48 @@ export class SessionStore {
     const slice =
       limit === undefined ? lines.slice(start) : lines.slice(start, start + Math.max(0, limit))
 
+    // Archived transcripts always start at absolute offset 0, so a line's
+    // absolute offset is the sum of the lines before it.
+    const lineStarts: number[] = []
+    let running = 0
+    for (const [index, line] of lines.entries()) {
+      lineStarts[index] = running
+      running += line.length + 1
+    }
+
+    const budgeted = applyLineBudget(slice, budget, (index) => {
+      const lineStart = lineStarts[start + index]
+      return lineStart ?? null
+    })
+    const delivered = start + budgeted.lines.length
+    const moreLinesExist = delivered < lines.length
+    const hasMore = budgeted.cutIndex !== null || moreLinesExist
+    const since = lineStarts[start] ?? 0
+    // Same reasoning as the live path: the numerator has to be stream
+    // characters, matching the `bufferChars` denominator.
+    const endOffset = budgeted.nextSince ?? lineStarts[delivered] ?? running
+
     return {
-      lines: slice,
+      lines: budgeted.lines,
+      slices: budgeted.slices,
       totalLines: lines.length,
       offset: start,
-      hasMore: start + slice.length < lines.length,
+      hasMore,
+      shownChars: Math.max(0, endOffset - since),
+      bufferChars: running,
+      truncatedLines: budgeted.truncatedLines,
+      nextSince: hasMore ? endOffset : null,
+      since,
     }
   }
 
-  search(id: string, pattern: RegExp, offset = 0, limit?: number): SearchResult | null {
+  search(
+    id: string,
+    pattern: RegExp,
+    offset = 0,
+    limit?: number,
+    budget?: number
+  ): BoundedSearchResult | null {
     const lines = this.lines(id)
     if (lines === null) return null
 
@@ -277,17 +324,29 @@ export class SessionStore {
       .filter((match) => pattern.test(match.text))
 
     const start = Math.max(0, Math.floor(offset))
-    const matches =
+    const limited =
       limit === undefined
         ? allMatches.slice(start)
         : allMatches.slice(start, start + Math.max(0, limit))
+
+    const budgeted = applyLineBudget(
+      limited.map((match) => match.text),
+      budget,
+      () => null
+    )
+    const matches = limited.slice(0, budgeted.lines.length).map((match, index) => ({
+      lineNumber: match.lineNumber,
+      text: budgeted.lines[index] ?? '',
+    }))
 
     return {
       matches,
       totalMatches: allMatches.length,
       totalLines: lines.length,
       offset: start,
-      hasMore: start + matches.length < allMatches.length,
+      hasMore: budgeted.truncatedLines === 1 || start + matches.length < allMatches.length,
+      shownChars: budgeted.consumedChars,
+      truncatedLines: budgeted.truncatedLines,
     }
   }
 
@@ -515,6 +574,11 @@ export function mergePersistedSessions(
       ...(entry.parentAgent === undefined ? {} : { parentAgent: entry.parentAgent }),
       ...(entry.endedAt === undefined ? {} : { endedAt: entry.endedAt }),
       lineCount: entry.lineCount,
+      // Archives written before char counts existed carry UTF-8 `bytes` only.
+      // UTF-8 never encodes a character in fewer than one byte, so that is an
+      // upper bound rather than a wrong small number: the listing can over-state
+      // the size of an old archive but never under-state it.
+      charCount: entry.charCount ?? entry.bytes,
       archived: true,
       ...(entry.lost ? { lost: true } : {}),
     }))

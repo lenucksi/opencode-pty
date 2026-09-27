@@ -265,6 +265,7 @@ export class SessionLifecycleManager {
       parentSessionId: session.parentSessionId,
       parentAgent: session.parentAgent,
       lineCount: session.buffer.length,
+      charCount: session.buffer.charLength,
     }
   }
 }

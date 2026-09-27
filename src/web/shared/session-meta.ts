@@ -75,7 +75,13 @@ export function sessionTooltip(session: PTYSessionInfo): string {
         session.parentAgent ? ` (${session.parentAgent})` : ''
       }`
     : ''
-  return [session.id, parent, sessionCommandLine(session), `workdir: ${session.workdir}`]
+  return [
+    session.id,
+    parent,
+    sessionCommandLine(session),
+    `${session.lineCount} lines · ${formatBytes(session.charCount)}`,
+    `workdir: ${session.workdir}`,
+  ]
     .filter((line) => line.trim() !== '')
     .join('\n')
 }
@@ -86,10 +92,23 @@ export function sessionDetailLine(session: PTYSessionInfo): string {
     `PID ${session.pid}`,
     sessionTiming(session),
     sessionCommandLine(session),
+    // Both counts, because they disagree in exactly the case that matters: a TUI
+    // that repaints its screen as escape sequences is one line and tens of
+    // thousands of characters. A line count alone makes that look like an idle
+    // session.
     `${session.lineCount} lines`,
+    `${formatBytes(session.charCount)}`,
   ]
     .filter((part) => part !== '')
     .join(' · ')
+}
+
+/** Human-readable size, using the same units the download dialog reports. */
+export function formatBytes(chars: number): string {
+  if (!Number.isFinite(chars) || chars < 0) return '0 B'
+  if (chars < 1024) return `${chars} chars`
+  if (chars < 1024 * 1024) return `${(chars / 1024).toFixed(1)} kB`
+  return `${(chars / (1024 * 1024)).toFixed(1)} MB`
 }
 
 /**

@@ -90,10 +90,47 @@ opencode
 | ----------- | --------------------------------------------------------------------------- |
 | `pty_spawn` | Create a new PTY session (command, args, workdir, env, title, notifyOnExit, timeoutSeconds) |
 | `pty_write` | Send input to a PTY (text, escape sequences like `\x03` for Ctrl+C)         |
-| `pty_read`  | Read output buffer with pagination and optional regex filtering             |
-| `pty_list`  | List all PTY sessions with status, PID, line count                          |
+| `pty_read`  | Read output buffer with a token budget, character-cursor paging and optional regex filtering |
+| `pty_list`  | List all PTY sessions with status, PID, line count and character count      |
 | `pty_kill`  | Terminate a PTY, optionally cleanup the buffer                              |
 | `pty_wait`  | Block until a PTY session exits, optionally with a timeout                  |
+
+### Reading output without losing data
+
+`pty_read` caps a single result rather than each line. Every line used to be cut
+at 2000 characters with a bare `...`, which was indistinguishable from a line
+that really ended there, and bounded nothing: 500 lines x 2000 characters is the
+entire 1 MB buffer. Measured against 225 live sessions, that clamp silently
+withheld 35 % of all output.
+
+Now the budget applies to the whole result. Lines come back whole until the
+budget runs out, at most one line is cut, and the result says so:
+
+```
+<pty_output id="pty_x" status="running" truncated="true" truncatedLines="1"
+            nextSince="100000" chars="100000/248225">
+```
+
+| Field         | Meaning                                                        |
+| ------------- | -------------------------------------------------------------- |
+| `truncated`   | A line was cut. Never read this as the end of the data.         |
+| `chars`       | Characters delivered of characters retained in the buffer.       |
+| `nextSince`   | Exact character offset this result stopped at.                  |
+
+Follow `nextSince` to get the rest without losing or repeating a character:
+
+```
+pty_read({ id, since: 100000 })
+```
+
+Re-assembling the chunks reproduces the output exactly, including the tail of a
+line an earlier call cut. `offset`/`limit` remain useful for line-oriented output
+such as build logs, but they cannot resume inside a cut line. `all: true` removes
+the budget entirely; it is unbounded and can overflow your context.
+
+`pty_list` reports a character count next to the line count because the two tell
+different stories: a TUI repainting its screen as escape sequences is one line and
+tens of thousands of characters, which is invisible to a line count alone.
 
 ## Slash Commands
 
@@ -294,11 +331,13 @@ Use when the agent cannot go idle—for example when a `/goal` plugin auto-resum
 
 ### Environment Variables
 
-| Variable               | Default    | Description                                        |
-| ---------------------- | ---------- | -------------------------------------------------- |
-| `PTY_MAX_BUFFER_LINES` | `50000`    | Maximum lines to keep in output buffer per session |
-| `PTY_WEB_HOSTNAME`     | `::1`      | Hostname for the web server to bind to (IPv6 loopback by default) |
-| `PTY_WEB_PORT`         | `0` (random) | Port for the web server (0 = random port)        |
+| Variable                        | Default    | Description                                        |
+| ------------------------------- | ---------- | -------------------------------------------------- |
+| `PTY_MAX_BUFFER_LINES`          | `50000`    | Maximum lines to keep in output buffer per session |
+| `PTY_READ_MAX_TOKENS`           | `25000`    | Default `pty_read` result budget, in tokens (~100 kB) |
+| `PTY_READ_MAX_TOKENS_CEILING`   | `125000`   | Hard ceiling on a caller's `maxTokens` request (~500 kB) |
+| `PTY_WEB_HOSTNAME`              | `::1`      | Hostname for the web server to bind to (IPv6 loopback by default) |
+| `PTY_WEB_PORT`                  | `0` (random) | Port for the web server (0 = random port)        |
 
 ### Permissions
 

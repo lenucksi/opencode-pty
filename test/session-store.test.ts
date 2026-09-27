@@ -49,6 +49,7 @@ function sessionInfo(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
     pid: 1234,
     createdAt: '2026-09-20T17:00:00.000Z',
     lineCount: 0,
+    charCount: 0,
     ...overrides,
   }
 }
@@ -204,6 +205,7 @@ describe('mergePersistedSessions', () => {
       id: 'pty_archived',
       status: 'exited',
       lineCount: 3,
+      charCount: 1600,
       parentSessionId: 'ses_parent',
       parentAgent: 'build',
     }),

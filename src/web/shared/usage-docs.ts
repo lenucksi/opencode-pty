@@ -1,4 +1,4 @@
-import { MAX_LINE_LENGTH } from '../../shared/constants.ts'
+import { CHARS_PER_TOKEN, DEFAULT_READ_MAX_TOKENS } from '../../shared/constants.ts'
 
 /** Canonical documentation for the humans who read the Web UI. */
 export interface UsageDocSection {
@@ -92,7 +92,8 @@ export const HUMAN_USAGE_DOCS: readonly UsageDocSection[] = [
     id: 'limits',
     title: 'Good to know',
     list: [
-      `A single output line is truncated at ${MAX_LINE_LENGTH} characters in the download and in the agent's view.`,
+      `The agent's view of a session is capped at ${DEFAULT_READ_MAX_TOKENS} tokens (about ${DEFAULT_READ_MAX_TOKENS * CHARS_PER_TOKEN} characters) per read. When that cap bites, the result is labelled \`truncated\` and the agent is told how much was withheld and given a \`nextSince\` cursor to page through it, rather than being handed a silently cut line.`,
+      "The download and the terminal pane show the full buffer; the cap applies to the agent's reads only.",
       'The Web UI binds an operating-system-assigned port unless a fixed one was configured, so it never blocks your dev server.',
       'The connection indicator in the sidebar shows whether live updates are flowing.',
     ],

@@ -31,6 +31,7 @@ function sessionInfo(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
     pid: 1234,
     createdAt: '2026-09-20T17:00:00.000Z',
     lineCount: 0,
+    charCount: 0,
     ...overrides,
   }
 }
@@ -47,6 +48,7 @@ describe('buildRestartNotice', () => {
         title: 'ansible 45-stalwart-guest',
         status: 'exited (lost)',
         lineCount: 141,
+        charCount: 4800,
         tail: 'PLAY RECAP\nok=38 changed=13 failed=0',
       },
     ],

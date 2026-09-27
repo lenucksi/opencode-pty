@@ -186,6 +186,31 @@ export class RingBuffer {
     return lines.slice(start, end)
   }
 
+  /**
+   * Absolute character offset at which the given line index starts.
+   *
+   * Lets a caller that showed part of a line resume exactly where it stopped
+   * instead of re-deriving a line offset it cannot use on a truncated line.
+   * Returns `null` when the index is out of range.
+   */
+  lineStartOffset(lineIndex: number): number | null {
+    if (lineIndex <= 0) return this.startOffset
+    const lines = this.splitBufferLines()
+    if (lineIndex >= lines.length) return null
+    let offset = this.startOffset
+    for (let i = 0; i < lineIndex; i++) {
+      const line = lines[i]
+      if (line === undefined) return null
+      offset += line.length + 1 // + the newline that separated it
+    }
+    return offset
+  }
+
+  /** Absolute character offset one past the last retained character. */
+  endCharOffset(): number {
+    return this.endOffset
+  }
+
   readRaw(): string {
     return this.buffer
   }
@@ -218,6 +243,17 @@ export class RingBuffer {
     // `newlineCount` newlines delimit that many lines; a trailing partial line
     // (buffer not ending in newline) adds one more.
     return this.newlineCount + (this.buffer.endsWith('\n') ? 0 : 1)
+  }
+
+  /**
+   * Characters currently retained.
+   *
+   * Distinct from `length`, which counts lines. A TUI that repaints a full
+   * screen as one line of escape sequences is `length: 1` and tens of thousands
+   * of characters, so the two must not be conflated.
+   */
+  get charLength(): number {
+    return this.buffer.length
   }
 
   /** Absolute offset of the first retained character. */

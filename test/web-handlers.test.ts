@@ -62,6 +62,7 @@ describe('session handlers', () => {
     pid: 1,
     createdAt: new Date().toISOString(),
     lineCount: 0,
+    charCount: 0,
   }
 
   it('lists sessions', async () => {
