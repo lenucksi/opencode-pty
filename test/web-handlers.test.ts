@@ -6,7 +6,7 @@ import { setPermissionAuthorizer } from '../src/plugin/pty/permissions.ts'
 import { handleHealth } from '../src/web/server/handlers/health.ts'
 import { handleServerInfo } from '../src/web/server/handlers/server-info.ts'
 import { describeBuild } from '../src/shared/build-info.ts'
-import { BUILD_INFO } from '../src/plugin/pty/build-info.ts'
+import { currentBuildInfo, resetBuildInfoCache } from '../src/plugin/pty/read-build-info.ts'
 import {
   cleanupSession,
   clearSessions,
@@ -373,14 +373,19 @@ describe('handleServerInfo', () => {
   it('reports which build is running, not which one the bundle was built from', async () => {
     // The client's bundle can be older than the server it is talking to. Serving
     // the server's own build identity is the only answer that stays true.
-    const payload = (await handleServerInfo(fakeServer).json()) as { build: typeof BUILD_INFO }
+    resetBuildInfoCache()
+    const payload = (await handleServerInfo(fakeServer).json()) as {
+      build: ReturnType<typeof currentBuildInfo>
+    }
 
-    expect(payload.build).toEqual(BUILD_INFO)
+    expect(payload.build).toEqual(currentBuildInfo())
     expect(describeBuild(payload.build)).toContain(payload.build.version)
   })
 
   it('reports a commit or admits it has none', async () => {
-    const payload = (await handleServerInfo(fakeServer).json()) as { build: typeof BUILD_INFO }
+    const payload = (await handleServerInfo(fakeServer).json()) as {
+      build: ReturnType<typeof currentBuildInfo>
+    }
 
     if (payload.build.commit === null) {
       // Never a fabricated hash: a placeholder sends someone looking for a commit

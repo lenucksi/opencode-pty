@@ -78,7 +78,7 @@
     "capture:demo": "bun scripts/capture-demo.ts",
     "build:plugin": "tsc -p tsconfig.build.json && bun x copyfiles -u 0 \"src/**/*.txt\" dist",
     "build:dev": "bun clean && bun build:plugin && vite build --mode development",
-    "build:prod": "bun clean && bun run build:version && bun build:plugin && vite build --mode production",
+    "build:prod": "bun clean && bun build:plugin && bun run build:version && vite build --mode production",
     "prepack": "bun build:prod",
     "clean": "rm -rf dist playwright-report test-results",
     "lint": "biome lint .",
