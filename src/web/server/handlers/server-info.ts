@@ -1,4 +1,4 @@
-import { BUILD_INFO } from '../../../plugin/pty/build-info.ts'
+import { currentBuildInfo } from '../../../plugin/pty/read-build-info.ts'
 import { manager } from '../../../plugin/pty/manager.ts'
 import { JsonResponse } from './responses.ts'
 
@@ -19,7 +19,7 @@ export function handleServerInfo(server: Bun.Server<undefined>) {
   const description = manager.describeServer()
 
   return new JsonResponse({
-    build: BUILD_INFO,
+    build: currentBuildInfo(),
     generation: description.generation,
     uiUrl: `${server.url.origin}/`,
     port: Number(server.url.port),

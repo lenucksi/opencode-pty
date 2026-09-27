@@ -1,32 +1,32 @@
 import { describe, expect, it } from 'bun:test'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 
 import { describeBuild, UNKNOWN_BUILD } from '../src/shared/build-info.ts'
 import {
+  BUILD_INFO_PATH,
   createGitProbe,
-  PLACEHOLDER,
   readBuildInfo,
   renderBuildInfo,
   writeBuildInfo,
 } from '../scripts/version.ts'
+import {
+  findBuildInfo,
+  findPackageVersion,
+  parseBuildInfo,
+} from '../src/plugin/pty/read-build-info.ts'
 
 /**
- * The build identity is baked in rather than read at runtime, because the runtime
- * copy is an installed package with no `.git`. That makes the generator the only
- * place the value can be wrong, and it can be wrong quietly: a hash of `null`
- * renders, ships, and reports nothing.
+ * The build identity is stamped into `dist/` at build time rather than read from
+ * Git at runtime, because the runtime copy is an installed package with no
+ * `.git`. That makes the generator and the reader the only two places the value
+ * can be wrong, and it can be wrong quietly: a hash of `null` renders, ships, and
+ * reports nothing.
  */
 
 const tempRoots: string[] = []
-
-function tempFile(): string {
-  const root = mkdtempSync(join(tmpdir(), 'pty-version-'))
-  tempRoots.push(root)
-  return join(root, 'build-info.ts')
-}
 
 describe('describeBuild', () => {
   it('puts the version first and the commit in parentheses', () => {
@@ -83,7 +83,7 @@ describe('readBuildInfo', () => {
     expect(info.commit).toBeNull()
     expect(info.dirty).toBe(false)
     // The version still comes through: package.json is there even without git.
-    expect(info.version).not.toBe(PLACEHOLDER.version)
+    expect(info.version).not.toBe(UNKNOWN_BUILD.version)
   })
 
   it('does not claim to be dirty when there are no local changes', () => {
@@ -168,7 +168,7 @@ describe('the real git probe', () => {
     // build dirty - the kind of wrong that is invisible until someone trusts it.
     const info = readBuildInfo()
 
-    expect(info.version).not.toBe(PLACEHOLDER.version)
+    expect(info.version).not.toBe(UNKNOWN_BUILD.version)
     expect(info.commit).toMatch(/^[0-9a-f]{7,}(-dirty)?$/)
     // This worktree has uncommitted changes, so the label has to say so.
     expect(info.dirty).toBe(true)
@@ -176,73 +176,148 @@ describe('the real git probe', () => {
   })
 })
 
-describe('the generated module', () => {
-  it('imports the shared type rather than restating it', () => {
-    const source = renderBuildInfo({ version: '1.2.3', commit: 'abc1234', dirty: false })
-
-    expect(source).toContain("import type { BuildInfo } from '../../shared/build-info.ts'")
-    expect(source).toContain('export const BUILD_INFO: BuildInfo')
+describe('the stamp', () => {
+  it('is JSON the runtime can parse straight back', () => {
+    // The stamp is the wire format now, so the round trip is the contract.
+    const info = { version: '2.0.0', commit: 'deadbee', dirty: true }
+    expect(parseBuildInfo(renderBuildInfo(info))).toEqual(info)
   })
 
-  it('says it is generated, so nobody hand-edits it', () => {
-    const source = renderBuildInfo(PLACEHOLDER)
-
-    expect(source).toContain('do not edit by hand')
-    expect(source).toContain('scripts/version.ts')
+  it('round-trips a stamp with no commit', () => {
+    const info = { version: '2.0.0', commit: null, dirty: false }
+    expect(parseBuildInfo(renderBuildInfo(info))).toEqual(info)
   })
 
-  it('emits a null commit rather than a placeholder hash', () => {
-    expect(renderBuildInfo(PLACEHOLDER)).toContain('commit: null,')
+  it('round-trips a stamp with a version containing a quote', () => {
+    // JSON escaping is not the place for cleverness, and the version is read from
+    // a manifest a human edited.
+    const info = { version: "it's 1.0", commit: null, dirty: false }
+    expect(parseBuildInfo(renderBuildInfo(info))).toEqual(info)
   })
 
-  it('emits single quotes and a trailing comma, so the format check passes', () => {
-    // Raw JSON.stringify output made every build produce a file the gate then
-    // rejected for formatting. The generated file has to be formatter-clean.
-    const source = renderBuildInfo({ version: '1.2.3', commit: 'abc1234', dirty: false })
-
-    expect(source).toContain("version: '1.2.3',")
-    expect(source).toContain("commit: 'abc1234',")
-    expect(source).toContain('dirty: false,')
-    expect(source).not.toContain('"version"')
+  it('ends with a newline, so the file is well-formed', () => {
+    expect(renderBuildInfo(UNKNOWN_BUILD).endsWith('\n')).toBe(true)
   })
 
-  it('falls back to JSON quoting for a value a single-quoted string cannot hold', () => {
-    // JSON escaping is not JS single-quote escaping, so a value containing a
-    // quote or a newline must not be wrapped naively.
-    const source = renderBuildInfo({
-      version: "it's odd",
-      commit: 'two' + '\n' + 'lines',
-      dirty: false,
-    })
-
-    expect(source).toContain(JSON.stringify("it's odd"))
-    expect(source).toContain(JSON.stringify('two' + '\n' + 'lines'))
+  it('writes under dist/, where generated output belongs', () => {
+    // The point of the placement: a stamp in the source tree changes on every
+    // build, which leaves the tree dirty and blocks every branch switch. That
+    // cost a merge before it was noticed, so it is pinned here rather than left
+    // to a code review.
+    expect(BUILD_INFO_PATH.endsWith(join('dist', 'build-info.json'))).toBe(true)
+    expect(BUILD_INFO_PATH).not.toContain(`${join('src', '')}`)
   })
 
-  it('emits a null commit as a bare null, not as a quoted string', () => {
-    // The difference between "no commit" and a commit called "null", and a reader
-    // cannot tell them apart in the rendered output.
-    expect(renderBuildInfo(PLACEHOLDER)).toContain('commit: null,')
+  it('writes somewhere git ignores, so a build leaves no trace in the tree', () => {
+    // The property that makes the placement worth having: after a build, nothing
+    // under version control has moved, so a branch switch cannot be blocked and no
+    // commit accidentally records a hash.
+    // The tests run from the repository root, so this is the same path the
+    // .gitignore rule names.
+    const fromRoot = relative(process.cwd(), BUILD_INFO_PATH)
+    const ignored = spawnSync('git', ['check-ignore', '-q', fromRoot], { encoding: 'utf8' })
+
+    expect(fromRoot).toBe(join('dist', 'build-info.json'))
+    expect(ignored.status).toBe(0)
   })
 
-  it('round-trips through a real file', () => {
-    const target = tempFile()
-    writeBuildInfo({ version: '2.0.0', commit: 'deadbee', dirty: true }, target)
+  it('creates dist/ when it is not there yet', () => {
+    // `bun clean` removes dist earlier in the same build, so the directory is
+    // usually missing when the stamp is written.
+    const root = mkdtempSync(join(tmpdir(), 'pty-stamp-'))
+    tempRoots.push(root)
+    const target = join(root, 'nested', 'dist', 'build-info.json')
 
-    const written = readFileSync(target, 'utf8')
-    expect(written).toContain("version: '2.0.0',")
-    expect(written).toContain("commit: 'deadbee',")
-    expect(written).toContain('dirty: true,')
+    writeBuildInfo(UNKNOWN_BUILD, target)
+
+    expect(readFileSync(target, 'utf8')).toBe(renderBuildInfo(UNKNOWN_BUILD))
   })
 
-  it('writes a module the committed placeholder can be replaced by', () => {
-    // The committed file exists so a fresh clone typechecks; a build overwrites
-    // it. Both have to be the same shape or the build breaks the checkout.
-    const target = tempFile()
-    writeBuildInfo(PLACEHOLDER, target)
-    const source = readFileSync(target, 'utf8')
+  it('finds the stamp from a checkout, where it lives under dist/', () => {
+    // The layout that actually exists when the tests run: source under `<repo>/src`,
+    // stamp at `<repo>/dist`. An earlier version of this test put the stamp in the
+    // repository root, so it passed against a search that could not find the real
+    // file - and the E2E server reported `unknown` because of it.
+    const root = mkdtempSync(join(tmpdir(), 'pty-find-checkout-'))
+    tempRoots.push(root)
+    const src = join(root, 'src', 'plugin', 'pty')
+    mkdirSync(join(root, 'dist'), { recursive: true })
+    mkdirSync(src, { recursive: true })
+    writeFileSync(
+      join(root, 'dist', 'build-info.json'),
+      renderBuildInfo({ version: '9.9.9', commit: 'abc1234', dirty: false })
+    )
 
-    expect(source).toBe(renderBuildInfo(PLACEHOLDER))
+    expect(findBuildInfo(src)).toEqual({ version: '9.9.9', commit: 'abc1234', dirty: false })
+  })
+
+  it('finds the stamp from the compiled package, where it sits beside the code', () => {
+    // The other real layout: `dist/src/...` running with the stamp at `dist/`.
+    // A separate candidate path, so a search that only handles the first silently
+    // reports "unknown" in a published install.
+    const root = mkdtempSync(join(tmpdir(), 'pty-find-dist-'))
+    tempRoots.push(root)
+    const compiled = join(root, 'dist', 'src', 'web', 'server', 'handlers')
+    mkdirSync(join(root, 'dist'), { recursive: true })
+    mkdirSync(compiled, { recursive: true })
+    writeFileSync(
+      join(root, 'dist', 'build-info.json'),
+      renderBuildInfo({ version: '8.8.8', commit: 'beef123', dirty: false })
+    )
+
+    expect(findBuildInfo(compiled)).toEqual({ version: '8.8.8', commit: 'beef123', dirty: false })
+  })
+
+  it('falls back to unknown when no stamp is anywhere above', () => {
+    const root = mkdtempSync(join(tmpdir(), 'pty-nostamp-'))
+    tempRoots.push(root)
+
+    expect(findBuildInfo(root)).toEqual(UNKNOWN_BUILD)
+  })
+
+  it('reads the version from a manifest above it', () => {
+    const root = mkdtempSync(join(tmpdir(), 'pty-manifest-'))
+    tempRoots.push(root)
+    const deep = join(root, 'src', 'a', 'b')
+    mkdirSync(deep, { recursive: true })
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '3.1.4' }))
+
+    expect(findPackageVersion(deep)).toBe('3.1.4')
+  })
+
+  it('skips a corrupt stamp instead of taking the server down', () => {
+    // A cosmetic value is not worth an exception on the path of every request.
+    expect(parseBuildInfo('{not json')).toBeNull()
+    expect(parseBuildInfo('[]')).toBeNull()
+    expect(parseBuildInfo('{"commit":"abc1234","dirty":false}')).toBeNull()
+    expect(parseBuildInfo('{"version":"1.0.0","commit":7,"dirty":false}')).toBeNull()
+    expect(parseBuildInfo('{"version":"1.0.0","commit":null}')).toBeNull()
+  })
+
+  it('prefers the nearest stamp', () => {
+    const root = mkdtempSync(join(tmpdir(), 'pty-nearest-'))
+    tempRoots.push(root)
+    const near = join(root, 'dist')
+    mkdirSync(near, { recursive: true })
+    writeFileSync(
+      join(root, 'build-info.json'),
+      renderBuildInfo({
+        version: '1.0.0',
+        commit: null,
+        dirty: false,
+      })
+    )
+    writeFileSync(
+      join(near, 'build-info.json'),
+      renderBuildInfo({
+        version: '2.0.0',
+        commit: null,
+        dirty: false,
+      })
+    )
+
+    // A stale stamp in an outer directory must not shadow the current one.
+    expect(findBuildInfo(near).version).toBe('2.0.0')
   })
 
   it('leaves no temp dirs behind', () => {
