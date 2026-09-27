@@ -185,13 +185,14 @@ export function SettingsModal({
         </section>
 
         <section className="settings-section settings-section-build">
-          <span className="settings-label" id="settings-build-label">
-            Version
-          </span>
+          <span className="settings-label">Version</span>
           {buildInfo === null ? (
             // Saying nothing beats saying "unknown": a missing value that reads
             // as missing is more useful than a confident wrong one.
-            <span className="settings-build-value" aria-labelledby="settings-build-label">
+            // `aria-live` rather than `aria-labelledby`: the span has no role, so
+            // a labelledby would be inert, and what matters here is announcing
+            // that the value arrived - the section label is already on screen.
+            <span className="settings-build-value" aria-live="polite">
               Checking…
             </span>
           ) : (

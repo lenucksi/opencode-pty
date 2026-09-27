@@ -63,9 +63,7 @@ export const BUILD_INFO: BuildInfo = ${JSON.stringify(info, null, 2)}
  * answers `''` for `git status` on a clean checkout would otherwise read as
  * "uncommitted changes", which is exactly backwards.
  */
-export interface GitProbe {
-  (command: string[]): string | null
-}
+export type GitProbe = (command: string[]) => string | null
 
 /**
  * A probe that runs Git in a given directory.
