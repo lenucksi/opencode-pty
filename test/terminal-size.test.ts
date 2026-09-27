@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from 'bun:test'
+import { afterAll, describe, expect, it, spyOn } from 'bun:test'
 
 import { ptyResize } from '../src/plugin/pty/tools/resize.ts'
 import { manager, PTYManager } from '../src/plugin/pty/manager.ts'
@@ -197,6 +197,24 @@ describe('pty_resize', () => {
     await ptyResize.execute({ id, cols: 300, rows: 90 }, ctx)
 
     expect(manager.clientSize()).toEqual({ cols: 100, rows: 40 })
+  })
+
+  it('reports a session that exits between the lookup and the resize', async () => {
+    // `manager.get` succeeded, so the session existed a moment ago. Losing it in
+    // between is a race, not a caller error, and the answer has to be a
+    // not-found rather than a fabricated size.
+    const id = spawn()
+    // Only the resize loses the race; the lookup before it still succeeds.
+    const realResize = manager.resize.bind(manager)
+    const resizeSpy = spyOn(manager, 'resize').mockImplementation((target) =>
+      target === id ? false : realResize(target)
+    )
+
+    expect(ptyResize.execute({ id, cols: 80 }, ctx)).rejects.toThrow()
+
+    resizeSpy.mockRestore()
+    // The session itself is untouched, so a retry still works.
+    expect(ptyResize.execute({ id, cols: 80 }, ctx)).resolves.toContain('cols="80"')
   })
 
   it('warns that a program may not react to a runtime resize', async () => {

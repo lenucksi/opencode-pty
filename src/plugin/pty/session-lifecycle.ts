@@ -234,12 +234,11 @@ export class SessionLifecycleManager {
   }
 
   /**
-   * Resize a running session, recording the size it ended up at.
+   * Resize a running session and record the size it ended up at.
    *
-   * The recording is the point. The size used to be handed to the PTY and then
-   * forgotten, so nothing could report it: the agent could not tell a cramped
-   * program from a broken one, and the web UI could not tell a resize that had
-   * been clamped from one that had been honoured.
+   * The recorded size is what callers report, so it must be the size the process
+   * actually has, not the size that was requested: a clamped request and an
+   * honoured one are indistinguishable otherwise.
    *
    * An omitted or non-finite dimension keeps the session's current value rather
    * than snapping to a global default, so a partial resize cannot reset the axis
