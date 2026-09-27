@@ -13,9 +13,17 @@ Behavior:
 - If cleanup=true, the session is removed entirely and the buffer is freed
 
 Deprecation:
-- Removing sessions is intended for humans via the web UI. The `cleanup` flag still
-  works for backwards compatibility but will be removed in a future release, so prefer
-  killing the session and letting the human discard it.
+- Never pass `cleanup: true`. It frees the session's entire output buffer, and
+  that buffer is the only record of what the process did.
+- This includes sessions you created for your own verification. "The human may
+  still want to inspect it" is not a reason to keep one and "this session is
+  mine, so it does not count" is not a reason to delete one: a model that frees
+  a buffer to save tokens destroys the evidence it would need to explain a
+  failure, and measured across 15 real runs, 4 did exactly that - including
+  deleting the very output they were in the middle of reading, and noting it as
+  "expected".
+- Kill the session and leave it in the list. Removing it is a human's decision,
+  made in the web UI.
 
 Tips:
 - To send Ctrl+C instead of killing, use pty_write with data="\x03"

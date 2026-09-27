@@ -386,7 +386,7 @@ export const ptyRead = tool({
       .number()
       .optional()
       .describe(
-        `Raise the result budget in tokens (default ${DEFAULT_READ_MAX_TOKENS}, server ceiling ${MAX_READ_MAX_TOKENS}). Larger costs more context; prefer a pattern over a larger budget.`
+        `Raise the result budget in tokens (default ${DEFAULT_READ_MAX_TOKENS}, server ceiling ${MAX_READ_MAX_TOKENS}). A wider budget buys fewer round trips, it does not replace the cursor: a result cut at any budget still ends in a \`nextSince\` that has to be followed with \`since\`, and the token you spend re-reading the same bytes is the token you saved. Use \`pattern\` when you only want matching lines, and \`maxTokens\` when the output is genuinely large and you need most of it in one result. Measured across 15 real runs, raising the budget was chosen over following \`nextSince\` every time it was offered, and the cursor was then re-typed from memory and came out wrong.`
       ),
     since: tool.schema
       .number()
