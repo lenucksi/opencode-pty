@@ -725,7 +725,13 @@ describe('scenarios', () => {
 describe('isolated environment', () => {
   it('finds the package root and its built V2 entrypoint', () => {
     const root = findRepoRoot()
-    expect(root.endsWith('opencode-pty')).toBe(true)
+    // The root is wherever this checkout happens to live. Asserting its directory
+    // name - which this test did, expecting the path to end in "opencode-pty" -
+    // makes the suite pass or fail on where somebody cloned the repository, and
+    // it is normally worked on from a worktree whose name carries the task. What
+    // identifies the root is the manifest in it, so assert that.
+    const manifest: unknown = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+    expect(manifest).toMatchObject({ name: 'opencode-pty' })
     expect(pluginEntryPoint(root)).toBe(join(root, 'dist', 'src', 'v2', 'index.js'))
     expect(() => assertPluginBuilt(root)).not.toThrow()
   })
