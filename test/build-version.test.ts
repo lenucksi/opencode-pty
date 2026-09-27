@@ -192,7 +192,37 @@ describe('the generated module', () => {
   })
 
   it('emits a null commit rather than a placeholder hash', () => {
-    expect(renderBuildInfo(PLACEHOLDER)).toContain('"commit": null')
+    expect(renderBuildInfo(PLACEHOLDER)).toContain('commit: null,')
+  })
+
+  it('emits single quotes and a trailing comma, so the format check passes', () => {
+    // Raw JSON.stringify output made every build produce a file the gate then
+    // rejected for formatting. The generated file has to be formatter-clean.
+    const source = renderBuildInfo({ version: '1.2.3', commit: 'abc1234', dirty: false })
+
+    expect(source).toContain("version: '1.2.3',")
+    expect(source).toContain("commit: 'abc1234',")
+    expect(source).toContain('dirty: false,')
+    expect(source).not.toContain('"version"')
+  })
+
+  it('falls back to JSON quoting for a value a single-quoted string cannot hold', () => {
+    // JSON escaping is not JS single-quote escaping, so a value containing a
+    // quote or a newline must not be wrapped naively.
+    const source = renderBuildInfo({
+      version: "it's odd",
+      commit: 'two' + '\n' + 'lines',
+      dirty: false,
+    })
+
+    expect(source).toContain(JSON.stringify("it's odd"))
+    expect(source).toContain(JSON.stringify('two' + '\n' + 'lines'))
+  })
+
+  it('emits a null commit as a bare null, not as a quoted string', () => {
+    // The difference between "no commit" and a commit called "null", and a reader
+    // cannot tell them apart in the rendered output.
+    expect(renderBuildInfo(PLACEHOLDER)).toContain('commit: null,')
   })
 
   it('round-trips through a real file', () => {
@@ -200,9 +230,9 @@ describe('the generated module', () => {
     writeBuildInfo({ version: '2.0.0', commit: 'deadbee', dirty: true }, target)
 
     const written = readFileSync(target, 'utf8')
-    expect(written).toContain('"version": "2.0.0"')
-    expect(written).toContain('"commit": "deadbee"')
-    expect(written).toContain('"dirty": true')
+    expect(written).toContain("version: '2.0.0',")
+    expect(written).toContain("commit: 'deadbee',")
+    expect(written).toContain('dirty: true,')
   })
 
   it('writes a module the committed placeholder can be replaced by', () => {

@@ -3,7 +3,7 @@
 import type { BuildInfo } from '../../shared/build-info.ts'
 
 export const BUILD_INFO: BuildInfo = {
-  "version": "0.4.0",
-  "commit": "2137829-dirty",
-  "dirty": true
+  version: '0.4.0',
+  commit: '9ba964c-dirty',
+  dirty: true,
 }
