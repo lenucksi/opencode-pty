@@ -50,3 +50,6 @@ devenv.local.yaml
 
 # pre-commit
 .pre-commit-config.yaml
+
+# Working notes about defects, superseded once the fix lands.
+START-*.md

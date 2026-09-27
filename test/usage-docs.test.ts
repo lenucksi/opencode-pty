@@ -10,6 +10,7 @@ import {
 import { ptyRead } from '../src/plugin/pty/tools/read.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import { ptyResize } from '../src/plugin/pty/tools/resize.ts'
+import { ptyScreen } from '../src/plugin/pty/tools/screen.ts'
 import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../src/plugin/constants.ts'
 import { resolveWebPort } from '../src/web/server/server.ts'
 import { handleUsageDocs } from '../src/web/server/handlers/usage-docs.ts'
@@ -136,6 +137,21 @@ describe('docs stay true to the implementation', () => {
     expect(Object.keys(ptyResize.args ?? {})).toEqual(
       expect.arrayContaining(['id', 'cols', 'rows'])
     )
+  })
+
+  it('documents pty_screen and every parameter it accepts', () => {
+    expect(PTY_USAGE_SKILL.content).toContain('pty_screen')
+    const args = Object.keys(ptyScreen.args ?? {})
+    for (const name of ['colors', 'width', 'height']) {
+      if (PTY_USAGE_SKILL.content.includes(name)) expect(args).toContain(name)
+    }
+  })
+
+  it('explains when to reach for pty_screen rather than pty_read', () => {
+    // The two tools answer different questions; prose that does not say which is
+    // which leaves the caller guessing and usually reaching for the wrong one.
+    expect(PTY_USAGE_SKILL.content).toMatch(/layout/i)
+    expect(PTY_USAGE_SKILL.content).toMatch(/pty_read.*cheaper/is)
   })
 
   it('documents the regex rejection path the reader can hit', () => {
