@@ -1,8 +1,8 @@
 import { tool } from '@opencode-ai/plugin'
 import { manager, registerSessionUpdateCallback, removeSessionUpdateCallback } from '../manager.ts'
-import { MAX_LINE_LENGTH } from '../../../shared/constants.ts'
+import { DEFAULT_READ_MAX_TOKENS, charsForTokens } from '../../../shared/constants.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
-import { formatLine } from '../formatters.ts'
+import { formatLine, TRUNCATION_MARKER } from '../formatters.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import DESCRIPTION from './wait.txt'
 
@@ -14,31 +14,63 @@ function isTerminal(session: PTYSessionInfo): boolean {
 }
 
 /**
- * Reads the tail of a session's buffer as formatted lines.
+ * Reads the tail of a session's buffer as numbered lines.
+ *
+ * The tail used to be clamped per line at a fixed 2000 characters with a bare
+ * `...`, so the last line of a wait could be cut with nothing saying how much
+ * was missing. The wait shares the read budget and reports its own accounting.
  */
-function formatTail(session: PTYSessionInfo, count: number): string[] {
+function formatTail(session: PTYSessionInfo, count: number, budget: number): TailLines {
   const offset = Math.max(0, session.lineCount - count)
-  const result = manager.read(session.id, offset, count)
+  const result = manager.read(session.id, offset, count, budget)
   if (!result || result.lines.length === 0) {
-    return []
+    return { lines: [], truncatedLines: 0, shownChars: 0, bufferChars: session.charCount }
   }
-  return result.lines.map((line, index) =>
-    formatLine(line, result.offset + index + 1, MAX_LINE_LENGTH)
-  )
+  return {
+    lines: result.slices.map((slice, index) => {
+      const formatted = formatLine(slice.text, result.offset + index + 1, slice.shownChars)
+      return slice.truncated
+        ? `${formatted.text}${TRUNCATION_MARKER(slice.shownChars, slice.totalChars)}`
+        : formatted.text
+    }),
+    truncatedLines: result.truncatedLines,
+    shownChars: result.shownChars,
+    bufferChars: result.bufferChars,
+  }
 }
 
-function formatWaitedBlock(session: PTYSessionInfo): string {
-  const tail = formatTail(session, WAIT_TAIL_LINES)
+interface TailLines {
+  lines: string[]
+  truncatedLines: number
+  shownChars: number
+  bufferChars: number
+}
+
+function formatWaitedBlock(session: PTYSessionInfo, budget: number): string {
+  const tail = formatTail(session, WAIT_TAIL_LINES, budget)
   const exitInfo = `${session.exitCode ?? 'unknown'}${session.exitSignal ? `, signal: ${session.exitSignal}` : ''}`
+  const attrs = [
+    `id="${session.id}"`,
+    `status="${session.status}"`,
+    `lines="${session.lineCount}"`,
+    `chars="${session.charCount}"`,
+  ]
+  if (tail.truncatedLines) attrs.push(`truncated="true"`)
   return [
-    `<pty_waited>`,
+    `<pty_waited ${attrs.join(' ')}>`,
     `ID: ${session.id}`,
     `Title: ${session.title}`,
     `Command: ${session.command} ${session.args.join(' ')}`,
     `Status: ${session.status}`,
     `Exit: ${exitInfo}`,
-    `Output Lines: ${session.lineCount}`,
-    ...(tail.length > 0 ? ['', 'Tail:', ...tail] : []),
+    `Output Lines: ${session.lineCount} | Chars: ${session.charCount}`,
+    ...(tail.lines.length > 0 ? ['', 'Tail:', ...tail.lines] : []),
+    ...(tail.truncatedLines
+      ? [
+          '',
+          `(Tail cut by the ${DEFAULT_READ_MAX_TOKENS} token budget: ${tail.shownChars} of ${tail.bufferChars} chars shown. Use pty_read for the rest.)`,
+        ]
+      : []),
     `</pty_waited>`,
   ].join('\n')
 }
@@ -55,12 +87,13 @@ export const ptyWait = tool({
       ),
   },
   async execute(args) {
+    const tailBudget = charsForTokens(DEFAULT_READ_MAX_TOKENS)
     const initial = manager.get(args.id)
     if (!initial) {
       throw buildSessionNotFoundError(args.id)
     }
     if (isTerminal(initial)) {
-      return formatWaitedBlock(initial)
+      return formatWaitedBlock(initial, tailBudget)
     }
 
     let resolveDone!: (session: PTYSessionInfo) => void
@@ -117,6 +150,6 @@ export const ptyWait = tool({
         `</pty_wait_timeout>`,
       ].join('\n')
     }
-    return formatWaitedBlock(winner)
+    return formatWaitedBlock(winner, tailBudget)
   },
 })

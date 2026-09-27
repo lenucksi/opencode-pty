@@ -3,6 +3,7 @@ import {
   formatLine,
   formatPtyOutputBlock,
   formatSessionInfo,
+  TRUNCATION_MARKER,
 } from '../src/plugin/pty/formatters.ts'
 import type { PTYSessionInfo } from '../src/plugin/pty/types.ts'
 
@@ -19,6 +20,7 @@ function buildSession(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
     pid: 99,
     createdAt: '2026-01-01T00:00:00.000Z',
     lineCount: 3,
+    charCount: 1600,
     ...overrides,
   }
 }
@@ -30,7 +32,7 @@ describe('formatSessionInfo', () => {
       '  Command: echo hello',
       '  Status: running',
       '  PID: 99',
-      '  Lines: 3',
+      '  Lines: 3 | Chars: 1600',
       '  Workdir: /tmp',
       '  Started: 2026-01-01T00:00:00.000Z',
       '',
@@ -71,20 +73,75 @@ describe('formatPtyOutputBlock', () => {
   })
 
   it('includes the pattern attribute when supplied', () => {
-    expect(formatPtyOutputBlock('pty_x', 'exited', ['one'], 'foo')).toBe(
+    expect(formatPtyOutputBlock('pty_x', 'exited', ['one'], { pattern: 'foo' })).toBe(
       '<pty_output id="pty_x" status="exited" pattern="foo">\none\n</pty_output>'
     )
+  })
+
+  it('reports how much of the buffer was shown and where to resume', () => {
+    const block = formatPtyOutputBlock('pty_x', 'running', ['one'], {
+      truncatedLines: 1,
+      nextSince: 4096,
+      chars: { shown: 4096, total: 9000 },
+    })
+    expect(block).toContain('truncated="true"')
+    expect(block).toContain('truncatedLines="1"')
+    expect(block).toContain('nextSince="4096"')
+    expect(block).toContain('chars="4096/9000"')
+  })
+
+  it('omits the truncation attributes on a result that was not cut', () => {
+    const block = formatPtyOutputBlock('pty_x', 'running', ['one'], {
+      chars: { shown: 3, total: 3 },
+      nextSince: null,
+    })
+    expect(block).not.toContain('truncated')
+    expect(block).not.toContain('nextSince')
+  })
+})
+
+describe('TRUNCATION_MARKER', () => {
+  it('states both counts so a cut cannot be mistaken for the end of the data', () => {
+    expect(TRUNCATION_MARKER(3, 6)).toBe('… [truncated: 3 of 6 chars]')
+  })
+
+  it('is searchable, unlike a bare ellipsis that program output can also contain', () => {
+    expect(TRUNCATION_MARKER(1, 2)).toContain('truncated:')
   })
 })
 
 describe('formatLine', () => {
   it('pads line numbers to five digits', () => {
-    expect(formatLine('hello', 1)).toBe('00001| hello')
-    expect(formatLine('hello', 12345)).toBe('12345| hello')
+    expect(formatLine('hello', 1, 5).text).toBe('00001| hello')
+    expect(formatLine('hello', 12345, 5).text).toBe('12345| hello')
   })
 
-  it('truncates lines longer than maxLength', () => {
-    expect(formatLine('abcdef', 2, 3)).toBe('00002| abc...')
-    expect(formatLine('abcdef', 2, 6)).toBe('00002| abcdef')
+  it('returns a line that fits untouched and says it was not truncated', () => {
+    expect(formatLine('abcdef', 2, 6)).toEqual({
+      text: '00002| abcdef',
+      truncated: false,
+      shownChars: 6,
+      totalChars: 6,
+    })
+  })
+
+  it('cuts at the budget and reports both counts', () => {
+    // The old version returned '00002| abc...', which is indistinguishable from
+    // a line whose content genuinely ends in three dots.
+    expect(formatLine('abcdef', 2, 3)).toEqual({
+      text: '00002| abc',
+      truncated: true,
+      shownChars: 3,
+      totalChars: 6,
+    })
+  })
+
+  it('treats a zero budget as an empty delivery rather than a negative slice', () => {
+    expect(formatLine('abcdef', 1, 0)).toEqual({
+      text: '00001| ',
+      truncated: true,
+      shownChars: 0,
+      totalChars: 6,
+    })
   })
 })

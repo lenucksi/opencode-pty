@@ -1,5 +1,11 @@
 import { logPtyEvent, type PtyLogger } from '../plugin/pty/plugin-log.ts'
-import { MAX_LINE_LENGTH } from '../shared/constants.ts'
+import {
+  CHARS_PER_TOKEN,
+  DEFAULT_READ_MAX_TOKENS,
+  MAX_READ_MAX_TOKENS,
+  READ_MAX_TOKENS_CEILING_ENV,
+  READ_MAX_TOKENS_ENV,
+} from '../shared/constants.ts'
 import type { SkillDraft, SkillInfoV2 } from './types.ts'
 
 /**
@@ -58,18 +64,51 @@ initial \`status\` (\`running\`). Keep the id - every other tool needs it.
 
 ## Reading output
 
-- \`pty_read({ id, offset, limit, pattern, ignoreCase })\` returns numbered
-  lines from the buffer. \`pattern\` is a regex; when set, \`offset\`/\`limit\`
-  apply to the matching lines. Default limit is 500 lines.
-- \`pty_list()\` shows every session with status, PID and line count.
+- \`pty_read({ id, offset, limit, pattern, ignoreCase, maxTokens, all })\`
+  returns numbered lines from the buffer. \`pattern\` is a regex; when set,
+  \`offset\`/\`limit\` apply to the matching lines. Default limit is 500 lines.
+- \`pty_list()\` shows every session with status, PID, line count and char
+  count. A large char count with a small line count means the output is one very
+  long line - typically a TUI repainting its screen as escape sequences, or
+  minified/compiled data. \`pty_read\` on such a session returns a single
+  enormous line, which is a different situation from a build log.
 - Buffers survive process exit, so reading after a session ends is fine.
-- Every returned line is truncated at ${MAX_LINE_LENGTH} characters. A long
-  line therefore ends in a cut-off, not a full payload. Re-read a narrower
-  \`offset\`/\`limit\` window rather than assuming the text ended naturally.
 - \`pattern\` is rejected with an error when it looks like catastrophic
   backtracking (nested repeated groups, stacked non-greedy quantifiers, long
   alternations). If a filter is rejected, simplify it or fetch the window first
   and filter in your own reasoning.
+
+### The read budget, and how to page through what it withheld
+
+A result is capped at **${DEFAULT_READ_MAX_TOKENS} tokens** (about ${DEFAULT_READ_MAX_TOKENS * CHARS_PER_TOKEN} characters) unless you ask for more with \`maxTokens\`, which is itself capped at ${MAX_READ_MAX_TOKENS} tokens. \`all: true\` removes the cap entirely and is a last resort - it can overflow your context.
+
+The cap applies to the **whole result**, not to each line. Lines are returned
+whole until the budget runs out, and at most one line is cut.
+
+When the budget bites, the \`<pty_output>\` tag says so:
+
+\`\`\`
+<pty_output id="pty_x" status="running" truncated="true" truncatedLines="1"
+            nextSince="100000" chars="100000/248225">
+00001| ...
+00002| <cut here> … [truncated: 0 of 59760 chars]
+</pty_output>
+\`\`\`
+
+- \`truncated="true"\` - a line was cut. Never read that as the end of the data.
+- \`chars="X/Y"\` - X characters delivered of Y retained in the buffer.
+- \`nextSince="N"\` - the exact character offset this result stopped at.
+
+To continue **without losing or repeating a character**, read with
+\`pty_read({ id, since: N })\` and follow each \`nextSince\` until the tag
+omits it. Re-assembling the chunks reproduces the output exactly, including a
+line that was cut mid-way. \`offset\`/\`limit\` remain useful for line-oriented
+output such as build logs, but they cannot resume inside a cut line - if a
+\`truncated="true"\` result contains something you need in full, use \`since\`.
+
+\`offset\` and \`since\` are mutually exclusive; \`since\` wins. The defaults
+are environment variables: \`${READ_MAX_TOKENS_ENV}\` sets the default budget and
+\`${READ_MAX_TOKENS_CEILING_ENV}\` the maximum a caller may request.
 
 Prefer reading **after** the session finished (or when the user asks for live
 output) over babysitting it.

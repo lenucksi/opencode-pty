@@ -18,6 +18,7 @@ function buildSession(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
     pid: 4242,
     createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
     lineCount: 7,
+    charCount: 1600,
     ...overrides,
   }
 }

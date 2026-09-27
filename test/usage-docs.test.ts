@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'bun:test'
 
 import { PTY_USAGE_SKILL } from '../src/v2/skill.ts'
-import { MAX_LINE_LENGTH, DEFAULT_READ_LIMIT } from '../src/shared/constants.ts'
+import {
+  CHARS_PER_TOKEN,
+  DEFAULT_READ_LIMIT,
+  DEFAULT_READ_MAX_TOKENS,
+  MAX_READ_MAX_TOKENS,
+} from '../src/shared/constants.ts'
+import { ptyRead } from '../src/plugin/pty/tools/read.ts'
 import { resolveWebPort } from '../src/web/server/server.ts'
 import { handleUsageDocs } from '../src/web/server/handlers/usage-docs.ts'
 import { HUMAN_USAGE_DOCS, README_URL } from '../src/web/shared/usage-docs.ts'
@@ -67,12 +73,48 @@ describe('docs stay true to the implementation', () => {
     expect(PTY_USAGE_SKILL.content).toMatch(/ephemeral/i)
   })
 
-  it('documents the real line truncation limit in both audiences', async () => {
+  it('documents the read budget, not the per-line clamp it replaced', async () => {
     const payload = await readDocsJson()
+    const human = JSON.stringify(payload.sections)
 
-    expect(MAX_LINE_LENGTH).toBe(2000)
-    expect(PTY_USAGE_SKILL.content).toContain(String(MAX_LINE_LENGTH))
-    expect(JSON.stringify(payload.sections)).toContain(String(MAX_LINE_LENGTH))
+    // Both audiences must name the real budget, or the model sizes its reads
+    // against a number the server does not enforce.
+    expect(PTY_USAGE_SKILL.content).toContain(String(DEFAULT_READ_MAX_TOKENS))
+    expect(human).toContain(String(DEFAULT_READ_MAX_TOKENS))
+
+    // And the ceiling, so a caller knows `maxTokens` is clamped rather than free.
+    expect(PTY_USAGE_SKILL.content).toContain(String(MAX_READ_MAX_TOKENS))
+
+    // The old clamp is gone. Its number must not survive anywhere as a promise
+    // the reader will rely on.
+    expect(PTY_USAGE_SKILL.content).not.toMatch(/truncated at 2000 characters/i)
+    expect(human).not.toMatch(/truncated at 2000 characters/i)
+  })
+
+  it('documents the recovery path for a cut line in both audiences', () => {
+    for (const text of [PTY_USAGE_SKILL.content, JSON.stringify(HUMAN_USAGE_DOCS)]) {
+      expect(text).toContain('truncated')
+      expect(text).toContain('nextSince')
+    }
+  })
+
+  it('only documents pty_read parameters the tool actually accepts', () => {
+    // The failure this guards: prose telling the model to pass `since` while the
+    // schema has no such argument, which makes the documented recovery
+    // impossible to perform.
+    const documented = ['maxTokens', 'since', 'all'].filter((name) =>
+      PTY_USAGE_SKILL.content.includes(name)
+    )
+    expect(documented.length).toBeGreaterThan(0)
+    for (const name of documented) {
+      expect(Object.keys(ptyRead.args ?? {})).toContain(name)
+    }
+  })
+
+  it('states the char-per-token ratio it converts the budget with', () => {
+    // The budget is only meaningful to a reader who can estimate its size.
+    const approxChars = DEFAULT_READ_MAX_TOKENS * CHARS_PER_TOKEN
+    expect(PTY_USAGE_SKILL.content).toContain(String(approxChars))
   })
 
   it('documents the regex rejection path the reader can hit', () => {

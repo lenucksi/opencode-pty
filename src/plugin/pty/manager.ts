@@ -2,7 +2,11 @@ import type { SessionNotifier } from '../../adapters/types.ts'
 import type { OpencodeClient } from '@opencode-ai/sdk'
 import { Terminal } from 'bun-pty'
 import { NotificationManager } from './notification-manager.ts'
-import { OutputManager } from './output-manager.ts'
+import {
+  OutputManager,
+  type BoundedReadResult,
+  type BoundedSearchResult,
+} from './output-manager.ts'
 import { sortSessionsByTime } from '../../web/shared/session-meta.ts'
 import { logPtyEvent } from './plugin-log.ts'
 import {
@@ -12,8 +16,50 @@ import {
   SessionStore,
 } from './session-store.ts'
 import { SessionLifecycleManager } from './session-lifecycle.ts'
-import type { PTYSessionInfo, ReadResult, SearchResult, SpawnOptions } from './types.ts'
+import type { PTYSessionInfo, SpawnOptions } from './types.ts'
 import { withSession } from './utils.ts'
+
+/**
+ * A raw character slice, bounded and resumable.
+ *
+ * `nextSince` is `null` exactly when the whole remainder was delivered, so a
+ * caller can page by following it until it disappears.
+ */
+export interface BoundedRawResult {
+  /** The delivered characters; the tail of a cut is not included. */
+  text: string
+  shownChars: number
+  /** Characters available from `since` to the end of the retained buffer. */
+  totalChars: number
+  /** Absolute character offset `text` starts at. */
+  since: number
+  /** Absolute character offset to pass back to continue, or null when done. */
+  nextSince: number | null
+  truncated: boolean
+}
+
+function buildBoundedRaw(raw: string, offset: number, budget?: number): BoundedRawResult {
+  if (budget === undefined) {
+    return {
+      text: raw,
+      shownChars: raw.length,
+      totalChars: raw.length,
+      since: offset,
+      nextSince: null,
+      truncated: false,
+    }
+  }
+  const shown = raw.slice(0, Math.max(0, budget))
+  const truncated = shown.length < raw.length
+  return {
+    text: shown,
+    shownChars: shown.length,
+    totalChars: raw.length,
+    since: offset,
+    nextSince: truncated ? offset + shown.length : null,
+    truncated,
+  }
+}
 
 /** Details about a session that is only left on disk. */
 export interface MissingSessionInfo {
@@ -192,21 +238,27 @@ class PTYManager {
     )
   }
 
-  read(id: string, offset: number = 0, limit?: number): ReadResult | null {
+  read(id: string, offset: number = 0, limit?: number, budget?: number): BoundedReadResult | null {
     const live = withSession(
       this.lifecycleManager,
       id,
-      (session) => this.outputManager.read(session, offset, limit),
+      (session) => this.outputManager.read(session, offset, limit, budget),
       null
     )
     return live ?? this.sessionStore.read(id, offset, limit)
   }
 
-  search(id: string, pattern: RegExp, offset: number = 0, limit?: number): SearchResult | null {
+  search(
+    id: string,
+    pattern: RegExp,
+    offset: number = 0,
+    limit?: number,
+    budget?: number
+  ): BoundedSearchResult | null {
     const live = withSession(
       this.lifecycleManager,
       id,
-      (session) => this.outputManager.search(session, pattern, offset, limit),
+      (session) => this.outputManager.search(session, pattern, offset, limit, budget),
       null
     )
     return live ?? this.sessionStore.search(id, pattern, offset, limit)
@@ -338,7 +390,42 @@ class PTYManager {
     if (text === null) return null
     const from = Math.min(Math.max(0, since ?? 0), text.length)
     const raw = text.slice(from)
-    return { raw, byteLength: new TextEncoder().encode(raw).length, offset: text.length }
+    // The archived branch used to report the *end* of the transcript as the
+    // offset while the live branch reported the *start* of the slice. Callers
+    // that treat `offset` as a resume cursor silently jumped to the end of every
+    // archived session.
+    return { raw, byteLength: new TextEncoder().encode(raw).length, offset: from }
+  }
+
+  /**
+   * Raw character stream from an absolute offset, bounded by a character budget.
+   *
+   * This is the paging primitive that makes a cut line recoverable. Line-based
+   * `offset`/`limit` cannot resume inside a line that was cut, so a long line
+   * either had to be re-read from its start or lost. Following `nextSince` here
+   * re-assembles the original stream exactly, character for character.
+   *
+   * Offsets are **characters**, matching `RingBuffer`'s internal accounting, not
+   * UTF-8 bytes. The two diverge on any non-ASCII output, which is common in
+   * box-drawing and emoji-heavy TUIs.
+   */
+  readSince(id: string, since: number, budget?: number): BoundedRawResult | null {
+    const from = Math.max(0, Math.floor(since))
+    const live = withSession(
+      this.lifecycleManager,
+      id,
+      (session) => {
+        const { raw, offset } = session.buffer.sliceSince(from)
+        return buildBoundedRaw(raw, offset, budget)
+      },
+      null
+    )
+    if (live) return live
+
+    const text = this.sessionStore.readRaw(id)
+    if (text === null) return null
+    const start = Math.min(from, text.length)
+    return buildBoundedRaw(text.slice(start), start, budget)
   }
 
   kill(id: string, cleanup: boolean = false): boolean {

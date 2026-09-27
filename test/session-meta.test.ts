@@ -26,6 +26,7 @@ function session(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
     pid: 4242,
     createdAt: '2026-09-21T15:00:00.000Z',
     lineCount: 12,
+    charCount: 3200,
     ...overrides,
   }
 }
@@ -119,10 +120,13 @@ describe('sessionSidebarMeta', () => {
 })
 
 describe('sessionTooltip', () => {
-  it('lists the id, command and workdir on separate lines', () => {
+  it('lists the id, command, size and workdir on separate lines', () => {
     expect(sessionTooltip(session()).split('\n')).toEqual([
       'pty_meta',
       'ansible-playbook site.yml --limit host',
+      // The character count is here because a one-line, 85 kB TUI repaint looks
+      // identical to an idle session without it.
+      '12 lines · 3.1 kB',
       'workdir: /srv/ansible',
     ])
   })

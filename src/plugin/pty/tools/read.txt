@@ -9,10 +9,22 @@ Usage:
 - `limit`: how many lines to return (default: 500)
 - `pattern`: regex; only matching lines are returned, then `offset`/`limit` apply to the matches
 - `ignoreCase`: make `pattern` case-insensitive (default: false)
+- `maxTokens`: raise the result budget in tokens (capped by the server ceiling)
+- `since`: absolute character offset to resume from; returns the raw stream from
+  that point with no line numbering
+- `all`: remove the result budget entirely. Unbounded - can overflow your context.
 
 Behavior:
-- Every returned line is truncated at 2000 characters, so a long line ends in a
-  cut-off rather than a full payload.
+- A result is capped at 25000 tokens (about 100000 characters) unless you pass
+  `maxTokens`; the server caps the request at 125000 tokens. The cap applies to
+  the whole result, not per line.
+- When the cap bites, the `<pty_output>` tag carries `truncated="true"`,
+  `chars="shown/total"` and `nextSince="N"`, and the cut line ends in a
+  `… [truncated: X of Y chars]` marker. That is not the end of the data.
+- To continue without losing or repeating a character, read with
+  `pty_read({ id, since: N })` and follow each `nextSince` until the tag omits it.
+  `offset`/`limit` are line-based and cannot resume inside a cut line.
+- `since` and `offset` are mutually exclusive; `since` wins.
 - A `pattern` that looks like catastrophic backtracking (nested repeated groups,
   stacked non-greedy quantifiers, long alternations) is rejected with an error.
   Simplify it, or fetch the window first and filter yourself.

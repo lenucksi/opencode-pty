@@ -39,6 +39,7 @@ function buildSpawnInfo(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo
     pid: 1234,
     createdAt: new Date().toISOString(),
     lineCount: 0,
+    charCount: 0,
     ...overrides,
   }
 }

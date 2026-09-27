@@ -1,8 +1,21 @@
 import { tool } from '@opencode-ai/plugin'
 import { manager } from '../manager.ts'
-import { DEFAULT_READ_LIMIT, MAX_LINE_LENGTH } from '../../../shared/constants.ts'
+import {
+  charsForTokens,
+  DEFAULT_READ_LIMIT,
+  DEFAULT_READ_MAX_TOKENS,
+  MAX_READ_MAX_TOKENS,
+  READ_MAX_TOKENS_CEILING_ENV,
+  READ_MAX_TOKENS_ENV,
+  readTokenBudget,
+} from '../../../shared/constants.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
-import { formatLine, formatPtyOutputBlock } from '../formatters.ts'
+import {
+  formatLine,
+  formatPtyOutputBlock,
+  TRUNCATION_MARKER,
+  type OutputBlockMeta,
+} from '../formatters.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import DESCRIPTION from './read.txt'
 
@@ -32,6 +45,29 @@ interface ReadArgs {
   limit?: number
   pattern?: string
   ignoreCase?: boolean
+  maxTokens?: number
+  all?: boolean
+  since?: number
+}
+
+/** Highest token budget a caller may request, after env and the hard ceiling. */
+function resolveCeiling(): number {
+  return readTokenBudget(process.env, READ_MAX_TOKENS_CEILING_ENV, MAX_READ_MAX_TOKENS)
+}
+
+function resolveDefaultBudget(): number {
+  return readTokenBudget(process.env, READ_MAX_TOKENS_ENV, DEFAULT_READ_MAX_TOKENS)
+}
+
+/**
+ * Character budget for this call, or `undefined` when the caller asked for
+ * everything.
+ */
+function resolveBudget(args: ReadArgs): number | undefined {
+  if (args.all === true) return undefined
+  const ceiling = resolveCeiling()
+  const requested = args.maxTokens ?? resolveDefaultBudget()
+  return charsForTokens(Math.min(Math.max(1, requested), ceiling))
 }
 
 /**
@@ -44,16 +80,35 @@ function formatPtyOutput(
   formattedLines: string[],
   hasMore: boolean,
   paginationMessage: string,
-  endMessage: string
+  endMessage: string,
+  meta: OutputBlockMeta = {}
 ): string {
-  const output = [
-    `<pty_output id="${id}" status="${status}"${pattern ? ` pattern="${pattern}"` : ''}>`,
+  const attrs: string[] = [`id="${id}"`, `status="${status}"`]
+  if (pattern) attrs.push(`pattern="${pattern}"`)
+  if (meta.truncatedLines) {
+    attrs.push(`truncated="true"`, `truncatedLines="${meta.truncatedLines}"`)
+  }
+  if (meta.nextSince !== undefined && meta.nextSince !== null) {
+    attrs.push(`nextSince="${meta.nextSince}"`)
+  }
+  if (meta.chars) attrs.push(`chars="${meta.chars.shown}/${meta.chars.total}"`)
+  if (meta.all) attrs.push('all="true"')
+
+  const notes: string[] = []
+  if (meta.all) {
+    notes.push(
+      '(You asked for the complete buffer. This is unbounded and can overflow your context; prefer a bounded read unless you truly need everything.)'
+    )
+  }
+
+  return [
+    `<pty_output ${attrs.join(' ')}>`,
     ...formattedLines,
     '',
     hasMore ? paginationMessage : endMessage,
+    ...notes,
     `</pty_output>`,
-  ]
-  return output.join('\n')
+  ].join('\n')
 }
 
 function appendNotifyOnExitReminder(output: string, session: PTYSessionInfo): string {
@@ -98,16 +153,18 @@ function validateAndCreateRegex(pattern: string, ignoreCase?: boolean): RegExp {
  * Handles pattern-based reading and formatting
  */
 function handlePatternRead(
+  args: ReadArgs,
   id: string,
   pattern: string,
   ignoreCase: boolean | undefined,
   session: PTYSessionInfo,
   offset: number,
-  limit: number
+  limit: number,
+  budget: number | undefined
 ): string {
   const regex = validateAndCreateRegex(pattern, ignoreCase)
 
-  const result = manager.search(id, regex, offset, limit)
+  const result = manager.search(id, regex, offset, limit, budget)
   if (!result) {
     throw buildSessionNotFoundError(id)
   }
@@ -121,28 +178,33 @@ function handlePatternRead(
           `No lines matched the pattern '${pattern}'.`,
           `Total lines in buffer: ${result.totalLines}`,
         ],
-        pattern
+        { pattern }
       ),
       session
     )
   }
 
-  const formattedLines = result.matches.map((match) =>
-    formatLine(match.text, match.lineNumber, MAX_LINE_LENGTH)
-  )
+  // A match can be cut by the budget; mark it rather than dropping it silently.
+  const lines = result.matches.map((match) => {
+    const formatted = formatLine(match.text, match.lineNumber, match.text.length)
+    return formatted.truncated
+      ? `${formatted.text}${TRUNCATION_MARKER(formatted.shownChars, formatted.totalChars)}`
+      : formatted.text
+  })
 
-  const paginationMessage = `(${result.matches.length} of ${result.totalMatches} matches shown. Use offset=${offset + result.matches.length} to see more.)`
   const endMessage = `(${result.totalMatches} match${result.totalMatches === 1 ? '' : 'es'} from ${result.totalLines} total lines)`
+  const paginationMessage = `(${lines.length} of ${result.totalMatches} matches shown. Use offset=${offset + lines.length} to see more.)`
 
   return appendSessionReminders(
     formatPtyOutput(
       id,
       session.status,
       pattern,
-      formattedLines,
+      lines,
       result.hasMore,
       paginationMessage,
-      endMessage
+      endMessage,
+      { all: args.all === true, truncatedLines: result.truncatedLines }
     ),
     session
   )
@@ -155,9 +217,10 @@ function handlePlainRead(
   args: ReadArgs,
   session: PTYSessionInfo,
   offset: number,
-  limit: number
+  limit: number,
+  budget: number | undefined
 ): string {
-  const result = manager.read(args.id, offset, limit)
+  const result = manager.read(args.id, offset, limit, budget)
   if (!result) {
     throw buildSessionNotFoundError(args.id)
   }
@@ -172,12 +235,28 @@ function handlePlainRead(
     )
   }
 
-  const formattedLines = result.lines.map((line, index) =>
-    formatLine(line, result.offset + index + 1, MAX_LINE_LENGTH)
-  )
+  // The budget is shared across the whole result, so a line may be cut. Each cut
+  // is marked with an explicit, searchable token instead of a bare `...`, which
+  // is indistinguishable from three literal dots in program output.
+  const formattedLines: string[] = []
+  let truncatedLines = 0
+  for (const [index, slice] of result.slices.entries()) {
+    const formatted = formatLine(slice.text, result.offset + index + 1, slice.shownChars)
+    if (slice.truncated) truncatedLines += 1
+    formattedLines.push(
+      slice.truncated
+        ? `${formatted.text}${TRUNCATION_MARKER(slice.shownChars, slice.totalChars)}`
+        : formatted.text
+    )
+  }
 
-  const paginationMessage = `(Buffer has more lines. Use offset=${result.offset + result.lines.length} to read beyond line ${result.offset + result.lines.length})`
-  const endMessage = `(End of buffer - total ${result.totalLines} lines)`
+  const nextLineOffset = result.offset + result.lines.length
+  const paginationMessage = `(Buffer has more. Use offset=${nextLineOffset} to read beyond line ${nextLineOffset}, or since=${result.nextSince} to continue exactly where this result stopped.)`
+  // Never claim the end of the buffer while a line is still cut: that is the lie
+  // that made a frozen TUI look like a stable screen.
+  const endMessage = truncatedLines
+    ? `(Cut mid-result - ${result.shownChars} of ${result.bufferChars} chars shown. Continue with since=${result.nextSince}.)`
+    : `(End of buffer - ${result.totalLines} lines, ${result.bufferChars} chars)`
 
   return appendSessionReminders(
     formatPtyOutput(
@@ -187,14 +266,79 @@ function handlePlainRead(
       formattedLines,
       result.hasMore,
       paginationMessage,
-      endMessage
+      endMessage,
+      {
+        all: args.all === true,
+        truncatedLines,
+        nextSince: result.nextSince,
+        chars: { shown: result.shownChars, total: result.bufferChars },
+      }
     ),
     session
   )
 }
 
 /**
- * Formats a single line with line number and truncation
+ * Resume the raw character stream at an absolute offset.
+ *
+ * Line-based paging cannot recover a line that the budget cut in half: there is
+ * no line offset inside a cut line to ask for. This path exists so that a caller
+ * can walk the stream character by character and end up with exactly the bytes
+ * the process produced, including the tail of a line an earlier call cut.
+ */
+function handleSinceRead(
+  args: ReadArgs,
+  session: PTYSessionInfo,
+  budget: number | undefined
+): string {
+  const since = Math.max(0, Math.floor(args.since ?? 0))
+  const result = manager.readSince(args.id, since, budget)
+  if (!result) {
+    throw buildSessionNotFoundError(args.id)
+  }
+
+  if (result.totalChars === 0) {
+    return appendSessionReminders(
+      formatPtyOutputBlock(args.id, session.status, [
+        `(Nothing available at or after character ${since}.)`,
+      ]),
+      session
+    )
+  }
+
+  const attrs = [
+    `id="${args.id}"`,
+    `status="${session.status}"`,
+    `since="${result.since}"`,
+    `chars="${result.shownChars}/${result.totalChars}"`,
+  ]
+  if (result.truncated) attrs.push('truncated="true"')
+  if (result.nextSince !== null) attrs.push(`nextSince="${result.nextSince}"`)
+  if (args.all === true) attrs.push('all="true"')
+
+  const footer = result.nextSince
+    ? `(Part of the stream. Continue with since=${result.nextSince}; ${result.shownChars} of ${result.totalChars} chars shown so far.)`
+    : `(End of stream - ${result.totalChars} chars from offset ${result.since}.)`
+
+  return appendSessionReminders(
+    [
+      `<pty_output ${attrs.join(' ')}>`,
+      result.text,
+      '',
+      footer,
+      ...(args.all === true
+        ? [
+            '(You asked for an unbounded read. This can overflow your context; prefer a bounded read with since-paging unless you truly need everything.)',
+          ]
+        : []),
+      '</pty_output>',
+    ].join('\n'),
+    session
+  )
+}
+
+/**
+ * Rejects regexes that look like catastrophic backtracking.
  */
 function validateRegex(pattern: string): boolean {
   try {
@@ -238,6 +382,24 @@ export const ptyRead = tool({
       .boolean()
       .optional()
       .describe('Case-insensitive pattern matching (default: false)'),
+    maxTokens: tool.schema
+      .number()
+      .optional()
+      .describe(
+        `Raise the result budget in tokens (default ${DEFAULT_READ_MAX_TOKENS}, server ceiling ${MAX_READ_MAX_TOKENS}). Larger costs more context; prefer a pattern over a larger budget.`
+      ),
+    since: tool.schema
+      .number()
+      .optional()
+      .describe(
+        'Absolute character offset to resume from, as reported by a previous nextSince. Returns the raw stream with no line numbering. Follow nextSince until it is absent to get the output in full.'
+      ),
+    all: tool.schema
+      .boolean()
+      .optional()
+      .describe(
+        'Remove the result budget entirely. Unbounded and can overflow your context; use only when a bounded read plus since-paging would take more calls than the data is worth.'
+      ),
   },
   async execute(args) {
     const session = manager.get(args.id)
@@ -245,13 +407,30 @@ export const ptyRead = tool({
       throw buildSessionNotFoundError(args.id)
     }
 
+    const budget = resolveBudget(args)
+
+    // `since` is a character cursor and `offset` a line cursor; they answer
+    // different questions and cannot be combined. `since` wins, and says so.
+    if (args.since !== undefined) {
+      return handleSinceRead(args, session, budget)
+    }
+
     const offset = args.offset ?? 0
     const limit = args.limit ?? DEFAULT_READ_LIMIT
 
     if (args.pattern) {
-      return handlePatternRead(args.id, args.pattern, args.ignoreCase, session, offset, limit)
+      return handlePatternRead(
+        args,
+        args.id,
+        args.pattern,
+        args.ignoreCase,
+        session,
+        offset,
+        limit,
+        budget
+      )
     } else {
-      return handlePlainRead(args, session, offset, limit)
+      return handlePlainRead(args, session, offset, limit, budget)
     }
   },
 })
