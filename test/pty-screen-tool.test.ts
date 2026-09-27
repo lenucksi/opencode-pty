@@ -1,6 +1,8 @@
-import { afterAll, describe, expect, it } from 'bun:test'
+import { afterAll, describe, expect, it, spyOn } from 'bun:test'
 
 import { ptyScreen } from '../src/plugin/pty/tools/screen.ts'
+import * as ScreenModule from '../src/plugin/pty/screen.ts'
+import { renderScreen } from '../src/plugin/pty/screen.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
 
 /**
@@ -217,5 +219,91 @@ describe('pty_screen', () => {
     const result = await ptyScreen.execute({ id: info.id }, ctx)
 
     expect(result).toContain('1| archived line')
+  })
+
+  it('states a partial replay instead of implying a whole-session render', async () => {
+    // A bounded window is a reconstruction. Saying nothing would let a reader
+    // treat a missing row as a row the program never painted.
+    const id = spawn(['-c', `for i in $(seq 1 20000); do echo "filler $i"; done; sleep 5`], 80, 10)
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+
+    const result = text(await ptyScreen.execute({ id }, ctx))
+
+    expect(result).toMatch(/partial="\d+\/\d+"/)
+    expect(result).toContain('Rows painted earlier')
+  })
+
+  it('says so when the program is on the alternate screen', async () => {
+    const id = spawn(['-c', 'printf "\\033[?1049hfull screen ui"; sleep 5'], 60, 8)
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    const result = text(await ptyScreen.execute({ id }, ctx))
+
+    expect(result).toContain('alternate="true"')
+    expect(result).toContain('no history')
+    expect(result).toContain('full screen ui')
+  })
+
+  it('marks a row that wrapped, so a wide-character split is not read as truncation', async () => {
+    // 8 CJK characters take 16 columns, so on a 12-column screen the terminal
+    // splits them across two rows. Read as two lines that looks like the text
+    // stopped short; it did not.
+    const id = spawn(['-c', 'printf "日本語のテキスト\\r\\n"; sleep 5'], 12, 6)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    const result = text(await ptyScreen.execute({ id }, ctx))
+
+    expect(result).toMatch(/Row 2 continues row 1/)
+    expect(result).toContain('one line of output, not several')
+    // Every character is present, in order, across the two rows.
+    const text_ = result
+      .split('\n')
+      .filter((l) => /^\d+\| /.test(l))
+      .join('')
+    expect(text_).toContain('日本語のテキ')
+    expect(text_).toContain('スト')
+  })
+
+  it('reports an unavailable transcript instead of an empty screen', async () => {
+    const id = spawn(['-c', 'printf "content"; sleep 5'], 40, 6)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    const realGetRaw = manager.getRawBuffer.bind(manager)
+    const spy = spyOn(manager, 'getRawBuffer').mockImplementation((target, since) =>
+      target === id ? null : realGetRaw(target, since)
+    )
+
+    const result = text(await ptyScreen.execute({ id }, ctx))
+
+    expect(result).toContain('retained output of this session is not available')
+    spy.mockRestore()
+  })
+
+  it('reports a failed render rather than an empty screen', async () => {
+    // A render that throws must not reach the caller as a blank screen: that
+    // reads as "the program printed nothing", which is the opposite of the truth.
+    const id = spawn(['-c', 'printf "content"; sleep 5'], 40, 6)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    // A geometry the emulator cannot build a terminal for. The tool clamps its
+    // own, so the renderer is stubbed to reach the guard the tool installs.
+    const failing = spyOn(ScreenModule, 'renderScreen').mockImplementation(() => {
+      throw new Error('emulator refused the geometry')
+    })
+    const result = text(await ptyScreen.execute({ id }, ctx))
+    expect(result).toContain('error="true"')
+    expect(result).toContain('emulator refused the geometry')
+    expect(result).toContain('pty_read')
+
+    failing.mockRestore()
+  })
+
+  it('can genuinely fail a render, which is what the guard above exists for', async () => {
+    // Without this the guard would be untestable and therefore unproven: a
+    // mocked throw proves the handler runs, not that a throw can happen.
+    const outcome = await renderScreen('x', 0, 0).then(
+      () => 'ok',
+      () => 'threw'
+    )
+
+    expect(outcome).toBe('threw')
   })
 })

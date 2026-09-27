@@ -125,6 +125,24 @@ export interface ScreenSnapshot {
   rows: number
   /** One string per row, with trailing blanks removed. */
   lines: string[]
+  /**
+   * Widest row, in screen columns.
+   *
+   * Measured from the cells' own widths rather than from the rendered string: a
+   * string of 8 CJK characters is 8 code points but 16 columns, and a check based
+   * on the string would conclude a row that overflows the screen is fine.
+   */
+  widestRowCols: number
+  /**
+   * Zero-based rows that continue the row above them.
+   *
+   * A line of output that does not fit is split across screen rows, which is how
+   * wide characters get handled. Without this the split is invisible:
+   * `日本語のテキ` and `スト` are one line, and reading them as two makes the text
+   * look truncated. Note the flag is on the *continuation*, not the row that
+   * ran out of room - verified against the emulator.
+   */
+  continuedRows: number[]
   cursor: { x: number; y: number; visible: boolean; style: string }
   /** True when the program is on the alternate screen, which has no scrollback. */
   alternate: boolean
@@ -232,6 +250,8 @@ export async function renderScreen(
 
     const lines: string[] = []
     const spans: ColorSpan[] = []
+    let widestRowCols = 0
+    const continuedRows: number[] = []
 
     for (let y = 0; y < rows; y++) {
       const cells = terminal.getLine(y) ?? []
@@ -240,6 +260,7 @@ export async function renderScreen(
       // current run is tracked separately from the line text.
       let run: { col: number; length: number; cell: GhosttyCell } | null = null
       let previousWasWide = false
+      let rowCols = 0
       const flush = (): void => {
         if (!run) return
         spans.push(toSpan(y, run.col, run.length, run.cell, defaultFg, defaultBg))
@@ -256,8 +277,10 @@ export async function renderScreen(
         // back as "日 本 語" and be read as three separate words.
         if (previousWasWide) {
           previousWasWide = false
+          // The wide character already covered this column.
           continue
         }
+        rowCols += cell.width > 0 ? cell.width : 1
         line += cellText(terminal, y, x, cell)
         previousWasWide = cell.width > 1
 
@@ -274,6 +297,8 @@ export async function renderScreen(
       }
       flush()
 
+      widestRowCols = Math.max(widestRowCols, rowCols)
+      if (terminal.isRowWrapped(y)) continuedRows.push(y)
       // Trailing blanks are screen shape, not content: a 240-column row of a
       // progress bar would otherwise be mostly padding.
       lines.push(line.replace(/\s+$/, ''))
@@ -283,6 +308,8 @@ export async function renderScreen(
       cols,
       rows,
       lines,
+      widestRowCols,
+      continuedRows,
       cursor: {
         x: rawCursor.x,
         y: rawCursor.y,

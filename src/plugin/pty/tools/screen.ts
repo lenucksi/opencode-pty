@@ -127,7 +127,6 @@ export const ptyScreen = tool({
       ].join('\n')
     }
 
-    const width = Math.max(snapshot.cols, 1)
     // Zero-padded so rows stay aligned and sortable in the reader's view, and so
     // a span's row can be matched against a body row by string equality.
     const rowWidth = String(rows).length
@@ -196,13 +195,15 @@ export const ptyScreen = tool({
         `${snapshot.scrollback} line(s) of scrollback above this screen; read them with pty_read.`
       )
     }
-    // Cheap sanity check that keeps a padded column from hiding a real width
-    // problem: a wide character makes a row wider in columns than in cells.
-    const widest = snapshot.lines.reduce((max, line) => Math.max(max, [...line].length), 0)
-    if (widest > width) {
+    // A continued row is the tail of a line that did not fit, which is how wide
+    // characters are handled. Saying so stops a reader treating the split as
+    // truncation.
+    if (snapshot.continuedRows.length > 0) {
+      const continued = snapshot.continuedRows.map((row) => row + 1)
+      const sources = snapshot.continuedRows.map((row) => row)
       parts.push(
         '',
-        `(Note: the widest row is ${widest} columns for a ${width}-column screen, which means it contains wide characters.)`
+        `(Row ${continued.join(', ')} continues row ${sources.join(', ')}: the line did not fit in ${snapshot.cols} columns, so it carries on below. Those rows are one line of output, not several.)`
       )
     }
 
