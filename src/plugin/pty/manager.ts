@@ -15,51 +15,10 @@ import {
   type PersistSessionInput,
   SessionStore,
 } from './session-store.ts'
+import { buildBoundedRaw, type BoundedRawResult } from './read-budget.ts'
 import { SessionLifecycleManager } from './session-lifecycle.ts'
 import type { PTYSessionInfo, SpawnOptions } from './types.ts'
 import { withSession } from './utils.ts'
-
-/**
- * A raw character slice, bounded and resumable.
- *
- * `nextSince` is `null` exactly when the whole remainder was delivered, so a
- * caller can page by following it until it disappears.
- */
-export interface BoundedRawResult {
-  /** The delivered characters; the tail of a cut is not included. */
-  text: string
-  shownChars: number
-  /** Characters available from `since` to the end of the retained buffer. */
-  totalChars: number
-  /** Absolute character offset `text` starts at. */
-  since: number
-  /** Absolute character offset to pass back to continue, or null when done. */
-  nextSince: number | null
-  truncated: boolean
-}
-
-function buildBoundedRaw(raw: string, offset: number, budget?: number): BoundedRawResult {
-  if (budget === undefined) {
-    return {
-      text: raw,
-      shownChars: raw.length,
-      totalChars: raw.length,
-      since: offset,
-      nextSince: null,
-      truncated: false,
-    }
-  }
-  const shown = raw.slice(0, Math.max(0, budget))
-  const truncated = shown.length < raw.length
-  return {
-    text: shown,
-    shownChars: shown.length,
-    totalChars: raw.length,
-    since: offset,
-    nextSince: truncated ? offset + shown.length : null,
-    truncated,
-  }
-}
 
 /** Details about a session that is only left on disk. */
 export interface MissingSessionInfo {

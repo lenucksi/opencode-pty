@@ -11,7 +11,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { type BoundedReadResult, type BoundedSearchResult } from './output-manager.ts'
+import type { BoundedReadResult, BoundedSearchResult } from './output-manager.ts'
 import { logPtyEvent } from './plugin-log.ts'
 import { applyLineBudget } from './read-budget.ts'
 import { sessionsRoot } from './state-paths.ts'
