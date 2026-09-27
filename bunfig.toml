@@ -9,10 +9,15 @@ coverageDir = "coverage"
 # Compiled duplicates, test helpers, local quality tooling and React client
 # components/hooks are out of scope for the production coverage gate. Quality
 # helpers have their own unit tests; the React layer is covered by Playwright.
+# `test/**` is deliberately NOT ignored: the LLM harness in `test/llm/` is
+# ordinary logic that costs money when it is wrong, so it is held to the same 80%
+# per file as `src/`. Only the test-support files stay out.
 coveragePathIgnorePatterns = [
   "dist/**",
   "scripts/**",
-  "test/**",
+  "test/e2e/**",
+  "test/utils.ts",
+  "test/start-server.ts",
   "src/web/client/components/**",
   "src/web/client/hooks/**",
   "src/web/client/addons/**",
