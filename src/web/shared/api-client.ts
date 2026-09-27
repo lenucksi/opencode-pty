@@ -5,6 +5,7 @@ import type {
   HealthResponse,
   ParentSessionTitlesResponse,
   PTYSessionInfo,
+  ServerInfoResponse,
 } from 'opencode-pty/web/shared/types'
 import { routes } from './routes'
 import type { UsageDocsResponse } from './usage-docs.ts'
@@ -182,6 +183,12 @@ export function createApiClient(baseUrl: string) {
 
     health: () =>
       apiFetchJson<typeof routes.health, 'GET', HealthResponse>(routes.health, {
+        method: 'GET',
+        baseUrl,
+      }),
+
+    server: () =>
+      apiFetchJson<typeof routes.server, 'GET', ServerInfoResponse>(routes.server, {
         method: 'GET',
         baseUrl,
       }),

@@ -1,5 +1,7 @@
-import { type RefObject, useCallback, useEffect, useRef } from 'react'
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
+import { describeBuild, type BuildInfo } from '../../../shared/build-info.ts'
+import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { ThemePreference } from '../lib/theme.ts'
 import { MAX_TERMINAL_FONT_SIZE, MIN_TERMINAL_FONT_SIZE } from '../lib/ui-prefs.ts'
 import { ThemeSwitch } from './theme-switch.tsx'
@@ -17,6 +19,11 @@ interface SettingsModalProps {
   onTerminalFontSizeChange: (size: number) => void
   showDebugBar: boolean
   onShowDebugBarChange: (show: boolean) => void
+  /**
+   * Build identity of the server this page is talking to, or `null` while it is
+   * still being fetched or if the request failed.
+   */
+  buildInfo: BuildInfo | null
 }
 
 /**
@@ -36,8 +43,30 @@ export function SettingsModal({
   onTerminalFontSizeChange,
   showDebugBar,
   onShowDebugBarChange,
+  buildInfo,
 }: SettingsModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  // The confirmation belongs next to the button, not in the terminal header: the
+  // settings dialog is a modal on top of that header, so feedback shown there is
+  // feedback the user cannot see.
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleCopyBuild = useCallback(() => {
+    if (buildInfo === null) return
+    void copyTextToClipboard(describeBuild(buildInfo)).then((copied) => {
+      setCopyState(copied ? 'copied' : 'failed')
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = setTimeout(() => setCopyState('idle'), 2000)
+    })
+  }, [buildInfo])
+
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    },
+    []
+  )
   // Read at event time: the native `close` event also fires when we close the
   // dialog ourselves, and only a user-initiated close should notify the parent.
   const openRef = useRef(open)
@@ -153,6 +182,36 @@ export function SettingsModal({
             />
             Show debug bar
           </label>
+        </section>
+
+        <section className="settings-section settings-section-build">
+          <span className="settings-label">Version</span>
+          {buildInfo === null ? (
+            // Saying nothing beats saying "unknown": a missing value that reads
+            // as missing is more useful than a confident wrong one.
+            // `aria-live` rather than `aria-labelledby`: the span has no role, so
+            // a labelledby would be inert, and what matters here is announcing
+            // that the value arrived - the section label is already on screen.
+            <span className="settings-build-value" aria-live="polite">
+              Checking…
+            </span>
+          ) : (
+            <span className="settings-build-row">
+              <button
+                type="button"
+                className="settings-build-value"
+                // A bug report needs the commit; one click saves the round trip
+                // through a terminal to run `git rev-parse`.
+                onClick={handleCopyBuild}
+                title="Copy version and commit"
+              >
+                {describeBuild(buildInfo)}
+              </button>
+              <span className="settings-build-copied" aria-live="polite">
+                {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : ''}
+              </span>
+            </span>
+          )}
         </section>
       </div>
     </dialog>

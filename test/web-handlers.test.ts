@@ -4,6 +4,9 @@ import { manager } from '../src/plugin/pty/manager.ts'
 import { setParentSessionTitleResolver } from '../src/plugin/pty/parent-session-title.ts'
 import { setPermissionAuthorizer } from '../src/plugin/pty/permissions.ts'
 import { handleHealth } from '../src/web/server/handlers/health.ts'
+import { handleServerInfo } from '../src/web/server/handlers/server-info.ts'
+import { describeBuild } from '../src/shared/build-info.ts'
+import { BUILD_INFO } from '../src/plugin/pty/build-info.ts'
 import {
   cleanupSession,
   clearSessions,
@@ -361,5 +364,40 @@ describe('handleUpgrade', () => {
 
     const response = handleUpgrade(server, request) as Response
     expect(response.status).toBe(400)
+  })
+})
+
+describe('handleServerInfo', () => {
+  const fakeServer = { url: new URL('http://localhost:4321/') } as never
+
+  it('reports which build is running, not which one the bundle was built from', async () => {
+    // The client's bundle can be older than the server it is talking to. Serving
+    // the server's own build identity is the only answer that stays true.
+    const payload = (await handleServerInfo(fakeServer).json()) as { build: typeof BUILD_INFO }
+
+    expect(payload.build).toEqual(BUILD_INFO)
+    expect(describeBuild(payload.build)).toContain(payload.build.version)
+  })
+
+  it('reports a commit or admits it has none', async () => {
+    const payload = (await handleServerInfo(fakeServer).json()) as { build: typeof BUILD_INFO }
+
+    if (payload.build.commit === null) {
+      // Never a fabricated hash: a placeholder sends someone looking for a commit
+      // that does not exist.
+      expect(payload.build.commit).toBeNull()
+    } else {
+      expect(payload.build.commit).toMatch(/^[0-9a-f]{7,}(-dirty)?$/)
+    }
+  })
+
+  it('keeps reporting where the server is', async () => {
+    const payload = (await handleServerInfo(fakeServer).json()) as {
+      uiUrl: string
+      port: number
+    }
+
+    expect(payload.uiUrl).toBe('http://localhost:4321/')
+    expect(payload.port).toBe(4321)
   })
 })

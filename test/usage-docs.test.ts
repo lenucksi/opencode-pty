@@ -154,6 +154,13 @@ describe('docs stay true to the implementation', () => {
     expect(PTY_USAGE_SKILL.content).toMatch(/pty_read.*cheaper/is)
   })
 
+  it('tells the human where to find the running build', () => {
+    // The one thing a bug report needs that nothing else in the UI provides.
+    const human = JSON.stringify(HUMAN_USAGE_DOCS)
+    expect(human).toMatch(/version/i)
+    expect(human).toMatch(/commit/i)
+  })
+
   it('documents the regex rejection path the reader can hit', () => {
     expect(PTY_USAGE_SKILL.content.toLowerCase()).toContain('backtracking')
   })
