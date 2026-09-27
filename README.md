@@ -93,6 +93,7 @@ opencode
 | `pty_read`  | Read output buffer with a token budget, character-cursor paging and optional regex filtering |
 | `pty_list`  | List all PTY sessions with status, PID, line count and character count      |
 | `pty_resize` | Change a running session's terminal size (cols, rows)                |
+| `pty_screen` | Render a session's screen: rows, cursor and per-cell colour        |
 | `pty_kill`  | Terminate a PTY, optionally cleanup the buffer                              |
 | `pty_wait`  | Block until a PTY session exits, optionally with a timeout                  |
 
@@ -115,6 +116,49 @@ pty_resize({ id, cols: 120, rows: 40 })
 for: out-of-range values are clamped. An omitted dimension keeps its current
 value. A program that read its size at startup will not react to a resize, so
 pass `cols`/`rows` to `pty_spawn` when that matters.
+
+### Seeing a screen instead of a stream
+
+Anything that paints a full screen - a TUI, a pager, `top`, `htop`, a progress
+display, a diff viewer - produces a byte stream that is not the information you
+want. The layout lives in escape sequences and cursor moves, and the last line of
+a repaint says nothing about what the program looks like.
+
+`pty_screen` replays the session's output through the same VT parser the web UI
+uses and returns the resulting two-dimensional screen:
+
+```
+<pty_screen id="pty_x" cols="80" rows="24" cursor="12,5" visible="true"
+            alternate="false" scrollback="0">
+01| Deploying to staging
+02| Building image ...
+...
+</pty_screen>
+```
+
+With `colors: true` a `<pty_spans>` block follows, listing every run of cells that
+differs from the default as `row col length style`, so a highlight can be matched
+against the row above it.
+
+`width` and `height` render at a size you choose without touching the running
+session, which is the cheap way to ask how a program behaves on a narrow terminal.
+
+| Tag               | Meaning                                                         |
+| ----------------- | --------------------------------------------------------------- |
+| `alternate="true"` | The program is on the alternate screen, so there is no history   |
+| `scrollback="N"`  | N lines above the screen; read them with `pty_read`              |
+| `partial="X/Y"`   | Only the last X of Y retained characters were replayed            |
+| `requested="CxR"` | The request exceeded the render budget, so this is scaled down     |
+
+Use `pty_read` for ordinary line output such as a build log: it is cheaper and
+its line numbers match what the process printed. Reach for `pty_screen` when the
+layout is the question.
+
+The screen is rebuilt by replaying rather than by keeping a live emulator per
+session: measured, one terminal costs about 21 MB, so a hundred live sessions
+would be two gigabytes. A bounded replay window costs a fraction of that and, for a
+full-screen program, produces an identical result - a TUI's last repaint carries
+the whole screen.
 
 ### Reading output without losing data
 

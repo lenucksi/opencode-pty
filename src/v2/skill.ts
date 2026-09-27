@@ -20,7 +20,7 @@ import type { SkillDraft, SkillInfoV2 } from './types.ts'
 export const PTY_USAGE_SKILL: SkillInfoV2 = {
   name: 'pty-usage',
   description:
-    'Use when a command needs a TTY: interactive prompts, long-running or background processes, TUIs (vim/htop), watching live output, or when the exit status matters. Covers pty_spawn/pty_write/pty_read/pty_wait/pty_list/pty_resize/pty_kill.',
+    'Use when a command needs a TTY: interactive prompts, long-running or background processes, TUIs (vim/htop), watching live output, or when the exit status matters. Covers pty_spawn/pty_write/pty_read/pty_wait/pty_list/pty_resize/pty_screen/pty_kill.',
   slash: false,
   location: 'opencode-pty:pty-usage',
   content: `# Using the pty_* tools
@@ -173,6 +173,50 @@ For interactive prompts, write the value and then a newline. Shells only
 execute a line once they receive it, so do not assume a command ran just
 because you saw the echoed characters.
 
+## Seeing a screen, not a stream
+
+\`pty_screen({ id, colors?, width?, height? })\` returns what a human would see:
+the two-dimensional screen, the cursor position, and optionally the colour and
+style of every run of cells that differ from the default.
+
+Use it when the *layout* is the question - a TUI, a pager, \`top\`, \`htop\`, a
+progress display, a diff viewer, a wizard. For ordinary line output such as a
+build log, \`pty_read\` is cheaper and its line numbers match what the process
+printed.
+
+\`\`\`
+<pty_screen id="pty_x" cols="80" rows="24" cursor="12,5" visible="true"
+            alternate="false" scrollback="0">
+01| Deploying to staging
+...
+</pty_screen>
+\`\`\`
+
+The body is the screen, one row per line, each prefixed with its row number. With
+\`colors: true\` a \`<pty_spans>\` block follows, listing runs as
+\`row col length style\` - a location and a style, so a highlight can be matched
+against the row above it.
+
+What the tags mean:
+- \`alternate="true"\` - the program is on the alternate screen (vim, htop, less).
+  There is no history there; \`pty_read\` for the full stream.
+- \`scrollback="N"\` - N lines above the screen. Read them with \`pty_read\`; they
+  are not part of the screen.
+- \`partial="X/Y"\` - only the last X of Y retained characters were replayed. The
+  screen is a reconstruction; a row the program painted long ago and never touched
+  again may be missing. Prefer \`pty_read\` when you need the whole history.
+- \`requested="CxR"\` - you asked for a screen larger than the render budget allows,
+  so this is the scaled-down version. The proportions are preserved.
+
+\`width\`/\`height\` render at a size you choose without touching the session. That
+is the cheap way to answer "how does this behave on a narrow terminal", and it
+costs no respawn.
+
+Prefer \`pty_read\` first and \`pty_screen\` when the read shows the output is
+painting a screen: escape sequences, a single enormous line, or a \`pty_list\`
+character count far larger than the line count. A large character count with
+almost no lines is the signature of a program that repaints its screen.
+
 ## Killing and cleanup
 
 - \`pty_kill({ id })\` terminates a running process (SIGTERM) and **keeps** the
@@ -222,6 +266,7 @@ The plugin also serves a web UI for a **human** to watch the sessions.
 | Start a process | \`pty_spawn\` |
 | Send keystrokes/input | \`pty_write\` |
 | Look at output now | \`pty_read\` |
+| See what the screen looks like | \`pty_screen\` |
 | Block until it exits | \`pty_wait\` |
 | See all sessions | \`pty_list\` |
 | Change the terminal size | \`pty_resize\` |

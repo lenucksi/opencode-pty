@@ -1,0 +1,40 @@
+Replays a PTY session's output through a terminal emulator and returns the screen.
+
+Use this instead of `pty_read` when you need to know what a program *looks like* -
+a TUI, a pager, `top`, `htop`, a progress display, anything that paints a screen.
+For ordinary line-oriented output such as a build log, `pty_read` is cheaper and
+its line numbers line up with what the process printed.
+
+Usage:
+- `id`: The PTY session ID
+- `colors`: include the colour and style of every run of cells that differ from
+  the default (default: false). Off by default because it costs tokens and most
+  questions are about layout, not colour.
+- `width`: render at this many columns instead of the session's own width. Use it
+  to see how a program behaves at a size you care about; the session's real
+  geometry is left untouched.
+- `height`: same, for rows
+
+Behavior:
+- The screen is rebuilt by replaying the retained output, so it is what a user
+  looking at the session would see, not the last thing the process wrote.
+- Trailing blank columns are dropped from each row. A row is still exactly
+  `height` rows tall; blank rows come back empty.
+- A wide character (CJK, emoji) occupies one grid cell but is two columns wide,
+  so a row's text can be wider on screen than its cell count suggests.
+- If the session's retained output is larger than one replay window, the tail is
+  used and the response says so. A row the program painted long ago and never
+  touched again will not be in that window.
+
+Output:
+- `<pty_screen>` carries `cols`, `rows`, the cursor as `cursor="x,y"`, whether
+  the cursor is visible, and whether the program is on the alternate screen.
+- The body is the screen, one row per line, each prefixed with its row number.
+- With `colors: true`, a `<pty_spans>` block follows, listing runs as
+  `row col length style`, e.g. `3 4 9 fg=#5fd75f bold`.
+- `scrollback` is the number of lines above the screen. Read those with
+  `pty_read`; they are not part of the screen.
+
+Cost: the replay is proportional to the retained output and bounded by the
+buffer cap. It is a read of the program's *state*, not a poll: prefer one call
+over repeated ones.

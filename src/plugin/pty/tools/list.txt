@@ -1,2 +1,5 @@
 Lists all PTY sessions (active and exited) with their status, PID, line count,
 character count and current terminal size.
+
+A session with a large character count but almost no lines is painting a screen;
+`pty_screen` returns what that screen looks like.

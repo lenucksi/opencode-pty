@@ -45,6 +45,7 @@ export const HUMAN_USAGE_DOCS: readonly UsageDocSection[] = [
     body: [
       'Click a session in the sidebar to attach it. Output streams in live over a WebSocket.',
       'Scrollback is preserved, and the Download menu saves the visible buffer or a range of it to a file.',
+      'A session running a full-screen program repaints the whole screen rather than printing lines, so it looks like it is producing a lot of output and showing very little. That is normal, and the agent has a separate view of the rendered screen.',
     ],
   },
   {
