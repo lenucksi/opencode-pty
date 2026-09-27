@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 
 import { describeBuild, UNKNOWN_BUILD } from '../src/shared/build-info.ts'
 import {
@@ -161,18 +161,27 @@ describe('the real git probe', () => {
     expect(createGitProbe(root)(['rev-parse', '--short', 'HEAD'])).toBeNull()
   })
 
-  it('reports this checkout honestly, dirty included', () => {
-    // The fakes above pin the contract; this pins that the shipped probe honours
-    // it. `git status --porcelain` prints nothing on a clean checkout, and a probe
-    // that returned that as an answer instead of null would label every clean
-    // build dirty - the kind of wrong that is invisible until someone trusts it.
-    const info = readBuildInfo()
+  it('labels this checkout the way git does, in whatever state it is in', () => {
+    // The fakes above pin the contract and the temp repository above pins the
+    // composition. What is left for the shipped probe is that it agrees with git
+    // about the *real* checkout it will be asked about.
+    //
+    // An earlier version of this asserted `dirty === true` and explained it with
+    // "this worktree has uncommitted changes". That made the test a snapshot of
+    // whatever the tree happened to look like: it failed on a clean checkout,
+    // passed on a dirty one, and would have passed just as happily with a probe
+    // that always answered "dirty". Comparing against `git status` asks the
+    // question that actually matters and is true in both states.
+    const status = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8' })
+    expect(status.status).toBe(0)
+    const actuallyDirty = status.stdout.trim() !== ''
+
+    const info = readBuildInfo(createGitProbe(dirname(dirname(BUILD_INFO_PATH))))
 
     expect(info.version).not.toBe(UNKNOWN_BUILD.version)
     expect(info.commit).toMatch(/^[0-9a-f]{7,}(-dirty)?$/)
-    // This worktree has uncommitted changes, so the label has to say so.
-    expect(info.dirty).toBe(true)
-    expect(info.commit?.endsWith('-dirty')).toBe(true)
+    expect(info.dirty).toBe(actuallyDirty)
+    expect(info.commit?.endsWith('-dirty')).toBe(actuallyDirty)
   })
 })
 
