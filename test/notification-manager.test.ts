@@ -35,6 +35,8 @@ function createSession(overrides: Partial<PTYSession> = {}): PTYSession {
     timedOut: false,
     buffer,
     process: null,
+    cols: 240,
+    rows: 80,
     ...overrides,
   }
 }

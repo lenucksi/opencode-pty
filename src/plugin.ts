@@ -3,6 +3,7 @@ import { createV1Adapter, installHostAdapter } from './adapters/index.ts'
 import { ptySpawn } from './plugin/pty/tools/spawn.ts'
 import { ptyWrite } from './plugin/pty/tools/write.ts'
 import { ptyRead } from './plugin/pty/tools/read.ts'
+import { ptyResize } from './plugin/pty/tools/resize.ts'
 import { ptyList } from './plugin/pty/tools/list.ts'
 import { ptyKill } from './plugin/pty/tools/kill.ts'
 import { ptyWait } from './plugin/pty/tools/wait.ts'
@@ -52,6 +53,7 @@ export const PTYPlugin = async (context: PluginContext): Promise<PluginResult> =
       pty_list: ptyList,
       pty_kill: ptyKill,
       pty_wait: ptyWait,
+      pty_resize: ptyResize,
     },
     config: async (input) => {
       if (!input.command) {

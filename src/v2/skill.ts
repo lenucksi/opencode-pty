@@ -1,4 +1,5 @@
 import { logPtyEvent, type PtyLogger } from '../plugin/pty/plugin-log.ts'
+import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../plugin/constants.ts'
 import {
   CHARS_PER_TOKEN,
   DEFAULT_READ_MAX_TOKENS,
@@ -19,7 +20,7 @@ import type { SkillDraft, SkillInfoV2 } from './types.ts'
 export const PTY_USAGE_SKILL: SkillInfoV2 = {
   name: 'pty-usage',
   description:
-    'Use when a command needs a TTY: interactive prompts, long-running or background processes, TUIs (vim/htop), watching live output, or when the exit status matters. Covers pty_spawn/pty_write/pty_read/pty_wait/pty_list/pty_kill.',
+    'Use when a command needs a TTY: interactive prompts, long-running or background processes, TUIs (vim/htop), watching live output, or when the exit status matters. Covers pty_spawn/pty_write/pty_read/pty_wait/pty_list/pty_resize/pty_kill.',
   slash: false,
   location: 'opencode-pty:pty-usage',
   content: `# Using the pty_* tools
@@ -49,7 +50,8 @@ pty_spawn({
   description: "Dev server",   // required, 5-10 words, used in listings and notifications
   workdir, env, title,         // optional
   notifyOnExit: true,          // push a <pty_exited> message when it finishes
-  timeoutSeconds: 600          // hard cap; process is killed after it elapses
+  timeoutSeconds: 600,         // hard cap; process is killed after it elapses
+  cols: 200, rows: 50          // optional; see "Terminal size" below
 })
 \`\`\`
 
@@ -61,6 +63,30 @@ initial \`status\` (\`running\`). Keep the id - every other tool needs it.
   running (dev servers, watchers, REPLs) unless the user explicitly asks.
 - **Do** set it for long commands you are waiting on: builds, unit tests,
   E2E suites, migrations, downloads. It is a safety net, not a scheduler.
+
+## Terminal size
+
+The result reports the size it got: \`Size: 240x80\`.
+
+- Without a terminal attached there is no honest "how wide would this run", so
+  the default is a roomy ${FALLBACK_TERMINAL_COLS}x${FALLBACK_TERMINAL_ROWS}. Anything that
+  formats a table, prints a wide line, or draws a full-screen UI is legible
+  there; a narrow default makes all three look broken.
+- If a human has the web UI open, a session started afterwards inherits the size
+  of their terminal pane instead, because that is the geometry they are looking
+  at.
+- Pass \`cols\`/\`rows\` to \`pty_spawn\` when the program cares. This is the reliable
+  route: a program that reads its size once, at startup, will not react to a
+  later resize.
+- \`pty_resize({ id, cols?, rows? })\` changes the geometry of a running session.
+  Omitting a dimension leaves it alone. The result reports the size that was
+  actually set, which is not always what you asked for - out-of-range values are
+  clamped.
+- \`pty_list\` shows each session's current size.
+
+Wrapping in the output is a geometry problem until proven otherwise. A table
+folded onto three lines usually means the program was given fewer columns than
+it wanted, not that the table is malformed.
 
 ## Reading output
 
@@ -198,6 +224,7 @@ The plugin also serves a web UI for a **human** to watch the sessions.
 | Look at output now | \`pty_read\` |
 | Block until it exits | \`pty_wait\` |
 | See all sessions | \`pty_list\` |
+| Change the terminal size | \`pty_resize\` |
 | Stop a process (keep logs) | \`pty_kill\` |
 `,
 }

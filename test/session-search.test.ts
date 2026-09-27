@@ -25,6 +25,8 @@ function session(overrides: Partial<PTYSessionInfo> & { id: string }): PTYSessio
     timedOut: false,
     pid: 1,
     lineCount: 0,
+    cols: 240,
+    rows: 80,
     charCount: 0,
     createdAt: '2026-09-26T10:00:00.000Z',
     ...overrides,

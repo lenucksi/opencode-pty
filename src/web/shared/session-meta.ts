@@ -79,7 +79,7 @@ export function sessionTooltip(session: PTYSessionInfo): string {
     session.id,
     parent,
     sessionCommandLine(session),
-    `${session.lineCount} lines · ${formatBytes(session.charCount)}`,
+    `${session.lineCount} lines · ${formatBytes(session.charCount)} · ${session.cols}x${session.rows}`,
     `workdir: ${session.workdir}`,
   ]
     .filter((line) => line.trim() !== '')
@@ -98,6 +98,7 @@ export function sessionDetailLine(session: PTYSessionInfo): string {
     // session.
     `${session.lineCount} lines`,
     `${formatBytes(session.charCount)}`,
+    `${session.cols}x${session.rows}`,
   ]
     .filter((part) => part !== '')
     .join(' · ')

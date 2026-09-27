@@ -1,0 +1,20 @@
+Sets the terminal size of a running PTY session.
+
+The process is told immediately (SIGWINCH), so full-screen programs redraw at the
+new geometry. Programs that only read the size once, at startup, need a `pty_spawn`
+with `cols`/`rows` instead.
+
+Usage:
+- `id`: The PTY session ID
+- `cols`: Terminal width in columns. Omit to keep the current width.
+- `rows`: Terminal height in rows. Omit to keep the current height.
+
+Behavior:
+- Both dimensions are clamped to sane bounds; an omitted dimension is left alone
+  rather than reset, so resizing only the width does not silently change the
+  height.
+- The new size is reported back and is also visible in `pty_list`.
+- Only the size changes. It does not clear the buffer, and it works on an exited
+  session's record but has no effect on a process that is already gone.
+
+To start a session at a specific size instead, pass `cols`/`rows` to `pty_spawn`.

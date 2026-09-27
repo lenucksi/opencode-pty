@@ -1,6 +1,7 @@
 import type { SessionNotifier } from '../../adapters/types.ts'
 import type { OpencodeClient } from '@opencode-ai/sdk'
 import { Terminal } from 'bun-pty'
+import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../constants.ts'
 import { NotificationManager } from './notification-manager.ts'
 import {
   OutputManager,
@@ -17,7 +18,7 @@ import {
 } from './session-store.ts'
 import { buildBoundedRaw, type BoundedRawResult } from './read-budget.ts'
 import { SessionLifecycleManager } from './session-lifecycle.ts'
-import type { PTYSessionInfo, SpawnOptions } from './types.ts'
+import type { PTYSession, PTYSessionInfo, SpawnOptions } from './types.ts'
 import { withSession } from './utils.ts'
 
 /** Details about a session that is only left on disk. */
@@ -133,8 +134,29 @@ function notifySessionRemoved(sessionId: string): void {
   }
 }
 
-class PTYManager {
+export class PTYManager {
   private lifecycleManager = new SessionLifecycleManager()
+  /**
+   * Terminal size a connected web client last reported, if any.
+   *
+   * Remembered so a later agent-spawned session inherits the geometry the human
+   * is actually looking at, instead of an arbitrary constant. Deliberately not
+   * written by `pty_resize`: an agent changing one session's size says nothing
+   * about the size of the human's window.
+   */
+  private lastClientSize: { cols: number; rows: number } | null = null
+
+  /** Record the size a web client's terminal pane is using. */
+  noteClientSize(cols: number, rows: number): void {
+    if (!Number.isFinite(cols) || !Number.isFinite(rows)) return
+    this.lastClientSize = { cols: Math.floor(cols), rows: Math.floor(rows) }
+  }
+
+  /** The size a new session would get right now, or null when nothing is known. */
+  clientSize(): { cols: number; rows: number } | null {
+    return this.lastClientSize
+  }
+
   private outputManager = new OutputManager()
   private notificationManager = new NotificationManager()
   private notifier: SessionNotifier | null = null
@@ -162,9 +184,28 @@ class PTYManager {
     }
   }
 
+  /**
+   * Start a session, giving it a terminal size it can actually work in.
+   *
+   * The size a web client last reported wins, because that is the only honest
+   * answer to "how wide would this run": it is the geometry a human is looking
+   * at right now. A spawn with no client attached falls back to a wide, tall
+   * default rather than the old 120x40, which made anything that formats a table
+   * or draws a full-screen UI look broken.
+   *
+   * An explicit `cols`/`rows` on the call always wins over both.
+   */
   spawn(opts: SpawnOptions): PTYSessionInfo {
+    const fallback = this.lastClientSize ?? {
+      cols: FALLBACK_TERMINAL_COLS,
+      rows: FALLBACK_TERMINAL_ROWS,
+    }
     const session = this.lifecycleManager.spawn(
-      opts,
+      {
+        ...opts,
+        cols: opts.cols ?? fallback.cols,
+        rows: opts.rows ?? fallback.rows,
+      },
       (session, data, offset) => {
         this.sessionStore.appendOutput(session.id, data)
         notifyRawOutput(session.id, data, offset)
@@ -226,6 +267,19 @@ class PTYManager {
   list(): PTYSessionInfo[] {
     const live = this.lifecycleManager.listSessions().map((s) => this.lifecycleManager.toInfo(s))
     return sortSessionsByTime(mergePersistedSessions(live, this.sessionStore.list()))
+  }
+
+  /**
+   * The live session object, including the PTY handle and the buffer.
+   *
+   * `get` returns the serialisable view, which is what most callers want. This is
+   * for the ones that need something the view cannot carry: the running process
+   * itself, the screen state, the buffer object. Returns null for an unknown or
+   * already-archived id rather than reaching into the store, because an archived
+   * transcript has no live process to inspect.
+   */
+  getSession(id: string): PTYSession | null {
+    return withSession(this.lifecycleManager, id, (session) => session, null)
   }
 
   get(id: string): PTYSessionInfo | null {
@@ -403,7 +457,7 @@ class PTYManager {
     return success
   }
 
-  resize(id: string, cols: number, rows: number): boolean {
+  resize(id: string, cols?: number, rows?: number): boolean {
     return this.lifecycleManager.resize(id, cols, rows)
   }
 

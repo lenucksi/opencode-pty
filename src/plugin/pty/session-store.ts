@@ -15,6 +15,7 @@ import type { BoundedReadResult, BoundedSearchResult } from './output-manager.ts
 import { logPtyEvent } from './plugin-log.ts'
 import { applyLineBudget } from './read-budget.ts'
 import { sessionsRoot } from './state-paths.ts'
+import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../constants.ts'
 import type { PTYSessionInfo } from './types.ts'
 
 /** Everything worth keeping about a session, including who asked for it. */
@@ -24,7 +25,11 @@ export interface PersistSessionInput extends PTYSessionInfo {
 }
 
 /** A session that only exists on disk now. */
-export interface PersistedSession extends Omit<PersistSessionInput, 'charCount'> {
+export interface PersistedSession extends Omit<PersistSessionInput, 'charCount' | 'cols' | 'rows'> {
+  /** Absent in archives written before the terminal size was recorded. */
+  cols?: number
+  /** Absent in archives written before the terminal size was recorded. */
+  rows?: number
   /**
    * Absent in archives written before char counts were recorded. Those rows fall
    * back to `bytes`, see `mergePersistedSessions`.
@@ -574,6 +579,12 @@ export function mergePersistedSessions(
       ...(entry.parentAgent === undefined ? {} : { parentAgent: entry.parentAgent }),
       ...(entry.endedAt === undefined ? {} : { endedAt: entry.endedAt }),
       lineCount: entry.lineCount,
+      // Archives written before the size was recorded fall back to the same
+      // geometry a headless spawn gets, so a listed size is never a guess that
+      // contradicts what the process actually ran at by more than the archive
+      // predates the field.
+      cols: entry.cols ?? FALLBACK_TERMINAL_COLS,
+      rows: entry.rows ?? FALLBACK_TERMINAL_ROWS,
       // Archives written before char counts existed carry UTF-8 `bytes` only.
       // UTF-8 never encodes a character in fewer than one byte, so that is an
       // upper bound rather than a wrong small number: the listing can over-state

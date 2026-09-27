@@ -50,6 +50,8 @@ function buildSession(): PTYSession {
     parentSessionId: 'parent-adapter',
     buffer: { length: 0, read: () => [] } as unknown as PTYSession['buffer'],
     process: null,
+    cols: 240,
+    rows: 80,
   }
 }
 

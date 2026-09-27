@@ -25,6 +25,15 @@ export interface PTYSession {
   timedOut: boolean
   buffer: RingBuffer
   process: IPty | null
+  /**
+   * Size the process was started with, and the size it has since been resized to.
+   *
+   * Recorded rather than inferred, because the alternative was a size nobody
+   * could read back: the agent had no way to learn what geometry a TUI was being
+   * given, so it could not tell a cramped program from a broken one.
+   */
+  cols: number
+  rows: number
 }
 
 export interface PTYSessionInfo {
@@ -49,6 +58,15 @@ export interface PTYSessionInfo {
   /** ISO timestamp of the end, when the session is no longer running. */
   endedAt?: string
   lineCount: number
+  /**
+   * Current terminal geometry.
+   *
+   * A program that formats for 80 columns but is given 40 wraps in the wrong
+   * places, and nothing in the output says why. Reporting the size makes that
+   * diagnosable from `pty_list` alone.
+   */
+  cols: number
+  rows: number
   /**
    * Characters currently retained in the buffer.
    *
@@ -77,6 +95,10 @@ export interface SpawnOptions {
   parentAgent?: string
   notifyOnExit?: boolean
   timeoutSeconds?: number
+  /** Terminal columns to start with; defaults to the last size a client reported. */
+  cols?: number
+  /** Terminal rows to start with; defaults to the last size a client reported. */
+  rows?: number
 }
 
 export interface ReadResult {

@@ -155,6 +155,10 @@ class WebSocketHandler {
   }
 
   private handleResize(ws: ServerWebSocket<undefined>, message: WSMessageClientResize) {
+    // Recorded before the resize is attempted: this message is the only place the
+    // server learns how big a human's terminal pane is, and a later agent-spawned
+    // session should inherit that rather than a constant.
+    manager.noteClientSize(message.cols, message.rows)
     const resized = manager.resize(message.sessionId, message.cols, message.rows)
     if (!resized) {
       const error: WSMessageServerError = {

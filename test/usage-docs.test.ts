@@ -8,6 +8,9 @@ import {
   MAX_READ_MAX_TOKENS,
 } from '../src/shared/constants.ts'
 import { ptyRead } from '../src/plugin/pty/tools/read.ts'
+import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
+import { ptyResize } from '../src/plugin/pty/tools/resize.ts'
+import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../src/plugin/constants.ts'
 import { resolveWebPort } from '../src/web/server/server.ts'
 import { handleUsageDocs } from '../src/web/server/handlers/usage-docs.ts'
 import { HUMAN_USAGE_DOCS, README_URL } from '../src/web/shared/usage-docs.ts'
@@ -115,6 +118,24 @@ describe('docs stay true to the implementation', () => {
     // The budget is only meaningful to a reader who can estimate its size.
     const approxChars = DEFAULT_READ_MAX_TOKENS * CHARS_PER_TOKEN
     expect(PTY_USAGE_SKILL.content).toContain(String(approxChars))
+  })
+
+  it('documents the terminal size the agent will actually get', () => {
+    // The old default was a constant nobody could see or change, so a program
+    // that wrapped badly was unexplainable from the agent's side.
+    expect(PTY_USAGE_SKILL.content).toContain(`${FALLBACK_TERMINAL_COLS}x${FALLBACK_TERMINAL_ROWS}`)
+    expect(PTY_USAGE_SKILL.content).toContain('pty_resize')
+  })
+
+  it('only documents geometry parameters pty_spawn really accepts', () => {
+    const args = Object.keys(ptySpawn.args ?? {})
+    expect(args).toContain('cols')
+    expect(args).toContain('rows')
+    // `pty_resize` is documented as the way to change a running session, so it
+    // has to be a real tool with real arguments.
+    expect(Object.keys(ptyResize.args ?? {})).toEqual(
+      expect.arrayContaining(['id', 'cols', 'rows'])
+    )
   })
 
   it('documents the regex rejection path the reader can hit', () => {
