@@ -225,9 +225,13 @@ almost no lines is the signature of a program that repaints its screen.
 
 - \`pty_kill({ id })\` terminates a running process (SIGTERM) and **keeps** the
   session and its buffer for log access. Prefer this.
-- \`cleanup: true\` removes the session entirely. It is **deprecated**:
-  discarding finished sessions is a human action in the web UI. Do not discard
-  sessions the human may still want to inspect.
+- \`cleanup: true\` removes the session and frees its output buffer. It is
+  **deprecated** and you should never pass it. Not "not for the human's
+  sessions" - never, including sessions you started yourself to check something.
+  A buffer you free is evidence you cannot get back, and across 15 measured runs
+  4 models freed one, one of them deleting the exact output it was reading and
+  recording that as "expected". If you are convinced a session is worthless,
+  leave it and say so; the human prunes.
 
 Finished sessions accumulate in the list on purpose; a human prunes them. Do
 not try to keep the list tidy by removing things.

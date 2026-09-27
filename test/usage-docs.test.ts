@@ -11,6 +11,7 @@ import { ptyRead } from '../src/plugin/pty/tools/read.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import { ptyResize } from '../src/plugin/pty/tools/resize.ts'
 import { ptyScreen } from '../src/plugin/pty/tools/screen.ts'
+import KILL_DESCRIPTION from '../src/plugin/pty/tools/kill.txt'
 import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../src/plugin/constants.ts'
 import { resolveWebPort } from '../src/web/server/server.ts'
 import { handleUsageDocs } from '../src/web/server/handlers/usage-docs.ts'
@@ -112,6 +113,31 @@ describe('docs stay true to the implementation', () => {
     expect(documented.length).toBeGreaterThan(0)
     for (const name of documented) {
       expect(Object.keys(ptyRead.args ?? {})).toContain(name)
+    }
+  })
+
+  it('does not steer the model away from the cursor it will need', () => {
+    // Measured, not hypothetical. Across 15 real runs the model was offered a cut
+    // with `nextSince` and raised `maxTokens` instead, twice to the 125000-token
+    // ceiling, reasoning "the payload is only 12KB". The description said
+    // "prefer a pattern over a larger budget", which reads as a recommendation
+    // *against* widening - exactly backwards, because widening is what made the
+    // model stop paging. It then re-typed the cursor from memory and got it wrong.
+    const field = ptyRead.args?.maxTokens as { description?: string } | undefined
+    const description = field?.description ?? ''
+    expect(description).toContain('nextSince')
+    expect(description).not.toMatch(/prefer a pattern over a larger budget/i)
+  })
+
+  it('tells the model never to free a buffer, not only that a human may want it', () => {
+    // The measured failure: 4 of 15 runs passed `cleanup: true`, one of them
+    // deleting the exact output it was reading, and wrote that it had been
+    // "expected". The guidance said "do not discard sessions the human may still
+    // want to inspect", which a model reads as excluding sessions it made for its
+    // own verification - and that is what it then treated itself as doing.
+    for (const text of [PTY_USAGE_SKILL.content, KILL_DESCRIPTION]) {
+      expect(text).toMatch(/never/i)
+      expect(text).not.toMatch(/may still want to inspect/i)
     }
   })
 

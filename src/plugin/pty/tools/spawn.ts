@@ -1,6 +1,7 @@
 import { tool } from '@opencode-ai/plugin'
 import { manager } from '../manager.ts'
 import { checkCommandPermission, checkWorkdirPermission } from '../permissions.ts'
+import { checkExecutable } from '../command-check.ts'
 import { describeError } from '../utils.ts'
 import DESCRIPTION from './spawn.txt'
 
@@ -74,6 +75,18 @@ export const ptySpawn = tool({
 
     if (args.workdir) {
       await checkWorkdirPermission(args.workdir)
+    }
+
+    // Before the spawn, while the command is still just a string. A relative
+    // path to a file without the execute bit otherwise comes back as a live
+    // session whose pty helper has already aborted, so the model gets a Bun
+    // crash dump in the buffer and a session that claims to be running.
+    const executable = checkExecutable(args.command, args.workdir, {
+      ...process.env,
+      ...args.env,
+    })
+    if (!executable.ok) {
+      throw new Error(`PTY spawn failed: ${executable.reason}`)
     }
 
     const sessionId = ctx.sessionID
