@@ -10,6 +10,8 @@ import {
   sessionSidebarMeta,
   sessionTooltip,
 } from '../../shared/session-meta.ts'
+import { countSessions, filterGroups, normalizeQuery } from '../../shared/session-search.ts'
+import { SessionSearch } from './session-search.tsx'
 import type { ThemePreference } from '../lib/theme.ts'
 import { ThemeSwitch } from './theme-switch.tsx'
 
@@ -244,10 +246,22 @@ export function Sidebar({
   docsButtonRef,
   settingsButtonRef,
 }: SidebarProps) {
+  const [query, setQuery] = useState('')
   const liveSessions = sessions.filter(isLive)
   const finishedSessions = sessions.filter((session) => !isLive(session))
-  const liveGroups = groupSessionsByParent(liveSessions)
-  const finishedGroups = groupSessionsByParent(finishedSessions)
+  const searching = normalizeQuery(query) !== null
+  const applyFilter = (list: PTYSessionInfo[]) =>
+    filterGroups(
+      groupSessionsByParent(list),
+      (group) => parentSessionGroupTitle(group, parentSessionTitles),
+      query
+    ).map(({ group, sessions: kept }) => ({ ...group, sessions: kept }))
+  const liveGroups = applyFilter(liveSessions)
+  const finishedGroups = applyFilter(finishedSessions)
+  // Derived from the surviving groups, not from a per-session match: a query can
+  // match only the group title and still keep every child visible.
+  const matchCount = countSessions(liveGroups) + countSessions(finishedGroups)
+  const nothingVisible = liveGroups.length === 0 && finishedGroups.length === 0
 
   return (
     <div className="sidebar">
@@ -280,8 +294,16 @@ export function Sidebar({
       <div className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
         {connected ? '● Connected' : '○ Disconnected'}
       </div>
+      <SessionSearch
+        value={query}
+        onChange={setQuery}
+        matchCount={matchCount}
+        searching={searching}
+      />
       <div className="session-list">
-        {sessions.length === 0 ? (
+        {searching && nothingVisible ? (
+          <div className="session-empty">No session matches “{query.trim()}”</div>
+        ) : sessions.length === 0 ? (
           <div className="session-empty">No active sessions</div>
         ) : (
           <>
@@ -289,7 +311,7 @@ export function Sidebar({
               title="Running"
               sectionClassName="session-section-running"
               groups={liveGroups}
-              emptyText="No running sessions"
+              emptyText={searching ? 'No running session matches' : 'No running sessions'}
               groupsStartOpen
               parentSessionTitles={parentSessionTitles}
               activeSession={activeSession}
@@ -301,7 +323,7 @@ export function Sidebar({
               title="Finished"
               sectionClassName="session-section-finished"
               groups={finishedGroups}
-              emptyText="No finished sessions"
+              emptyText={searching ? 'No finished session matches' : 'No finished sessions'}
               groupsStartOpen={false}
               parentSessionTitles={parentSessionTitles}
               activeSession={activeSession}

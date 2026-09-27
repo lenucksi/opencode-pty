@@ -615,14 +615,18 @@ body {
 .connection-status.disconnected {
   color: var(--danger);
 }
+/* Two rows on purpose: the theme switch needs 137px at 12px type, the two
+   buttons ~134px, and the sidebar offers 267px. Forcing a wrap keeps every
+   control whole at any width instead of clipping the last theme option. */
 .sidebar-header-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: stretch;
   gap: 8px;
   margin-top: 12px;
 }
 .sidebar-header-controls .theme-switch {
-  flex: 1;
+  flex: 1 0 100%;
   margin-top: 0;
 }
 .settings-btn {
@@ -643,6 +647,10 @@ body {
 .settings-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+.sidebar-header-controls .settings-btn {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .settings-dialog {
   margin: auto;
@@ -948,4 +956,69 @@ body {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Sidebar filter box, directly under the header controls. */
+.session-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.session-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12px;
+}
+.session-search-input::placeholder {
+  color: var(--fg-subtle);
+}
+.session-search-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* The native clear affordance duplicates our own button. */
+.session-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+.session-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.session-search-clear:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.session-search-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.session-search-count {
+  flex: 0 0 auto;
+  min-width: 18px;
+  padding: 1px 5px;
+  background: var(--accent-subtle);
+  border-radius: 9px;
+  color: var(--accent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }

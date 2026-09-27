@@ -120,13 +120,16 @@ export async function runLocalQualityGate(): Promise<number> {
       runDependencyCheck(NETWORK_STEP_TIMEOUT_MS)
     )
     await runSocketStep(recorder)
+    // Before Typecheck on purpose: the web client resolves `opencode-pty/web/*`
+    // through the package export map, which points at `dist/`. Typechecking code
+    // that imports the build output needs the build to exist.
+    await recorder.run('Production build for tests', () =>
+      runInherited('bun', ['run', 'build:prod'])
+    )
     await recorder.run('Typecheck', () => runInherited('bun', ['run', 'typecheck']))
     await recorder.run('Lint', () => runInherited('bun', ['run', 'lint']))
     await recorder.run('Format', () => runInherited('bun', ['run', 'format']))
     await recorder.run('Aislop', runAislopCheck)
-    await recorder.run('Production build for tests', () =>
-      runInherited('bun', ['run', 'build:prod'])
-    )
     await recorder.run('Unit tests', () => runInherited('bun', ['run', 'unittest']))
     await recorder.run('Coverage', () => runInherited('bun', ['run', 'test:coverage']))
     await recorder.run('End-to-end tests', runE2eStep)
