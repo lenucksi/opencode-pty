@@ -144,7 +144,7 @@ export const ptyWait = tool({
     }
     if (winner === TIMEOUT) {
       return [
-        `<pty_wait_timeout>`,
+        `<pty_wait_timeout id="${args.id}">`,
         `Session is still running after ${Math.max(0, args.timeoutSeconds ?? 0)}s.`,
         `Use pty_read for live output, pty_kill to stop it, or call pty_wait again with a longer timeout.`,
         `</pty_wait_timeout>`,

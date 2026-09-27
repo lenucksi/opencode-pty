@@ -52,7 +52,7 @@ describe('V2SessionNotifier', () => {
     expect(input.sessionID).toBe('parent-session')
     // Hosts validate prompt ids against the message-id brand (`msg_`).
     expect(input.id).toBe('msg_pty_pty_test_exited')
-    expect(input.text).toContain('<pty_exited>')
+    expect(input.text).toContain('<pty_exited id=')
     expect(input.text).toContain('Exit Code: 3')
     expect(input.text).toContain('ok=38')
     expect(entries.some((entry) => entry.includes('delivered'))).toBe(true)

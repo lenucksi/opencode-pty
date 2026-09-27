@@ -150,7 +150,7 @@ describe('PTY Tools', () => {
         timeoutSeconds: undefined,
       })
 
-      expect(result).toContain('<pty_spawned>')
+      expect(result).toContain('<pty_spawned id=')
       expect(result).toContain('ID: test-session-id')
       expect(result).toContain('Command: echo hello')
       expect(result).toContain('NotifyOnExit: false')
@@ -623,7 +623,7 @@ describe('PTY Tools', () => {
 
       const result = await ptyWait.execute({ id: 'test-session-id', timeoutSeconds: 0.05 }, ctx)
 
-      expect(result).toContain('<pty_wait_timeout>')
+      expect(result).toContain('<pty_wait_timeout id=')
       expect(result).toContain('still running after 0.05s')
       expect(result).toContain('</pty_wait_timeout>')
       expect(sessionUpdateCallbacks).toHaveLength(0)

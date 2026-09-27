@@ -42,7 +42,7 @@ describe('ptySpawn Integration', () => {
     )
 
     const resultText = typeof result === 'string' ? result : result.output
-    expect(resultText).toContain('<pty_spawned>')
+    expect(resultText).toContain('<pty_spawned id=')
     expect(resultText).toContain('Command: echo Hello World')
     expect(resultText).toContain('Status: running')
 
