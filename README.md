@@ -223,6 +223,13 @@ If you name it "task" or "process" or anything else, the agent will sometimes ru
 
 This will start the background sessions observer cockpit server and launch the browser with web UI.
 
+### Version
+
+Settings shows the version and the short Git commit of the build that is running,
+and one click copies it. The value is served by the server rather than baked into
+the page bundle, so a stale bundle sitting next to a freshly built server cannot
+report a commit that is not running. The same identity is on `GET /api/server`.
+
 ### Features
 
 - **Session List**: View all PTY sessions with status indicators, split into running and finished

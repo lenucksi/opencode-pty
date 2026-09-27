@@ -78,13 +78,14 @@
     "capture:demo": "bun scripts/capture-demo.ts",
     "build:plugin": "tsc -p tsconfig.build.json && bun x copyfiles -u 0 \"src/**/*.txt\" dist",
     "build:dev": "bun clean && bun build:plugin && vite build --mode development",
-    "build:prod": "bun clean && bun build:plugin && vite build --mode production",
+    "build:prod": "bun clean && bun run build:version && bun build:plugin && vite build --mode production",
     "prepack": "bun build:prod",
     "clean": "rm -rf dist playwright-report test-results",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format .",
-    "format:fix": "biome format --write ."
+    "format:fix": "biome format --write .",
+    "build:version": "bun scripts/version.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.14",

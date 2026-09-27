@@ -1,3 +1,4 @@
+import type { BuildInfo } from '../../shared/build-info.ts'
 import type { PTYSessionInfo, PTYStatus, SpawnOptions } from '../../plugin/pty/types'
 
 export type { PTYSessionInfo, PTYStatus, HealthResponse }
@@ -132,4 +133,20 @@ interface HealthResponse {
   websocket: { connections: number }
   memory?: { rss: number; heapUsed: number; heapTotal: number }
   responseTime?: number
+}
+
+/** `GET /api/server`: where the server is and which build it is. */
+export interface ServerInfoResponse {
+  build: BuildInfo
+  generation: string
+  uiUrl: string
+  port: number
+  sessions: { total: number; running: number; archived: number }
+  persist: { enabled: boolean; retention: RetentionPolicyShape }
+}
+
+interface RetentionPolicyShape {
+  maxSessions: number
+  maxAgeDays: number
+  maxBytesPerSession: number
 }

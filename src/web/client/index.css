@@ -761,6 +761,48 @@ body {
   accent-color: var(--accent);
 }
 
+.settings-build-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 22px;
+}
+/* Sized so the row does not jump when the confirmation appears. */
+.settings-build-copied {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+/* Build identity. A button rather than static text because the whole value is
+   there to be copied into a bug report, and a plain <span> gives nothing to
+   click. Reset to the surrounding surface so it does not read as a third
+   control competing with the toggles above it. */
+.settings-build-value {
+  align-self: flex-start;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--fg-muted);
+  cursor: copy;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+.settings-build-value:hover,
+.settings-build-value:focus-visible {
+  color: var(--fg);
+  border-color: var(--border);
+}
+/* The value doubles as its own affordance, so it must not look disabled while
+   the lookup is in flight. */
+span.settings-build-value {
+  cursor: default;
+  border-color: transparent;
+}
+
 /* Documentation dialog: same visual language as the settings dialog, but
    sized for reading and scrollable. */
 .docs-dialog {

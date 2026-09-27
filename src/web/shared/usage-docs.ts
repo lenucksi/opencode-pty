@@ -54,6 +54,7 @@ export const HUMAN_USAGE_DOCS: readonly UsageDocSection[] = [
     body: [
       'Type in the terminal pane to send keystrokes to the process. This is what makes REPLs, prompts and TUIs work.',
       'Mouse selection and copy work even while an application has captured the mouse; hold Shift to select text in that case.',
+      'Settings shows the version and Git commit of the build that is running. Click it to copy, and include it in a bug report - it names the code you are looking at.',
     ],
   },
   {

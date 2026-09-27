@@ -18,6 +18,7 @@ import { Sidebar } from './sidebar.tsx'
 import { SettingsModal } from './settings-modal.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
 import { api } from '../../shared/api-client.ts'
+import type { BuildInfo } from '../../../shared/build-info.ts'
 
 interface ActiveSessionViewProps {
   activeSession: PTYSessionInfo
@@ -136,6 +137,10 @@ export function App() {
 
   const terminalRef = useRef<RawTerminal>(null)
   const [copyFeedback, setCopyFeedback] = useState('')
+  // Fetched, not baked into the bundle: the bundle is built once, but the server
+  // it is talking to is whatever is listening, and a stale bundle next to a fresh
+  // server would report a commit that is not running.
+  const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null)
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -203,6 +208,23 @@ export function App() {
     },
     [getOffset, applySnapshot]
   )
+
+  useEffect(() => {
+    let cancelled = false
+    void api
+      .server()
+      .then((info) => {
+        if (!cancelled) setBuildInfo(info.build)
+      })
+      .catch(() => {
+        // A failed lookup leaves the row on "Checking…". Erroring loudly in a
+        // settings dialog the user opened to change their font size would be
+        // worse than a missing version, and the same value is on /api/server.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const showCopyFeedback = useCallback((message: string) => {
     setCopyFeedback(message)
@@ -484,6 +506,7 @@ export function App() {
         onTerminalFontSizeChange={setTerminalFontSize}
         showDebugBar={prefs.showDebugBar}
         onShowDebugBarChange={setShowDebugBar}
+        buildInfo={buildInfo}
       />
       <DocsModal
         open={docsOpen}
