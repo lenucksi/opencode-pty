@@ -21,6 +21,8 @@ function createSession(content: string, process: PTYSession['process'] = null): 
     parentSessionId: 'parent-output',
     buffer,
     process,
+    cols: 240,
+    rows: 80,
   }
 }
 

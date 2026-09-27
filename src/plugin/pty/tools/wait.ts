@@ -14,11 +14,11 @@ function isTerminal(session: PTYSessionInfo): boolean {
 }
 
 /**
- * Reads the tail of a session's buffer as numbered lines.
+ * Reads the tail of a session's buffer as numbered lines, within the read budget.
  *
- * The tail used to be clamped per line at a fixed 2000 characters with a bare
- * `...`, so the last line of a wait could be cut with nothing saying how much
- * was missing. The wait shares the read budget and reports its own accounting.
+ * Shares `applyLineBudget` with `pty_read`, so a line the budget cuts is marked
+ * the same way here as it is there, and the block says how much of the buffer the
+ * tail accounts for.
  */
 function formatTail(session: PTYSessionInfo, count: number, budget: number): TailLines {
   const offset = Math.max(0, session.lineCount - count)

@@ -12,7 +12,7 @@ export function formatSessionInfo(session: PTYSessionInfo): string[] {
     `  Command: ${session.command} ${session.args.join(' ')}`,
     `  Status: ${session.status}${timedOutInfo}${exitInfo}${exitSignal}`,
     `  PID: ${session.pid}${timeoutInfo}`,
-    `  Lines: ${session.lineCount} | Chars: ${session.charCount}`,
+    `  Lines: ${session.lineCount} | Chars: ${session.charCount} | Size: ${session.cols}x${session.rows}`,
     `  Workdir: ${session.workdir}`,
     `  Started: ${session.createdAt}`,
     ...(session.endedAt === undefined

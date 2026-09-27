@@ -62,6 +62,8 @@ describe('session handlers', () => {
     pid: 1,
     createdAt: new Date().toISOString(),
     lineCount: 0,
+    cols: 240,
+    rows: 80,
     charCount: 0,
   }
 

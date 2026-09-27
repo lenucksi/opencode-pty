@@ -26,6 +26,8 @@ function session(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
     pid: 4242,
     createdAt: '2026-09-21T15:00:00.000Z',
     lineCount: 12,
+    cols: 240,
+    rows: 80,
     charCount: 3200,
     ...overrides,
   }
@@ -126,7 +128,7 @@ describe('sessionTooltip', () => {
       'ansible-playbook site.yml --limit host',
       // The character count is here because a one-line, 85 kB TUI repaint looks
       // identical to an idle session without it.
-      '12 lines · 3.1 kB',
+      '12 lines · 3.1 kB · 240x80',
       'workdir: /srv/ansible',
     ])
   })

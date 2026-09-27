@@ -88,12 +88,33 @@ opencode
 
 | Tool        | Description                                                                 |
 | ----------- | --------------------------------------------------------------------------- |
-| `pty_spawn` | Create a new PTY session (command, args, workdir, env, title, notifyOnExit, timeoutSeconds) |
+| `pty_spawn` | Create a new PTY session (command, args, workdir, env, title, notifyOnExit, timeoutSeconds, cols, rows) |
 | `pty_write` | Send input to a PTY (text, escape sequences like `\x03` for Ctrl+C)         |
 | `pty_read`  | Read output buffer with a token budget, character-cursor paging and optional regex filtering |
 | `pty_list`  | List all PTY sessions with status, PID, line count and character count      |
+| `pty_resize` | Change a running session's terminal size (cols, rows)                |
 | `pty_kill`  | Terminate a PTY, optionally cleanup the buffer                              |
 | `pty_wait`  | Block until a PTY session exits, optionally with a timeout                  |
+
+### Terminal size
+
+Every session runs at a terminal geometry, and the size is reported rather than
+assumed. A session spawned with no terminal attached gets a roomy 240x80: a
+narrow default makes anything that formats a table, prints a wide line or draws a
+full-screen UI look broken rather than merely cramped.
+
+If a human has the web UI open, sessions started afterwards inherit the size of
+their terminal pane, because that is the geometry they are looking at.
+
+```bash
+pty_spawn({ command: "htop", args: [], description: "System monitor", cols: 200, rows: 50 })
+pty_resize({ id, cols: 120, rows: 40 })
+```
+
+`pty_resize` reports the size it actually set, which is not always what you asked
+for: out-of-range values are clamped. An omitted dimension keeps its current
+value. A program that read its size at startup will not react to a resize, so
+pass `cols`/`rows` to `pty_spawn` when that matters.
 
 ### Reading output without losing data
 

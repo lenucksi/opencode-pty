@@ -290,6 +290,8 @@ describe('archived budget parity', () => {
       createdAt: new Date(Date.UTC(2026, 8, 20, 18, 0, 0)).toISOString(),
       lineCount: output.split('\n').length,
       charCount: output.length,
+      cols: 240,
+      rows: 80,
     }
     store.startSession(info)
     store.appendOutput(info.id, output)
@@ -327,6 +329,8 @@ describe('archived budget parity', () => {
       pid: 4243,
       createdAt: new Date(Date.UTC(2026, 8, 20, 18, 0, 0)).toISOString(),
       lineCount: 1,
+      cols: 240,
+      rows: 80,
       charCount: source.length,
     }
     store.startSession(info)

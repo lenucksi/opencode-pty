@@ -45,6 +45,8 @@ function buildSession(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
     pid: 1,
     createdAt: new Date().toISOString(),
     lineCount: 0,
+    cols: 240,
+    rows: 80,
     charCount: 0,
     ...overrides,
   }

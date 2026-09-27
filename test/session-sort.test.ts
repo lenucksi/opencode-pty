@@ -16,6 +16,8 @@ function session(id: string, overrides: Partial<PTYSessionInfo> = {}): PTYSessio
     pid: 1,
     createdAt: '2026-09-21T15:00:00.000Z',
     lineCount: 0,
+    cols: 240,
+    rows: 80,
     charCount: 0,
     ...overrides,
   }

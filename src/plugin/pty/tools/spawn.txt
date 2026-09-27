@@ -7,8 +7,15 @@ Usage:
 - `description` (required): a clear, concise 5-10 word description
 - `notifyOnExit`: receive a `<pty_exited>` message when the process exits
 - `timeoutSeconds`: hard cap. Skip it for processes meant to keep running unless the user asks; set it for builds, tests, e2e runs or migrations you are waiting on
+- `cols`, `rows`: terminal geometry. Defaults to the size the web UI last reported, or 240x80 when no client is attached. Set it when the program formats for a width, prints wide lines or draws a full-screen UI
 
-Then use `pty_write` (input), `pty_read` (output), `pty_wait` (block until it exits), `pty_list`, `pty_kill`.
+The result reports the size the session got, as `Size: <cols>x<rows>`.
+
+Output folded onto the wrong line is a geometry problem until proven otherwise.
+`pty_resize` changes the size of a running session, but a program that read its
+size at startup will not react to that - respawn with `cols`/`rows` instead.
+
+Then use `pty_write` (input), `pty_read` (output), `pty_wait` (block until it exits), `pty_list`, `pty_resize`, `pty_kill`.
 To wait for completion prefer `pty_wait`, or `notifyOnExit` + `<pty_exited>`; never sleep+poll.
 
 See the `pty-usage` skill for the full guide.

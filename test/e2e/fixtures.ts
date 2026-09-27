@@ -18,7 +18,7 @@ async function waitForServer(url: string, timeoutMs = 15000): Promise<void> {
   throw new Error(`Server did not become ready at ${url} within ${timeoutMs}ms`)
 }
 
-type TestFixtures = {
+export type TestFixtures = {
   api: ReturnType<typeof createApiClient>
   autoCleanup: undefined
   wsClient: ManagedTestClient

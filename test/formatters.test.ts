@@ -20,6 +20,8 @@ function buildSession(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
     pid: 99,
     createdAt: '2026-01-01T00:00:00.000Z',
     lineCount: 3,
+    cols: 240,
+    rows: 80,
     charCount: 1600,
     ...overrides,
   }
@@ -32,7 +34,7 @@ describe('formatSessionInfo', () => {
       '  Command: echo hello',
       '  Status: running',
       '  PID: 99',
-      '  Lines: 3 | Chars: 1600',
+      '  Lines: 3 | Chars: 1600 | Size: 240x80',
       '  Workdir: /tmp',
       '  Started: 2026-01-01T00:00:00.000Z',
       '',

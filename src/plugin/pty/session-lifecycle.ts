@@ -2,8 +2,8 @@ import { spawn, type IPty } from 'bun-pty'
 import { RingBuffer } from './buffer.ts'
 import type { PTYSession, PTYSessionInfo, SpawnOptions } from './types.ts'
 import {
-  DEFAULT_TERMINAL_COLS,
-  DEFAULT_TERMINAL_ROWS,
+  FALLBACK_TERMINAL_COLS,
+  FALLBACK_TERMINAL_ROWS,
   MAX_TERMINAL_COLS,
   MAX_TERMINAL_ROWS,
   MIN_TERMINAL_COLS,
@@ -16,9 +16,34 @@ const SESSION_ID_BYTE_LENGTH = 4
  * Clamp a terminal dimension to the PTY-supported range. Non-finite values
  * (NaN/Infinity) or values outside the range fall back to sane bounds.
  */
-function clampDimension(value: number, min: number, max: number, fallback: number): number {
-  if (!Number.isFinite(value)) {
+function clampDimension(
+  value: number | undefined,
+  min: number,
+  max: number,
+  fallback: number
+): number {
+  if (value === undefined || !Number.isFinite(value)) {
     return fallback
+  }
+  return Math.min(max, Math.max(min, Math.floor(value)))
+}
+
+/**
+ * Clamp an explicitly requested size, falling back to the session's current one.
+ *
+ * Used by `pty_resize`, where a caller may legitimately send only one dimension
+ * and mean "keep the other". Falling back to the session's own size rather than
+ * to a global default is what makes a partial resize not silently reset the
+ * axis that was left out.
+ */
+function clampAgainst(
+  value: number | undefined,
+  min: number,
+  max: number,
+  current: number
+): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return current
   }
   return Math.min(max, Math.max(min, Math.floor(value)))
 }
@@ -94,6 +119,21 @@ export class SessionLifecycleManager {
       opts.title ?? (`${opts.command} ${args.join(' ')}`.trim() || `Terminal ${id.slice(-4)}`)
 
     const buffer = new RingBuffer()
+    // Resolved once, here, so the spawn, the info and any later resize all agree
+    // on a single number. Re-deriving it at each use is how a session ends up
+    // reporting 80x24 while actually running at 120x40.
+    const cols = clampDimension(
+      opts.cols,
+      MIN_TERMINAL_COLS,
+      MAX_TERMINAL_COLS,
+      FALLBACK_TERMINAL_COLS
+    )
+    const rows = clampDimension(
+      opts.rows,
+      MIN_TERMINAL_ROWS,
+      MAX_TERMINAL_ROWS,
+      FALLBACK_TERMINAL_ROWS
+    )
     return {
       id,
       title,
@@ -112,6 +152,8 @@ export class SessionLifecycleManager {
       timedOut: false,
       buffer,
       process: null, // will be set
+      cols,
+      rows,
     }
   }
 
@@ -119,8 +161,8 @@ export class SessionLifecycleManager {
     const env = { ...process.env, ...session.env } as Record<string, string>
     const ptyProcess: IPty = spawn(session.command, session.args, {
       name: 'xterm-256color',
-      cols: DEFAULT_TERMINAL_COLS,
-      rows: DEFAULT_TERMINAL_ROWS,
+      cols: session.cols,
+      rows: session.rows,
       cwd: session.workdir,
       env,
     })
@@ -191,30 +233,36 @@ export class SessionLifecycleManager {
     return true
   }
 
-  resize(id: string, cols: number, rows: number): boolean {
+  /**
+   * Resize a running session and record the size it ended up at.
+   *
+   * The recorded size is what callers report, so it must be the size the process
+   * actually has, not the size that was requested: a clamped request and an
+   * honoured one are indistinguishable otherwise.
+   *
+   * An omitted or non-finite dimension keeps the session's current value rather
+   * than snapping to a global default, so a partial resize cannot reset the axis
+   * the caller left out.
+   */
+  resize(id: string, cols?: number, rows?: number): boolean {
     const session = this.sessions.get(id)
     if (!session) {
       return false
     }
 
-    const boundedCols = clampDimension(
-      cols,
-      MIN_TERMINAL_COLS,
-      MAX_TERMINAL_COLS,
-      DEFAULT_TERMINAL_COLS
-    )
-    const boundedRows = clampDimension(
-      rows,
-      MIN_TERMINAL_ROWS,
-      MAX_TERMINAL_ROWS,
-      DEFAULT_TERMINAL_ROWS
-    )
+    const boundedCols = clampAgainst(cols, MIN_TERMINAL_COLS, MAX_TERMINAL_COLS, session.cols)
+    const boundedRows = clampAgainst(rows, MIN_TERMINAL_ROWS, MAX_TERMINAL_ROWS, session.rows)
 
     try {
       session.process?.resize(boundedCols, boundedRows)
     } catch {
       // Ignore resize errors (e.g. process already exited)
     }
+
+    // Recorded even when the process is already gone: the size is then the size
+    // this session ran at, which is exactly what a later reader wants to know.
+    session.cols = boundedCols
+    session.rows = boundedRows
 
     return true
   }
@@ -266,6 +314,8 @@ export class SessionLifecycleManager {
       parentAgent: session.parentAgent,
       lineCount: session.buffer.length,
       charCount: session.buffer.charLength,
+      cols: session.cols,
+      rows: session.rows,
     }
   }
 }

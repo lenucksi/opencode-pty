@@ -4,12 +4,12 @@ export type { LineSlice }
 import type { PTYSession, ReadResult, SearchResult } from './types.ts'
 
 /**
- * A read result plus the accounting the old shape threw away.
+ * A read result plus the accounting needed to describe it honestly.
  *
- * `ReadResult.hasMore` is line arithmetic only, which is why a line cut in half
- * used to be reported as "end of buffer": once the last line is returned the
- * line condition is satisfied regardless of whether that line was whole. These
- * fields let the caller compute the honest answer.
+ * `ReadResult.hasMore` is line arithmetic on its own, which cannot express a
+ * line that was cut in half: the line condition is satisfied once the last line
+ * is returned whether or not that line arrived whole. These fields carry the
+ * rest, so the caller never has to infer it.
  */
 export interface BoundedReadResult extends ReadResult {
   /** Per-line delivery detail; `lines` is the same text without the metadata. */

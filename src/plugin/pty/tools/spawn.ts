@@ -58,6 +58,16 @@ export const ptySpawn = tool({
       .describe(
         'Optional per-session timeout in seconds. The PTY is killed automatically when this duration elapses.'
       ),
+    cols: tool.schema
+      .number()
+      .optional()
+      .describe(
+        'Terminal width in columns. Defaults to the size the web UI last reported, or 240 when no client has ever connected. Set it when the program you are about to run cares about width (tables, wide output, TUIs).'
+      ),
+    rows: tool.schema
+      .number()
+      .optional()
+      .describe('Terminal height in rows. Defaults like `cols`.'),
   },
   async execute(args, ctx) {
     await checkCommandPermission(args.command, args.args ?? [])
@@ -80,6 +90,8 @@ export const ptySpawn = tool({
         parentAgent: ctx.agent,
         notifyOnExit: args.notifyOnExit,
         timeoutSeconds: args.timeoutSeconds,
+        cols: args.cols,
+        rows: args.rows,
       })
     )
 
@@ -93,6 +105,10 @@ export const ptySpawn = tool({
       `Status: ${info.status}`,
       `NotifyOnExit: ${info.notifyOnExit}`,
       `TimeoutSeconds: ${info.timeoutSeconds ?? 'none'}`,
+      // Reported so the model knows the geometry it got. A program that formats
+      // for 80 columns and is given 40 wraps in the wrong places, and the output
+      // itself never says why.
+      `Size: ${info.cols}x${info.rows}`,
       `</pty_spawned>`,
       ...(info.notifyOnExit ? ['', NOTIFY_ON_EXIT_INSTRUCTIONS] : []),
     ].join('\n')

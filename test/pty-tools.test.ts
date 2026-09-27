@@ -88,6 +88,8 @@ describe('PTY Tools', () => {
         timedOut: false,
         createdAt: new Date().toISOString(),
         lineCount: 0,
+        cols: 240,
+        rows: 80,
         charCount: 0,
       }))
     })
@@ -231,6 +233,8 @@ describe('PTY Tools', () => {
         pid: 12345,
         createdAt: new Date().toISOString(),
         lineCount: 2,
+        cols: 240,
+        rows: 80,
         charCount: 80,
       })
       spyOn(manager, 'read').mockReturnValue(boundedRead(['line 1', 'line 2']))
@@ -278,6 +282,8 @@ describe('PTY Tools', () => {
         pid: 12345,
         createdAt: new Date().toISOString(),
         lineCount: 2,
+        cols: 240,
+        rows: 80,
         charCount: 80,
       })
 
@@ -422,6 +428,8 @@ describe('PTY Tools', () => {
         pid: 12345,
         createdAt: new Date().toISOString(),
         lineCount: 2,
+        cols: 240,
+        rows: 80,
         charCount: 80,
       })
 
@@ -461,6 +469,8 @@ describe('PTY Tools', () => {
           timedOut: false,
           pid: 12345,
           lineCount: 10,
+          cols: 240,
+          rows: 80,
           charCount: 400,
           workdir: '/tmp',
           createdAt: new Date('2023-01-01T00:00:00Z').toISOString(),
@@ -534,6 +544,8 @@ describe('PTY Tools', () => {
         pid: 12345,
         createdAt: new Date().toISOString(),
         lineCount: 2,
+        cols: 240,
+        rows: 80,
         charCount: 80,
         ...overrides,
       } as PTYSessionInfo
