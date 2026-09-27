@@ -49,7 +49,7 @@ describe('ptyKill tool', () => {
 
     expect(manager.get).toHaveBeenCalledWith('pty_killwrite')
     expect(killSpy).toHaveBeenCalledWith('pty_killwrite', false)
-    expect(result).toContain('<pty_killed>')
+    expect(result).toContain('<pty_killed id=')
     expect(result).toContain('Killed: pty_killwrite (session retained for log access)')
     expect(result).toContain('Title: Kill/write session')
     expect(result).toContain('Command: cat ')

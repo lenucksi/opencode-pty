@@ -55,8 +55,10 @@ pty_spawn({
 })
 \`\`\`
 
-The result contains the session \`id\` (\`pty_xxxxxxxx\`), the \`pid\` and the
-initial \`status\` (\`running\`). Keep the id - every other tool needs it.
+The result tag is \`<pty_spawned id="pty_xxxxxxxx" cols="C" rows="R">\`. Read the
+\`id\` from that tag - it is the input to every other tool, and the \`ID:\` line in
+the body below it is the same value repeated for readability. The tag also
+carries the geometry the session got; the body repeats it as \`Size: <cols>x<rows>\`.
 
 **Timeout policy**
 - Do **not** set \`timeoutSeconds\` for processes that are supposed to keep
@@ -66,7 +68,9 @@ initial \`status\` (\`running\`). Keep the id - every other tool needs it.
 
 ## Terminal size
 
-The result reports the size it got: \`Size: 240x80\`.
+The size the session got is on the spawn tag as \`cols\`/\`rows\`, and repeated in
+the body as \`Size: 240x80\`. \`pty_resize\` reports the same two as attributes after
+a change, so the shape does not change between the two tools.
 
 - Without a terminal attached there is no honest "how wide would this run", so
   the default is a roomy ${FALLBACK_TERMINAL_COLS}x${FALLBACK_TERMINAL_ROWS}. Anything that

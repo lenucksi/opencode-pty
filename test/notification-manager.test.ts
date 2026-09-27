@@ -148,7 +148,7 @@ describe('NotificationManager', () => {
     expect(payload.path).toEqual({ id: 'parent-session-id' })
     expect(payload.body.agent).toBe('agent-two')
     expect(payload.body.parts).toHaveLength(1)
-    expect(payload.body.parts[0]?.text).toContain('<pty_exited>')
+    expect(payload.body.parts[0]?.text).toContain('<pty_exited id=')
     expect(payload.body.parts[0]?.text).toContain('Use pty_read to check the full output.')
   })
 
@@ -167,7 +167,7 @@ describe('NotificationManager', () => {
     expect(payload.path).toEqual({ id: 'parent-session-id' })
     expect(Object.hasOwn(payload.body, 'agent')).toBe(false)
     expect(payload.body.parts).toHaveLength(1)
-    expect(payload.body.parts[0]?.text).toContain('<pty_exited>')
+    expect(payload.body.parts[0]?.text).toContain('<pty_exited id=')
     expect(payload.body.parts[0]?.text).toContain(
       'Process failed. Use pty_read with the pattern parameter to search for errors in the output.'
     )

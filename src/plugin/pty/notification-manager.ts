@@ -109,7 +109,14 @@ export function buildExitNotification(session: PTYSession, exitCode: number): st
       : displayTitle
 
   const lines = [
-    '<pty_exited>',
+    // The id is an attribute, not only a prose line, and this is the tag where it
+    // matters most. The notification arrives on its own: the model is not in the
+    // middle of a call and may have several sessions running, so "which one just
+    // finished" is answerable only from this tag. With the id buried in prose the
+    // model has to parse it, and a parse error means it reads the wrong session's
+    // output - or concludes the tag carried no id and gives up on the tail below,
+    // which is the part worth having.
+    `<pty_exited id="${session.id}">`,
     `ID: ${session.id}`,
     `Description: ${truncatedTitle}`,
     `Exit Code: ${exitCode}`,

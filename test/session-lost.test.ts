@@ -59,7 +59,12 @@ describe('buildSessionNotFoundError', () => {
 
     const message = buildSessionNotFoundError('pty_lost').message
 
-    expect(message).toContain('<pty_session_lost>')
+    // The tag, with the id on it. This error is the model's only source for which
+    // id to read from the archive next, and it usually arrives right after a
+    // restart, when the model has lost track. Asserting only `<pty_session_lost>`
+    // would pass for a bare tag and leave the id in prose where it has to be
+    // parsed.
+    expect(message).toContain('<pty_session_lost id="pty_lost">')
     expect(message).toContain('Status: exited (lost in a PTY server restart)')
     expect(message).toContain('Generation: gen-previous')
     expect(message).toContain('ok=38 changed=13 failed=0')

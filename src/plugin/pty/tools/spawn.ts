@@ -95,8 +95,14 @@ export const ptySpawn = tool({
       })
     )
 
+    // The id and the geometry go on the tag as attributes, not only as prose
+    // below it. Every other result tag in this tool family carries `id="..."`,
+    // and a model that learned that convention from `pty_read`/`pty_screen`/
+    // `pty_wait` looks for it here and - finding only `ID: ...` - concludes the
+    // spawn returned no id at all. This is the one result a model must be able
+    // to read mechanically, because the id is the input to every other call.
     const output = [
-      `<pty_spawned>`,
+      `<pty_spawned id="${info.id}" cols="${info.cols}" rows="${info.rows}">`,
       `ID: ${info.id}`,
       `Title: ${info.title}`,
       `Command: ${info.command} ${info.args.join(' ')}`,

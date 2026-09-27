@@ -24,7 +24,10 @@ export function buildSessionNotFoundError(id: string): Error {
   }
 
   const lines = [
-    '<pty_session_lost>',
+    // Carries the id as an attribute because the model's next move is to read the
+    // archived tail, and this error is the only place it is told which id to use.
+    // After a restart this is often the first thing it sees about the session.
+    `<pty_session_lost id="${archived.id}">`,
     `ID: ${archived.id}`,
     `Status: ${archived.status}${archived.lost ? ' (lost in a PTY server restart)' : ''}`,
     `Generation: ${archived.generation}`,

@@ -32,7 +32,10 @@ export const ptyKill = tool({
     const cleanupNote = cleanup ? ' (session removed)' : ' (session retained for log access)'
 
     return [
-      `<pty_killed>`,
+      // `id` on the tag, like every other result. The model passed the id in, so
+      // it does not need it back - but a tag without it breaks the one convention
+      // that makes these results machine-readable.
+      `<pty_killed id="${args.id}">`,
       `${action}: ${args.id}${cleanupNote}`,
       `Title: ${session.title}`,
       `Command: ${session.command} ${session.args.join(' ')}`,
