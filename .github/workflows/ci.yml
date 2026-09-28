@@ -47,6 +47,44 @@ jobs:
       - name: Run quality step
         run: bun ${{matrix.quality}}
 
+  socket:
+    # A job of its own rather than a step in the matrix: the matrix runs six
+    # quality steps, and a dependency scan has no business running six times.
+    #
+    # This closes the real gap. `socket.yml` configures the Socket for GitHub app,
+    # and that app evaluates pull requests. This repository pushes straight to
+    # `local/modernized` and has no pull requests, so every Socket rule it declares
+    # - `hasNativeCode` for bun-pty, `gitDependency` for ghostty-web - was inert on
+    # GitHub. The scan ran only on the machine that happened to run the local gate.
+    name: Socket.dev policy scan
+    runs-on: ubuntu-24.04
+    # `socket ci` stalled indefinitely on a bad connection once, so the bound is
+    # explicit rather than the 6-hour default.
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Socket analyses git-sourced dependencies; it needs the history to tell
+          # a direct dependency from a transitive one.
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --force --frozen-lockfile
+
+      - name: Socket.dev policy scan
+        env:
+          CI: 'true'
+          SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}
+        # Pinned to the same version the local gate runs. test/ci-agrees.test.ts
+        # fails if the two drift apart.
+        run: bunx socket@1.1.180 ci
+
   dependency-review:
     runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request'
