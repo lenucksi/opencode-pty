@@ -71,6 +71,9 @@ export const HUMAN_USAGE_DOCS: readonly UsageDocSection[] = [
     body: [
       'Running and finished sessions are listed separately. Finished sessions keep their output until you discard them.',
       'Clear finished removes them from the list when you no longer need them. Killing stops a process but keeps its buffer.',
+      'Both go through a dialog that says how many finished sessions move to the trash and how many running processes will be stopped, because those two are not the same kind of action.',
+      'A removed session can be brought back with Undo as long as the server has not restarted. A stopped one comes back as a row without its output, so Undo is only offered for the ones whose output was kept.',
+      'Select sessions lets you pick rows individually or by group, including ones the current search hides. Those are listed in the confirmation, so a filtered view never silently changes what an action affects.',
       'Sessions are cleaned up automatically when the OpenCode conversation that created them ends.',
     ],
   },

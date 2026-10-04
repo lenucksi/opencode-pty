@@ -18,7 +18,13 @@ import {
 } from './session-store.ts'
 import { buildBoundedRaw, type BoundedRawResult } from './read-budget.ts'
 import { SessionLifecycleManager } from './session-lifecycle.ts'
-import type { PTYSession, PTYSessionInfo, SpawnOptions } from './types.ts'
+import type {
+  BulkRemoveResult,
+  PTYSession,
+  PTYSessionInfo,
+  RestoreSessionsResult,
+  SpawnOptions,
+} from './types.ts'
 import { withSession } from './utils.ts'
 
 /** Details about a session that is only left on disk. */
@@ -455,6 +461,69 @@ export class PTYManager {
       notifySessionRemoved(id)
     }
     return success
+  }
+
+  /**
+   * Remove many sessions in one call and report what happened to each id.
+   *
+   * Two kinds of target, and only one of them can be taken back:
+   *
+   * - an archived session moves to the trash, and `restoreSessions` brings it
+   *   back. Its output is a file that changed place.
+   * - a live session is killed with `cleanup`, which clears the buffer without
+   *   ever writing an archive. There is nothing to move, so nothing to restore.
+   *
+   * Reported rather than summarised for the same reason the ids are not guessed:
+   * the caller needs to warn before the call, and a total cannot carry it.
+   */
+  bulkRemove(ids: string[]): BulkRemoveResult {
+    // Presence in the lifecycle map is not the test. A session leaves that map
+    // only on `kill(cleanup)`, so an exited one is still in it - and an exited
+    // session is precisely the case whose output is on disk and therefore
+    // restorable. Asking "is it running" is what separates the two kinds.
+    const running = new Set(
+      this.lifecycleManager
+        .listSessions()
+        .filter((session) => session.status === 'running' || session.status === 'killing')
+        .map((session) => session.id)
+    )
+    const result: BulkRemoveResult = { removed: [], killed: [], failed: [] }
+
+    for (const id of ids) {
+      // Through `kill` for both kinds, not only the running one. It is the single
+      // path that clears the lifecycle map and the archive together, and a
+      // finished session is still in that map: removing only its archive leaves
+      // a row in `list()` that no longer has an output buffer behind it, so the
+      // item stays on screen and clicking it yields nothing.
+      const wasRunning = running.has(id)
+      if (!this.kill(id, true)) {
+        result.failed.push(id)
+        continue
+      }
+      if (wasRunning) result.killed.push(id)
+      else result.removed.push(id)
+    }
+
+    return result
+  }
+
+  /**
+   * Put removed sessions back.
+   *
+   * Only ids that `bulkRemove` reported as `removed` can come back. A killed
+   * session has no archive, so it lands in `failed` rather than appearing to
+   * succeed - a restore that reports success and leaves nothing behind is the
+   * one failure mode an undo must not have.
+   */
+  restoreSessions(ids: string[]): RestoreSessionsResult {
+    const result: RestoreSessionsResult = { restored: [], failed: [] }
+
+    for (const id of ids) {
+      if (this.sessionStore.restore(id)) result.restored.push(id)
+      else result.failed.push(id)
+    }
+
+    return result
   }
 
   resize(id: string, cols?: number, rows?: number): boolean {

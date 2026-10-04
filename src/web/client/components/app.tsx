@@ -14,11 +14,17 @@ import type { ThemeScheme } from '../lib/theme.ts'
 
 import { DocsModal } from './docs-modal.tsx'
 import { DownloadMenu } from './download-menu.tsx'
+import { RemoveSessionsDialog, UndoToast } from './remove-sessions-dialog.tsx'
 import { Sidebar } from './sidebar.tsx'
 import { SettingsModal } from './settings-modal.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
 import { api } from '../../shared/api-client.ts'
 import type { BuildInfo } from '../../../shared/build-info.ts'
+
+/** A session is live until its process has actually exited. */
+function isLiveStatus(status: PTYSessionInfo['status']): boolean {
+  return status === 'running' || status === 'killing'
+}
 
 interface ActiveSessionViewProps {
   activeSession: PTYSessionInfo
@@ -410,7 +416,6 @@ export function App() {
     handleKillSession,
     handleKillSessionById,
     handleRemoveSession,
-    handleClearFinished,
   } = useSessionManager({
     activeSession,
     setActiveSession,
@@ -424,6 +429,85 @@ export function App() {
 
   const removeSessionFromList = handleSessionRemoved
 
+  // The confirmation is a two-step on purpose: the plan is computed from the
+  // list the reader is looking at, then the ids are sent as they were picked.
+  // Recomputing the plan after the call would report what happened as what was
+  // agreed to.
+  const [removalPlan, setRemovalPlan] = useState<{
+    ids: string[]
+    removable: number
+    stoppable: number
+    hiddenByFilter: number
+  } | null>(null)
+  const [undoState, setUndoState] = useState<{ count: number; ids: string[] } | null>(null)
+
+  const startRemoval = useCallback(
+    (ids: string[], hiddenByFilter: number) => {
+      const stoppable = ids.filter((id) => {
+        const session = sessions.find((candidate) => candidate.id === id)
+        return session !== undefined && isLiveStatus(session.status)
+      }).length
+      setRemovalPlan({
+        ids,
+        removable: ids.length - stoppable,
+        stoppable,
+        hiddenByFilter,
+      })
+    },
+    [sessions]
+  )
+
+  const cancelRemoval = useCallback(() => setRemovalPlan(null), [])
+
+  const confirmRemoval = useCallback(async () => {
+    const plan = removalPlan
+    if (!plan) return
+    setRemovalPlan(null)
+    try {
+      const result = await api.sessions.bulkRemove({ ids: plan.ids })
+      const gone = [...result.removed, ...result.killed]
+      setSessions((previous) => previous.filter((session) => !gone.includes(session.id)))
+      setActiveSession((current) => (current && gone.includes(current.id) ? null : current))
+      // Undo offers back exactly what came back as restorable. A stopped session
+      // reappears as an empty row, so offering Undo for it and then producing
+      // nothing would be worse than not offering it.
+      setUndoState({ count: gone.length, ids: result.removed })
+    } catch (error) {
+      console.error('Failed to remove selected sessions', error)
+    }
+  }, [removalPlan])
+
+  const undoRemoval = useCallback(async () => {
+    const pending = undoState
+    if (!pending || pending.ids.length === 0) return
+    try {
+      await api.sessions.restore({ ids: pending.ids })
+      // Refetch rather than reinserting: a restored session's metadata has to
+      // come from the store, and inventing it here would be how a restored row
+      // ends up with the wrong exit code.
+      const refreshed = await api.sessions.list()
+      setSessions(refreshed)
+      setUndoState(null)
+    } catch (error) {
+      console.error('Failed to restore removed sessions', error)
+    }
+  }, [undoState])
+
+  const dismissUndo = useCallback(() => setUndoState(null), [])
+
+  /**
+   * `Clear finished` is the same action as a selection of every finished
+   * session, so it goes through the same dialog and the same undo. The old
+   * native `confirm()` named a count and nothing else, and it fired one request
+   * per session.
+   */
+  const handleClearFinishedClick = useCallback(() => {
+    const finishedIds = sessions
+      .filter((session) => !isLiveStatus(session.status))
+      .map((session) => session.id)
+    startRemoval(finishedIds, 0)
+  }, [sessions, startRemoval])
+
   const handleRemoveSessionClick = useCallback(
     async (session: PTYSessionInfo) => {
       const removed = await handleRemoveSession(session)
@@ -433,23 +517,6 @@ export function App() {
     },
     [handleRemoveSession, removeSessionFromList]
   )
-
-  const handleClearFinishedClick = useCallback(async () => {
-    const finishedSessions = sessions.filter(
-      (session) => session.status !== 'running' && session.status !== 'killing'
-    )
-    const cleared = await handleClearFinished(finishedSessions)
-    if (cleared) {
-      setSessions((prevSessions) =>
-        prevSessions.filter(
-          (session) => session.status === 'running' || session.status === 'killing'
-        )
-      )
-      setActiveSession((current) =>
-        current && (current.status === 'running' || current.status === 'killing') ? current : null
-      )
-    }
-  }, [sessions, handleClearFinished])
 
   return (
     <>
@@ -462,6 +529,7 @@ export function App() {
           onKillSession={handleKillSessionById}
           onRemoveSession={handleRemoveSessionClick}
           onClearFinished={handleClearFinishedClick}
+          onRemoveSelection={startRemoval}
           connected={wsConnected}
           themePreference={themePreference}
           onThemePreferenceChange={setThemePreference}
@@ -513,6 +581,23 @@ export function App() {
         onClose={() => setDocsOpen(false)}
         returnFocusRef={docsButtonRef}
         inertTarget={appShellRef}
+      />
+      <RemoveSessionsDialog
+        open={removalPlan !== null}
+        plan={{
+          removable: removalPlan?.removable ?? 0,
+          stoppable: removalPlan?.stoppable ?? 0,
+          hiddenByFilter: removalPlan?.hiddenByFilter ?? 0,
+        }}
+        confirmLabel={removalPlan?.stoppable ? 'Stop and remove' : 'Remove'}
+        onConfirm={() => void confirmRemoval()}
+        onClose={cancelRemoval}
+      />
+      <UndoToast
+        count={undoState?.count ?? 0}
+        restorable={undoState?.ids.length ?? 0}
+        onUndo={() => void undoRemoval()}
+        onDismiss={dismissUndo}
       />
     </>
   )

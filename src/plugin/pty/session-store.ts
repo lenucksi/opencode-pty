@@ -2,6 +2,7 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -122,6 +123,11 @@ export class SessionStore {
     try {
       mkdirSync(this.root, { recursive: true, mode: 0o700 })
       this.loadIndex()
+      // Before prune, and before anything can fill it. A trash entry that
+      // outlives the process it was created in is a directory nobody will ever
+      // restore, and an undo window that silently spans a restart promises more
+      // than it keeps.
+      this.purgeTrash()
       this.prune()
     } catch (error) {
       logPtyEvent('error', 'session store is unavailable, sessions will not be archived', error)
@@ -382,14 +388,113 @@ export class SessionStore {
 
   // ------------------------------------------------------------------ cleanup
 
+  /**
+   * Remove a session, reversibly.
+   *
+   * The directory moves to `.trash/` rather than disappearing, because removing a
+   * session destroys the only record of what a process printed. A human who
+   * removes the wrong five out of two hundred has no other way back, and the
+   * buffer is the evidence a bug report is built from.
+   *
+   * The trash is bounded by construction: `purgeTrash` runs before anything else
+   * at startup, so nothing is ever restorable across a restart. "Undo" therefore
+   * means until the server restarts, which is the window in which a mistake is
+   * actually noticed.
+   *
+   * `.trash` cannot collide with a session: ids are `pty_` plus eight hex
+   * digits, and `loadIndex` reads `index.json` rather than scanning the
+   * directory.
+   */
   remove(id: string): boolean {
+    if (!this.enabled) return false
+
+    const known = this.index.some((entry) => entry.id === id)
+    const source = this.sessionDir(id)
+    const target = this.trashedDir(id)
+    try {
+      mkdirSync(this.trashRoot(), { recursive: true, mode: 0o700 })
+      renameSync(source, target)
+    } catch (error) {
+      logPtyEvent('error', `failed to remove archived session ${id}`, error)
+      return false
+    }
+
+    if (known) {
+      this.index = this.index.filter((entry) => entry.id !== id)
+      this.saveIndex()
+    }
+    this.pending.delete(id)
+    this.bytesWritten.delete(id)
+    return known
+  }
+
+  /**
+   * Put a removed session back.
+   *
+   * The index entry is read out of the trashed `meta.json` rather than kept
+   * alongside, so a restore cannot invent metadata that the archive did not
+   * actually have.
+   */
+  restore(id: string): boolean {
+    if (!this.enabled) return false
+
+    const source = this.trashedDir(id)
+    if (!existsSync(source)) return false
+    try {
+      renameSync(source, this.sessionDir(id))
+    } catch (error) {
+      logPtyEvent('error', `failed to restore session ${id}`, error)
+      return false
+    }
+
+    const entry = this.readMeta(this.sessionDir(id))
+    if (entry !== null) {
+      this.upsertIndex(entry)
+      this.saveIndex()
+    }
+    return true
+  }
+
+  /** Ids that can still be restored, oldest trash entry last. */
+  trashed(): string[] {
+    if (!this.enabled) return []
+    try {
+      return readdirSync(this.trashRoot(), { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+    } catch {
+      return []
+    }
+  }
+
+  /** Empty the trash. Returns how many sessions went with it. */
+  purgeTrash(): number {
+    if (!this.enabled) return 0
+    const ids = this.trashed()
+    try {
+      rmSync(this.trashRoot(), { recursive: true, force: true })
+    } catch (error) {
+      logPtyEvent('error', 'failed to empty the session trash', error)
+      return 0
+    }
+    return ids.length
+  }
+
+  /**
+   * Remove without keeping a copy.
+   *
+   * The distinction from `remove` is the whole point of having both: `remove` is
+   * what a person does to two rows out of two hundred, `purge` is what "clear
+   * everything" means, and a clear that can be undone is not a clear.
+   */
+  purge(id: string): boolean {
     if (!this.enabled) return false
 
     const known = this.index.some((entry) => entry.id === id)
     try {
       rmSync(this.sessionDir(id), { recursive: true, force: true })
     } catch (error) {
-      logPtyEvent('error', `failed to remove archived session ${id}`, error)
+      logPtyEvent('error', `failed to purge archived session ${id}`, error)
       return false
     }
 
@@ -405,8 +510,12 @@ export class SessionStore {
   clear(): number {
     const ids = this.index.map((entry) => entry.id)
     for (const id of ids) {
-      this.remove(id)
+      this.purge(id)
     }
+    // The trash too. A session removed a moment ago is not in the index any
+    // more, so without this it would outlive the clear that was supposed to be
+    // final - and "clear everything you can undo" is not a clear.
+    this.purgeTrash()
     return ids.length
   }
 
@@ -444,6 +553,35 @@ export class SessionStore {
 
   private sessionDir(id: string): string {
     return join(this.root, id)
+  }
+
+  /**
+   * Where removed sessions wait to be restored.
+   *
+   * Inside `root` rather than beside it, because the store may not be able to
+   * write to the parent: `state-paths` puts the state directory where
+   * `XDG_STATE_HOME` points, and a sibling of that is not necessarily ours.
+   */
+  private trashRoot(): string {
+    return join(this.root, '.trash')
+  }
+
+  private trashedDir(id: string): string {
+    return join(this.trashRoot(), id)
+  }
+
+  /** The metadata a session directory carries, or null when it has none. */
+  private readMeta(dir: string): PersistedSession | null {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(join(dir, META_FILE), 'utf8'))
+      if (parsed && typeof parsed === 'object' && 'id' in parsed) {
+        return parsed as PersistedSession
+      }
+    } catch {
+      // A directory without readable metadata is still worth restoring; it just
+      // does not rejoin the index, so it stays invisible until its process ends.
+    }
+    return null
   }
 
   private ensureFlushTimer(): void {

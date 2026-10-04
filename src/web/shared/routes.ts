@@ -18,6 +18,23 @@ export const routes = {
   sessions: {
     path: '/api/sessions',
     methods: ['GET', 'POST', 'DELETE'] as const,
+    /**
+     * Collection-level removal, as opposed to `DELETE /api/sessions` which
+     * removes everything.
+     *
+     * `bulk` and `restore` are static segments sitting beside `session.path`'s
+     * `:id`. Bun prefers a static segment over a parameter, so these two win
+     * over `/api/sessions/:id`; a test pins that down, because the day somebody
+     * adds `POST /api/sessions/:id` the two start to mean the same thing.
+     */
+    bulk: {
+      path: '/api/sessions/bulk',
+      methods: ['POST'] as const,
+    },
+    restore: {
+      path: '/api/sessions/restore',
+      methods: ['POST'] as const,
+    },
   },
   parentSessions: {
     path: '/api/parent-sessions',

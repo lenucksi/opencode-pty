@@ -60,6 +60,61 @@ export function clearSessions() {
   return new JsonResponse({ success: true })
 }
 
+/**
+ * Read the `ids` array out of a removal or restore request.
+ *
+ * Answers null instead of throwing so each handler can phrase its own error, and
+ * filters nothing silently: an entry that is not a non-empty string fails the
+ * whole request rather than quietly shrinking the removal to the ids that
+ * happened to parse, because a request for 12 sessions that removes 11 is worse
+ * than one that removes none.
+ */
+async function readIds(req: Request): Promise<string[] | null> {
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return null
+  }
+  if (typeof body !== 'object' || body === null || !('ids' in body)) return null
+  const { ids } = body
+  if (!Array.isArray(ids)) return null
+
+  const parsed: string[] = []
+  for (const id of ids) {
+    if (typeof id !== 'string' || id === '') return null
+    parsed.push(id)
+  }
+  return parsed
+}
+
+export async function bulkRemoveSessions(
+  req: BunRequest<typeof routes.sessions.bulk.path>
+): Promise<Response> {
+  const ids = await readIds(req)
+  if (ids === null) {
+    return new ErrorResponse('Expected a body with an array of session ids', 400)
+  }
+  if (ids.length === 0) {
+    // A removal of nothing is a client bug, and answering 200 would hide it.
+    return new ErrorResponse('No session ids given', 400)
+  }
+  return new JsonResponse(manager.bulkRemove(ids))
+}
+
+export async function restoreSessions(
+  req: BunRequest<typeof routes.sessions.restore.path>
+): Promise<Response> {
+  const ids = await readIds(req)
+  if (ids === null) {
+    return new ErrorResponse('Expected a body with an array of session ids', 400)
+  }
+  if (ids.length === 0) {
+    return new ErrorResponse('No session ids given', 400)
+  }
+  return new JsonResponse(manager.restoreSessions(ids))
+}
+
 export function getSession(req: BunRequest<typeof routes.session.path>) {
   const session = manager.get(req.params.id)
   if (!session) {

@@ -53,9 +53,12 @@ extendedTest.describe('parent session groups', () => {
       await finishedGroup.locator('summary').click()
       await expect(finishedGroup).toHaveAttribute('open', '')
       await expect(finishedGroup.locator('.session-item')).toContainText('Finished child')
-
-      page.once('dialog', (dialog) => dialog.accept())
+      // `Clear finished` opens the native `<dialog>` that names the consequence,
+      // not a browser `confirm()`. There is nothing for `page.once('dialog')` to
+      // intercept any more, and the removal only happens on its confirm button.
       await page.getByRole('button', { name: 'Clear finished' }).click()
+      await expect(page.getByTestId('remove-sessions-dialog')).toBeVisible()
+      await page.getByTestId('remove-dialog-confirm').click()
       await expect(finishedSection.locator(GROUP)).toHaveCount(0)
       await expect(runningSection.locator(GROUP)).toHaveCount(2)
     }

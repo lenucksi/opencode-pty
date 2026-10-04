@@ -5,6 +5,7 @@ import { handleHealth } from './handlers/health.ts'
 import { getParentSessions } from './handlers/parent-sessions.ts'
 import { handleServerInfo } from './handlers/server-info.ts'
 import {
+  bulkRemoveSessions,
   cleanupSession,
   clearSessions,
   createSession,
@@ -14,6 +15,7 @@ import {
   getSession,
   getSessions,
   killSession,
+  restoreSessions,
   sendInput,
 } from './handlers/sessions.ts'
 import { buildStaticRoutes, serveIndexHtml } from './handlers/static.ts'
@@ -193,6 +195,12 @@ export class PTYServer implements Disposable {
           GET: getSessions,
           POST: createSession,
           DELETE: clearSessions,
+        },
+        [routes.sessions.bulk.path]: {
+          POST: bulkRemoveSessions,
+        },
+        [routes.sessions.restore.path]: {
+          POST: restoreSessions,
         },
         [routes.session.path]: {
           GET: getSession,
