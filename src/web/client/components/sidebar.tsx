@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
 
 import { WEB_API_PARENT_SESSION_ID } from '../../../plugin/constants.ts'
@@ -23,6 +23,12 @@ interface SidebarProps {
   onKillSession: (session: PTYSessionInfo) => void
   onRemoveSession: (session: PTYSessionInfo) => void
   onClearFinished: () => void
+  /**
+   * Remove exactly these ids. `hiddenByFilter` is how many of them the current
+   * search hides, and it is passed rather than recomputed because the confirmation
+   * has to name it before anything is gone.
+   */
+  onRemoveSelection: (ids: string[], hiddenByFilter: number) => void
   connected: boolean
   themePreference: ThemePreference
   onThemePreferenceChange: (preference: ThemePreference) => void
@@ -43,6 +49,10 @@ interface SessionGroupSectionProps {
   onSessionClick: (session: PTYSessionInfo) => void
   onKillSession: (session: PTYSessionInfo) => void
   onRemoveSession: (session: PTYSessionInfo) => void
+  selectionMode: boolean
+  selected: ReadonlySet<string>
+  onToggleSelected: (session: PTYSessionInfo) => void
+  onToggleGroup: (sessions: PTYSessionInfo[]) => void
   action?: React.ReactNode
 }
 
@@ -61,12 +71,18 @@ function SessionItem({
   onSessionClick,
   onKillSession,
   onRemoveSession,
+  selectionMode,
+  selected,
+  onToggleSelected,
 }: {
   session: PTYSessionInfo
   activeSession: PTYSessionInfo | null
   onSessionClick: (session: PTYSessionInfo) => void
   onKillSession: (session: PTYSessionInfo) => void
   onRemoveSession: (session: PTYSessionInfo) => void
+  selectionMode: boolean
+  selected: boolean
+  onToggleSelected: (session: PTYSessionInfo) => void
 }) {
   const label = sessionLabel(session)
   const canKill = session.status === 'running'
@@ -74,6 +90,22 @@ function SessionItem({
 
   return (
     <div className={`session-row ${isFinished ? 'finished' : ''}`}>
+      {/*
+       * A real checkbox, not a div with a click handler. In selection mode the
+       * whole row is a label target, so the control has to expose its own state
+       * to assistive technology - `aria-pressed` on a button would announce a
+       * toggle without saying whether the thing is selected right now.
+       */}
+      {selectionMode ? (
+        <input
+          type="checkbox"
+          className="session-select"
+          checked={selected}
+          onChange={() => onToggleSelected(session)}
+          aria-label={`Select session ${label}`}
+          data-testid={`session-select-${session.id}`}
+        />
+      ) : null}
       <button
         type="button"
         className={`session-item ${activeSession?.id === session.id ? 'active' : ''}`}
@@ -92,30 +124,35 @@ function SessionItem({
           {session.lost ? <span className="session-lost">lost in a restart</span> : null}
         </div>
       </button>
-      <div className="session-actions">
-        {canKill ? (
-          <button
-            type="button"
-            className="session-action session-action-kill"
-            title="Kill session"
-            aria-label={`Kill session ${label}`}
-            onClick={() => onKillSession(session)}
-          >
-            Kill
-          </button>
-        ) : null}
-        {isFinished ? (
-          <button
-            type="button"
-            className="session-action session-action-remove"
-            title="Remove finished session"
-            aria-label={`Remove finished session ${label}`}
-            onClick={() => onRemoveSession(session)}
-          >
-            Remove
-          </button>
-        ) : null}
-      </div>
+      {/* The per-row actions are a liability in selection mode: a Remove
+            button next to a checkbox invites removing the one you did not mean
+            to. They stay reachable outside it. */}
+      {selectionMode ? null : (
+        <div className="session-actions">
+          {canKill ? (
+            <button
+              type="button"
+              className="session-action session-action-kill"
+              title="Kill session"
+              aria-label={`Kill session ${label}`}
+              onClick={() => onKillSession(session)}
+            >
+              Kill
+            </button>
+          ) : null}
+          {isFinished ? (
+            <button
+              type="button"
+              className="session-action session-action-remove"
+              title="Remove finished session"
+              aria-label={`Remove finished session ${label}`}
+              onClick={() => onRemoveSession(session)}
+            >
+              Remove
+            </button>
+          ) : null}
+        </div>
+      )}
     </div>
   )
 }
@@ -128,6 +165,10 @@ function SessionGroup({
   onSessionClick,
   onKillSession,
   onRemoveSession,
+  selectionMode,
+  selected,
+  onToggleSelected,
+  onToggleGroup,
 }: {
   group: PTYSessionGroup
   startOpen: boolean
@@ -136,6 +177,11 @@ function SessionGroup({
   onSessionClick: (session: PTYSessionInfo) => void
   onKillSession: (session: PTYSessionInfo) => void
   onRemoveSession: (session: PTYSessionInfo) => void
+  selectionMode: boolean
+  /** Ids selected anywhere in this group's sessions, whether or not they are shown. */
+  selected: ReadonlySet<string>
+  onToggleSelected: (session: PTYSessionInfo) => void
+  onToggleGroup: (sessions: PTYSessionInfo[]) => void
 }) {
   const title = parentSessionGroupTitle(group, parentSessionTitles)
   const containsActiveSession = group.sessions.some((session) => session.id === activeSession?.id)
@@ -153,6 +199,17 @@ function SessionGroup({
   ]
     .filter(Boolean)
     .join('\n')
+  const selectedHere = group.sessions.filter((session) => selected.has(session.id)).length
+  const allSelected = group.sessions.length > 0 && selectedHere === group.sessions.length
+  const someSelected = selectedHere > 0 && !allSelected
+  const groupSelectRef = useRef<HTMLInputElement>(null)
+
+  // `indeterminate` has no HTML attribute - it only exists as a property, so it
+  // has to be set after render or a partly selected group reads as unselected.
+  useEffect(() => {
+    const input = groupSelectRef.current
+    if (input) input.indeterminate = someSelected
+  }, [someSelected])
 
   return (
     <details
@@ -163,6 +220,23 @@ function SessionGroup({
       data-testid="parent-session-group"
     >
       <summary className="parent-session-summary" title={tooltip}>
+        {/*
+         * Inside the summary on purpose: a group's checkbox is a way to select
+         * the group, and it has to sit where the group is named. The click
+         * handler stops the event so choosing a group does not also fold it.
+         */}
+        {selectionMode ? (
+          <input
+            type="checkbox"
+            ref={groupSelectRef}
+            className="session-group-select"
+            checked={allSelected}
+            onClick={(event) => event.stopPropagation()}
+            onChange={() => onToggleGroup(group.sessions)}
+            aria-label={`Select all sessions in ${title}`}
+            data-testid={`group-select-${group.key}`}
+          />
+        ) : null}
         <span className="parent-session-title">{title}</span>
         <span className="parent-session-meta">
           {group.parentAgent ? <span>{group.parentAgent}</span> : null}
@@ -181,6 +255,9 @@ function SessionGroup({
             onSessionClick={onSessionClick}
             onKillSession={onKillSession}
             onRemoveSession={onRemoveSession}
+            selectionMode={selectionMode}
+            selected={selected.has(session.id)}
+            onToggleSelected={onToggleSelected}
           />
         ))}
       </div>
@@ -199,6 +276,10 @@ function SessionGroupSection({
   onSessionClick,
   onKillSession,
   onRemoveSession,
+  selectionMode,
+  selected,
+  onToggleSelected,
+  onToggleGroup,
   action,
 }: SessionGroupSectionProps) {
   const sessionCount = groups.reduce((count, group) => count + group.sessions.length, 0)
@@ -223,6 +304,10 @@ function SessionGroupSection({
             onSessionClick={onSessionClick}
             onKillSession={onKillSession}
             onRemoveSession={onRemoveSession}
+            selectionMode={selectionMode}
+            selected={selected}
+            onToggleSelected={onToggleSelected}
+            onToggleGroup={onToggleGroup}
           />
         ))
       )}
@@ -238,6 +323,7 @@ export function Sidebar({
   onKillSession,
   onRemoveSession,
   onClearFinished,
+  onRemoveSelection,
   connected,
   themePreference,
   onThemePreferenceChange,
@@ -247,6 +333,8 @@ export function Sidebar({
   settingsButtonRef,
 }: SidebarProps) {
   const [query, setQuery] = useState('')
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set<string>())
   const liveSessions = sessions.filter(isLive)
   const finishedSessions = sessions.filter((session) => !isLive(session))
   const searching = normalizeQuery(query) !== null
@@ -262,6 +350,61 @@ export function Sidebar({
   // match only the group title and still keep every child visible.
   const matchCount = countSessions(liveGroups) + countSessions(finishedGroups)
   const nothingVisible = liveGroups.length === 0 && finishedGroups.length === 0
+
+  // Selection is per id and survives the filter, on purpose: the filter decides
+  // what a reader sees, the selection decides what an action affects, and a
+  // search that silently shrank a selection would remove rows nobody could see
+  // had been picked. The count of hidden picks is reported instead of hidden.
+  const visibleIds = [...liveGroups, ...finishedGroups].flatMap((group) =>
+    group.sessions.map((session) => session.id)
+  )
+  const hiddenSelected = [...selected].filter((id) => !visibleIds.includes(id)).length
+
+  const toggleSelected = useCallback((session: PTYSessionInfo) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(session.id)) next.delete(session.id)
+      else next.add(session.id)
+      return next
+    })
+  }, [])
+
+  const toggleGroup = useCallback((groupSessions: PTYSessionInfo[]) => {
+    setSelected((current) => {
+      const allPicked = groupSessions.every((session) => current.has(session.id))
+      const next = new Set(current)
+      for (const session of groupSessions) {
+        if (allPicked) next.delete(session.id)
+        else next.add(session.id)
+      }
+      return next
+    })
+  }, [])
+
+  const selectAllVisible = useCallback(() => {
+    setSelected((current) => new Set([...current, ...visibleIds]))
+  }, [visibleIds])
+
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false)
+    setSelected(new Set())
+  }, [])
+
+  // ESC leaves selection mode, the way it leaves the dialogs. Bound while the
+  // mode is on so it cannot swallow ESC anywhere else in the app.
+  useEffect(() => {
+    if (!selectionMode) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') exitSelection()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [selectionMode, exitSelection])
+
+  const handleRemoveSelection = useCallback(() => {
+    if (selected.size === 0) return
+    onRemoveSelection([...selected], hiddenSelected)
+  }, [selected, hiddenSelected, onRemoveSelection])
 
   return (
     <div className="sidebar">
@@ -300,6 +443,64 @@ export function Sidebar({
         matchCount={matchCount}
         searching={searching}
       />
+      {selectionMode ? (
+        <div className="selection-toolbar" data-testid="selection-toolbar">
+          {/* aria-live because the count changes on every click and nothing
+              else on screen moves when it does. */}
+          <span className="selection-count" aria-live="polite" data-testid="selection-count">
+            {selected.size} selected
+          </span>
+          {hiddenSelected > 0 ? (
+            <span className="selection-hidden" data-testid="selection-hidden">
+              {hiddenSelected} hidden by search
+              <button
+                type="button"
+                className="selection-show-hidden"
+                onClick={() => setQuery('')}
+                data-testid="selection-show-hidden"
+              >
+                Show
+              </button>
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="selection-select-visible"
+            onClick={selectAllVisible}
+            data-testid="selection-select-visible"
+          >
+            Select all visible
+          </button>
+          <button
+            type="button"
+            className="selection-remove"
+            onClick={handleRemoveSelection}
+            disabled={selected.size === 0}
+            data-testid="selection-remove"
+          >
+            Remove selected
+          </button>
+          <button
+            type="button"
+            className="selection-cancel"
+            onClick={exitSelection}
+            data-testid="selection-cancel"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : sessions.length > 0 ? (
+        <div className="selection-toolbar selection-toolbar-idle">
+          <button
+            type="button"
+            className="selection-enter"
+            onClick={() => setSelectionMode(true)}
+            data-testid="selection-enter"
+          >
+            Select sessions
+          </button>
+        </div>
+      ) : null}
       <div className="session-list">
         {searching && nothingVisible ? (
           <div className="session-empty">No session matches “{query.trim()}”</div>
@@ -318,6 +519,10 @@ export function Sidebar({
               onSessionClick={onSessionClick}
               onKillSession={onKillSession}
               onRemoveSession={onRemoveSession}
+              selectionMode={selectionMode}
+              selected={selected}
+              onToggleSelected={toggleSelected}
+              onToggleGroup={toggleGroup}
             />
             <SessionGroupSection
               title="Finished"
@@ -330,6 +535,10 @@ export function Sidebar({
               onSessionClick={onSessionClick}
               onKillSession={onKillSession}
               onRemoveSession={onRemoveSession}
+              selectionMode={selectionMode}
+              selected={selected}
+              onToggleSelected={toggleSelected}
+              onToggleGroup={toggleGroup}
               action={
                 finishedSessions.length > 0 ? (
                   <button type="button" className="clear-finished-btn" onClick={onClearFinished}>

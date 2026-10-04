@@ -2,9 +2,11 @@
 // Uses the structured routes to ensure correct methods and parameters
 
 import type {
+  BulkRemoveResult,
   HealthResponse,
   ParentSessionTitlesResponse,
   PTYSessionInfo,
+  RestoreSessionsResult,
   ServerInfoResponse,
 } from 'opencode-pty/web/shared/types'
 import { routes } from './routes'
@@ -119,6 +121,27 @@ export function createApiClient(baseUrl: string) {
           method: 'DELETE',
           baseUrl,
         }),
+
+      /**
+       * Remove exactly these sessions, in one round trip.
+       *
+       * One request rather than one per id because the interesting case is two
+       * hundred finished sessions, and two hundred requests is a spinner and a
+       * slow server for no reason.
+       */
+      bulkRemove: (body: { ids: string[] }) =>
+        apiFetchJson<typeof routes.sessions.bulk, 'POST', BulkRemoveResult>(routes.sessions.bulk, {
+          method: 'POST',
+          body,
+          baseUrl,
+        }),
+
+      /** Undo a `bulkRemove`. Only ids reported as `removed` can come back. */
+      restore: (body: { ids: string[] }) =>
+        apiFetchJson<typeof routes.sessions.restore, 'POST', RestoreSessionsResult>(
+          routes.sessions.restore,
+          { method: 'POST', body, baseUrl }
+        ),
     },
 
     parentSessions: {

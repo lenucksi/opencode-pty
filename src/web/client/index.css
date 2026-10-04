@@ -310,12 +310,129 @@ body {
   background: var(--danger-subtle);
   border-color: var(--danger-solid);
 }
+/* ---------------------------------------------------------------- selection */
+
+/*
+ * The toolbar carries the count, so it stays visible while the list scrolls.
+ * It is not sticky because the sidebar itself scrolls with the sessions; the
+ * point is only that the count is never inside the scrolled area.
+ */
+.selection-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.selection-toolbar-idle {
+  border-bottom: none;
+  background: transparent;
+  padding: 4px 12px 8px;
+}
+.selection-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.selection-hidden {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  /* The one thing in this toolbar that is a warning about something invisible.
+     Amber rather than red: nothing has gone wrong, but something is off-screen. */
+  color: var(--purple);
+}
+.selection-show-hidden {
+  padding: 1px 6px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.selection-show-hidden:hover {
+  background: var(--bg-hover);
+}
+.selection-select-visible,
+.selection-cancel,
+.selection-enter {
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.selection-select-visible:hover,
+.selection-cancel:hover,
+.selection-enter:hover {
+  background: var(--bg-hover);
+}
+.selection-remove {
+  margin-left: auto;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--danger);
+  cursor: pointer;
+}
+.selection-remove:hover:not(:disabled) {
+  background: var(--danger-subtle);
+  border-color: var(--danger-solid);
+}
+/* Disabled rather than hidden: the button stays in place so the toolbar does not
+   reflow the first time something is picked. */
+.selection-remove:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/*
+ * The checkbox sits outside the row button and the row button stays a button.
+ * Making the row itself the checkbox would take the session out of the tab order
+ * and lose the click-to-open behaviour that selection mode is layered on top of.
+ */
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.session-select,
+.session-group-select {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.session-select {
+  margin-left: 10px;
+}
+.parent-session-summary .session-group-select {
+  margin-right: 2px;
+}
+
 .session-row {
   position: relative;
   margin-bottom: 8px;
 }
 .session-item {
   width: 100%;
+  /* `min-width: 0` or a flex child refuses to shrink below its content width,
+     which with a long command line means the checkbox gets pushed out of the
+     row instead of the text being clipped. */
+  flex: 1;
+  min-width: 0;
   padding: 12px 76px 12px 12px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -1063,4 +1180,137 @@ span.settings-build-value {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   text-align: center;
+}
+
+/* ------------------------------------------------------- removal dialog */
+
+/*
+ * Same shell as the settings dialog: native `<dialog>` for the top layer, so
+ * only the panel and the button row are styled here.
+ */
+.remove-dialog {
+  margin: auto;
+  padding: 0;
+  width: min(440px, calc(100vw - 32px));
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.remove-dialog::backdrop {
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.remove-dialog-panel {
+  padding: 18px 20px 16px;
+}
+.remove-dialog-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.remove-dialog-list {
+  margin: 0 0 16px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+}
+/* The consequence that cannot be undone gets the danger colour, not the one
+   that can. Two identical red lines would teach the reader nothing. */
+.remove-dialog-warning {
+  color: var(--danger);
+}
+.remove-dialog-warning strong {
+  color: var(--danger-solid-hover);
+}
+.remove-dialog-hidden {
+  color: var(--purple);
+}
+.remove-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.remove-dialog-cancel,
+.remove-dialog-confirm {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.remove-dialog-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+.remove-dialog-cancel:hover {
+  background: var(--bg-hover);
+}
+.remove-dialog-confirm {
+  background: var(--danger-solid);
+  border: 1px solid var(--danger-solid);
+  color: var(--on-solid);
+}
+.remove-dialog-confirm:hover {
+  background: var(--danger-solid-hover);
+}
+
+/* ------------------------------------------------------------ undo toast */
+
+/*
+ * A toast, not a dialog: undo is offered after the fact and must never be the
+ * thing standing between the reader and the rest of the page. Fixed bottom-left
+ * because the session list lives on the left, so it never covers the terminal.
+ */
+.undo-toast {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #0008;
+  font-size: 12px;
+  color: var(--fg);
+}
+.undo-toast-text {
+  flex: 1;
+  min-width: 0;
+}
+.undo-toast-action {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.undo-toast-action:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+.undo-toast-dismiss {
+  padding: 0 4px;
+  font-size: 15px;
+  line-height: 1;
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.undo-toast-dismiss:hover {
+  color: var(--fg);
 }

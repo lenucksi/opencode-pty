@@ -128,42 +128,11 @@ export function useSessionManager({
     }
   }, [])
 
-  /**
-   * Human-only: discards every finished session in one go.
-   */
-  const handleClearFinished = useCallback(
-    async (finishedSessions: PTYSessionInfo[]): Promise<boolean> => {
-      if (finishedSessions.length === 0) {
-        return false
-      }
-
-      if (
-        !confirm(
-          `Remove ${finishedSessions.length} finished session(s)? Their output buffers will be discarded.`
-        )
-      ) {
-        return false
-      }
-
-      const results = await Promise.allSettled(
-        finishedSessions.map((session) => api.session.cleanup({ id: session.id }))
-      )
-      const failed = results.filter((result) => result.status === 'rejected')
-      if (failed.length > 0) {
-        console.error(`Failed to remove ${failed.length} finished session(s)`)
-        return false
-      }
-      return true
-    },
-    []
-  )
-
   return {
     handleSessionClick,
     handleSendInput,
     handleKillSession,
     handleKillSessionById,
     handleRemoveSession,
-    handleClearFinished,
   }
 }

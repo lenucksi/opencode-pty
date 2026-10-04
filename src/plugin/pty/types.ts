@@ -3,6 +3,30 @@ import type { RingBuffer } from './buffer.ts'
 
 export type PTYStatus = 'running' | 'exited' | 'killing' | 'killed'
 
+/**
+ * What a bulk removal did, per id.
+ *
+ * The three buckets are separate because the human has to be told which is
+ * which *before* the call, and "removed 205 sessions" cannot say that 204 can be
+ * taken back and one cannot.
+ */
+export interface BulkRemoveResult {
+  /** Moved to the trash. Every one of these can be restored. */
+  removed: string[]
+  /** Still running, so stopped. Their buffer was cleared, never archived. */
+  killed: string[]
+  /** Matched no session. */
+  failed: string[]
+}
+
+/** What a restore did, per id. */
+export interface RestoreSessionsResult {
+  /** Back on disk and in the list. */
+  restored: string[]
+  /** No longer in the trash: never removed, or the trash was emptied. */
+  failed: string[]
+}
+
 export interface PTYSession {
   id: string
   title: string
