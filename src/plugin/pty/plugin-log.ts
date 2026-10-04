@@ -12,10 +12,11 @@ export interface PtyLogEnvironment {
 }
 
 /**
- * Plugin `console` output shares the host's stdout, which is not captured in
- * opencode's own log — so a dropped exit notification used to be completely
- * invisible. Everything the PTY layer wants to be debuggable goes to a file as
- * well.
+ * File the PTY layer logs to.
+ *
+ * Plugin `console` output shares the host's stdout, which opencode's own log
+ * does not capture, so anything the PTY layer wants to be debuggable goes
+ * here instead.
  */
 export function ptyLogPath(env: PtyLogEnvironment): string {
   const stateHome = env.XDG_STATE_HOME ?? (env.HOME ? join(env.HOME, '.local', 'state') : '/tmp')

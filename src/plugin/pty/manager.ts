@@ -81,6 +81,10 @@ export function removeSessionUpdateCallback(callback: SessionUpdateCallback) {
 }
 
 function notifySessionUpdate(session: PTYSessionInfo) {
+  // The copy is load-bearing: `pty_wait` unregisters its own callback from
+  // inside the callback it is being called through (tools/wait.ts), so walking
+  // the live array would skip the element behind the removed one.
+  // aislop-ignore-next-line unicorn/no-useless-spread -- a callback deregisters itself while being notified
   for (const callback of [...sessionUpdateCallbacks]) {
     try {
       callback(session)

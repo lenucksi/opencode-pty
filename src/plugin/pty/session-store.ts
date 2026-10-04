@@ -247,6 +247,9 @@ export class SessionStore {
   }
 
   flush(): void {
+    // `flushSession` deletes the id it was given from `pending`, so walking the
+    // live keys view mutates the collection being walked. The spread is a snapshot.
+    // aislop-ignore-next-line unicorn/no-useless-spread -- flushSession deletes from pending during the loop
     for (const id of [...this.pending.keys()]) {
       this.flushSession(id)
     }

@@ -139,7 +139,7 @@ export interface PluginContextV2 {
    */
   readonly session?: {
     readonly prompt: Plugin.Context['session']['prompt']
-    /** Used by the web UI to label groups with the parent session title. */
+    /** Resolves the session title, which the sidebar uses as the group label. */
     readonly get?: Plugin.Context['session']['get']
   }
 }

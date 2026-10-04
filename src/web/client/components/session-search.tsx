@@ -9,12 +9,10 @@ interface SessionSearchProps {
 }
 
 /**
- * Sidebar filter box.
- *
- * Matches the parent OpenCode session title as well as the concrete PTY title,
- * description and command, so both "which conversation?" and "which process?"
- * are answerable from one field. Escape clears it.
- */
+  /**
+   * Matches the parent OpenCode session title as well as the concrete PTY
+   * title, description and command. Escape clears it.
+   */
 export function SessionSearch({ value, onChange, matchCount, searching }: SessionSearchProps) {
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape' && value !== '') {

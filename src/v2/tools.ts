@@ -42,6 +42,11 @@ export function registerV2Tools(draft: ToolDraft): void {
     return
   }
   const add = draft.add.bind(draft)
+  // Two different tool APIs meet here. `ptyTools` holds V2 `tool()` objects,
+  // whose `execute` takes the V2 context and may answer with a `ToolResult`;
+  // `V1ToolDefinition` is the V1 shape this loop re-exports for the host.
+  // A single assertion is rejected because the parameter types are contravariant.
+  // aislop-ignore-next-line ai-slop/double-type-assertion -- bridging the V2 tool API to the V1 shape it is re-exported in
   const tools = ptyTools as unknown as Record<string, V1ToolDefinition>
 
   for (const [name, definition] of Object.entries(tools)) {
