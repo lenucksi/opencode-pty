@@ -71,6 +71,10 @@ if (typeof original === 'function') {
   )
 }
 
+// aislop-ignore-file complexity/file-too-large -- the callback fan-out and the spawned-PTY
+// patch are already separate modules; what remains is the manager itself, and there is no
+// second responsibility left in it to extract.
+
 export class PTYManager {
   private lifecycleManager = new SessionLifecycleManager()
   /**

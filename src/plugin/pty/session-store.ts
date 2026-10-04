@@ -93,6 +93,11 @@ function defaultGeneration(now: number): string {
  * under the per-user state directory with `0700`/`0600` permissions: terminal
  * output regularly contains secrets.
  */
+// aislop-ignore-file complexity/file-too-large -- one archive lifecycle: directories, index,
+// flush buffer, retention. The reader and the trash are already out; what is left cannot be
+// separated without handing the helper this.pending, this.bytesWritten, this.retention and
+// sessionDir(), which is more coupling than the line count is worth.
+
 export class SessionStore {
   private readonly root: string
   private readonly generation: string
