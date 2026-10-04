@@ -93,56 +93,118 @@ export async function apiFetchJson<
   return response.json() as Promise<T>
 }
 
+/**
+ * One function per route family, each closing over the base url.
+ *
+ * Split out of a single factory because the whole client read as one 130-line
+ * function: adding a method meant finding the right nesting level in it, and the
+ * families have nothing to say to each other.
+ */
+function sessionsApi(baseUrl: string) {
+  return {
+    list: () =>
+      apiFetchJson<typeof routes.sessions, 'GET', PTYSessionInfo[]>(routes.sessions, {
+        method: 'GET',
+        baseUrl,
+      }),
+
+    create: (body: {
+      command: string
+      args?: string[]
+      description?: string
+      workdir?: string
+      timeoutSeconds?: number
+    }) =>
+      apiFetchJson<typeof routes.sessions, 'POST', PTYSessionInfo>(routes.sessions, {
+        method: 'POST',
+        body,
+        baseUrl,
+      }),
+
+    clear: () =>
+      apiFetchJson<typeof routes.sessions, 'DELETE', { success: boolean }>(routes.sessions, {
+        method: 'DELETE',
+        baseUrl,
+      }),
+
+    /**
+     * Remove exactly these sessions, in one round trip.
+     *
+     * One request rather than one per id because the interesting case is two
+     * hundred finished sessions, and two hundred requests is a spinner and a slow
+     * server for no reason.
+     */
+    bulkRemove: (body: { ids: string[] }) =>
+      apiFetchJson<typeof routes.sessions.bulk, 'POST', BulkRemoveResult>(routes.sessions.bulk, {
+        method: 'POST',
+        body,
+        baseUrl,
+      }),
+
+    /** Undo a `bulkRemove`. Only ids reported as `removed` can come back. */
+    restore: (body: { ids: string[] }) =>
+      apiFetchJson<typeof routes.sessions.restore, 'POST', RestoreSessionsResult>(
+        routes.sessions.restore,
+        { method: 'POST', body, baseUrl }
+      ),
+  } as const
+}
+
+function sessionApi(baseUrl: string) {
+  return {
+    get: (params: { id: string }) =>
+      apiFetchJson<typeof routes.session, 'GET', PTYSessionInfo>(routes.session, {
+        method: 'GET',
+        params,
+        baseUrl,
+      }),
+
+    kill: (params: { id: string }) =>
+      apiFetchJson<typeof routes.session, 'DELETE', { success: boolean }>(routes.session, {
+        method: 'DELETE',
+        params,
+        baseUrl,
+      }),
+
+    input: (params: { id: string }, body: { data: string }) =>
+      apiFetchJson<typeof routes.session.input, 'POST', { success: boolean }>(
+        routes.session.input,
+        { method: 'POST', params, body, baseUrl }
+      ),
+
+    cleanup: (params: { id: string }) =>
+      apiFetchJson<typeof routes.session.cleanup, 'DELETE', { success: boolean }>(
+        routes.session.cleanup,
+        { method: 'DELETE', params, baseUrl }
+      ),
+
+    buffer: {
+      raw: (params: { id: string; since?: number }) =>
+        apiFetchJson<
+          typeof routes.session.buffer.raw,
+          'GET',
+          { raw: string; byteLength: number; offset: number }
+        >(routes.session.buffer.raw, {
+          method: 'GET',
+          params: { id: params.id },
+          ...(params.since !== undefined ? { query: { since: params.since } } : {}),
+          baseUrl,
+        }),
+
+      plain: (params: { id: string }) =>
+        apiFetchJson<
+          typeof routes.session.buffer.plain,
+          'GET',
+          { plain: string; byteLength: number }
+        >(routes.session.buffer.plain, { method: 'GET', params, baseUrl }),
+    },
+  } as const
+}
+
 // Factory function to create API client with fixed baseUrl (for tests)
 export function createApiClient(baseUrl: string) {
   return {
-    sessions: {
-      list: () =>
-        apiFetchJson<typeof routes.sessions, 'GET', PTYSessionInfo[]>(routes.sessions, {
-          method: 'GET',
-          baseUrl,
-        }),
-
-      create: (body: {
-        command: string
-        args?: string[]
-        description?: string
-        workdir?: string
-        timeoutSeconds?: number
-      }) =>
-        apiFetchJson<typeof routes.sessions, 'POST', PTYSessionInfo>(routes.sessions, {
-          method: 'POST',
-          body,
-          baseUrl,
-        }),
-
-      clear: () =>
-        apiFetchJson<typeof routes.sessions, 'DELETE', { success: boolean }>(routes.sessions, {
-          method: 'DELETE',
-          baseUrl,
-        }),
-
-      /**
-       * Remove exactly these sessions, in one round trip.
-       *
-       * One request rather than one per id because the interesting case is two
-       * hundred finished sessions, and two hundred requests is a spinner and a
-       * slow server for no reason.
-       */
-      bulkRemove: (body: { ids: string[] }) =>
-        apiFetchJson<typeof routes.sessions.bulk, 'POST', BulkRemoveResult>(routes.sessions.bulk, {
-          method: 'POST',
-          body,
-          baseUrl,
-        }),
-
-      /** Undo a `bulkRemove`. Only ids reported as `removed` can come back. */
-      restore: (body: { ids: string[] }) =>
-        apiFetchJson<typeof routes.sessions.restore, 'POST', RestoreSessionsResult>(
-          routes.sessions.restore,
-          { method: 'POST', body, baseUrl }
-        ),
-    },
+    sessions: sessionsApi(baseUrl),
 
     parentSessions: {
       list: () =>
@@ -155,54 +217,7 @@ export function createApiClient(baseUrl: string) {
         ),
     },
 
-    session: {
-      get: (params: { id: string }) =>
-        apiFetchJson<typeof routes.session, 'GET', PTYSessionInfo>(routes.session, {
-          method: 'GET',
-          params,
-          baseUrl,
-        }),
-
-      kill: (params: { id: string }) =>
-        apiFetchJson<typeof routes.session, 'DELETE', { success: boolean }>(routes.session, {
-          method: 'DELETE',
-          params,
-          baseUrl,
-        }),
-
-      input: (params: { id: string }, body: { data: string }) =>
-        apiFetchJson<typeof routes.session.input, 'POST', { success: boolean }>(
-          routes.session.input,
-          { method: 'POST', params, body, baseUrl }
-        ),
-
-      cleanup: (params: { id: string }) =>
-        apiFetchJson<typeof routes.session.cleanup, 'DELETE', { success: boolean }>(
-          routes.session.cleanup,
-          { method: 'DELETE', params, baseUrl }
-        ),
-
-      buffer: {
-        raw: (params: { id: string; since?: number }) =>
-          apiFetchJson<
-            typeof routes.session.buffer.raw,
-            'GET',
-            { raw: string; byteLength: number; offset: number }
-          >(routes.session.buffer.raw, {
-            method: 'GET',
-            params: { id: params.id },
-            ...(params.since !== undefined ? { query: { since: params.since } } : {}),
-            baseUrl,
-          }),
-
-        plain: (params: { id: string }) =>
-          apiFetchJson<
-            typeof routes.session.buffer.plain,
-            'GET',
-            { plain: string; byteLength: number }
-          >(routes.session.buffer.plain, { method: 'GET', params, baseUrl }),
-      },
-    },
+    session: sessionApi(baseUrl),
 
     health: () =>
       apiFetchJson<typeof routes.health, 'GET', HealthResponse>(routes.health, {
