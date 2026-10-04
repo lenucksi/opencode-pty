@@ -45,6 +45,9 @@ extendedTest.describe('Xterm Content Extraction', () => {
       // the rest of the suite runs in parallel.
       await waitForTerminalRegex(page, /\$\s*$/)
 
+      // Via the canonical SerializeAddon extractor, then via the emulator buffer.
+      // Both have to agree on what is on screen.
+
       const serializeContent = await getTerminalPlainText(page)
 
       // Extract content via the emulator's Terminal buffer API
