@@ -187,9 +187,14 @@ function SessionGroup({
   const containsActiveSession = group.sessions.some((session) => session.id === activeSession?.id)
   const shouldBeOpen = startOpen || containsActiveSession
   const [open, setOpen] = useState(shouldBeOpen)
-  useEffect(() => {
+  // Adjusting state while rendering, which is the documented pattern for a state
+  // that follows a prop: an effect here would cost an extra render per
+  // activation, and cancelling it out is what setState-in-effect warns about.
+  const [wasRequired, setWasRequired] = useState(shouldBeOpen)
+  if (shouldBeOpen !== wasRequired) {
+    setWasRequired(shouldBeOpen)
     if (shouldBeOpen) setOpen(true)
-  }, [shouldBeOpen])
+  }
   const showParentID =
     group.parentSessionId !== undefined && group.parentSessionId !== WEB_API_PARENT_SESSION_ID
   const tooltip = [

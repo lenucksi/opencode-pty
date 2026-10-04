@@ -69,8 +69,12 @@ export function SettingsModal({
   )
   // Read at event time: the native `close` event also fires when we close the
   // dialog ourselves, and only a user-initiated close should notify the parent.
+  // Synced in an effect because the only reader is an event handler, which can
+  // never run before the effect for the same render has.
   const openRef = useRef(open)
-  openRef.current = open
+  useEffect(() => {
+    openRef.current = open
+  }, [open])
   const wasOpenRef = useRef(false)
 
   useEffect(() => {

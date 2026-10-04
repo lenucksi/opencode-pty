@@ -32,8 +32,12 @@ export function DocsModal({ open, onClose, returnFocusRef, inertTarget }: DocsMo
   const [copied, setCopied] = useState(false)
   // Read at event time: the native `close` event also fires when we close the
   // dialog ourselves, and only a user-initiated close should notify the parent.
+  // Synced in an effect because the only reader is an event handler, which can
+  // never run before the effect for the same render has.
   const openRef = useRef(open)
-  openRef.current = open
+  useEffect(() => {
+    openRef.current = open
+  }, [open])
   const wasOpenRef = useRef(false)
 
   useEffect(() => {
@@ -69,9 +73,10 @@ export function DocsModal({ open, onClose, returnFocusRef, inertTarget }: DocsMo
 
   // Fetch lazily on first open; the document never changes while the server runs.
   useEffect(() => {
+    // The guard above already rules out a pending error, so resetting it here
+    // set the state to the value it already had and cost a render.
     if (!open || docs || error) return
     let cancelled = false
-    setError(null)
     api
       .docs()
       .then((response) => {

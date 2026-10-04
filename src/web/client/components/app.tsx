@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PTYSessionInfo, WSMessageServerRawData } from 'opencode-pty/web/shared/types'
 import { sessionDetailLine, sessionTooltip, sortSessionsByTime } from '../../shared/session-meta.ts'
 
@@ -127,7 +127,15 @@ function ActiveSessionView({
 
 export function App() {
   const [sessions, setSessions] = useState<PTYSessionInfo[]>([])
-  const [parentSessionTitles, setParentSessionTitles] = useState<Record<string, string>>({})
+  // Only what the server answered. Whether it is used at all is decided while
+  // rendering, so a session list without parent sessions needs no clearing pass.
+  const [fetchedParentTitles, setFetchedParentTitles] = useState<Record<string, string>>({})
+  // Derived, not stored: with no parent session there is nothing to show, and
+  // deriving it here means the clearing branch in the effect below disappears.
+  const parentSessionTitles = useMemo(
+    () => (sessions.some((session) => Boolean(session.parentSessionId)) ? fetchedParentTitles : {}),
+    [sessions, fetchedParentTitles]
+  )
   const [activeSession, setActiveSession] = useState<PTYSessionInfo | null>(null)
   const [wsMessageCount, setWsMessageCount] = useState(0)
   const [sessionUpdateCount, setSessionUpdateCount] = useState(0)
@@ -152,15 +160,12 @@ export function App() {
   useEffect(() => {
     let cancelled = false
     const hasParentSession = sessions.some((session) => Boolean(session.parentSessionId))
-    if (!hasParentSession) {
-      setParentSessionTitles({})
-      return
-    }
+    if (!hasParentSession) return
 
     void api.parentSessions
       .list()
       .then((response) => {
-        if (!cancelled) setParentSessionTitles(response.titles)
+        if (!cancelled) setFetchedParentTitles(response.titles)
       })
       .catch((error) => console.error('Failed to load parent session titles', error))
 
