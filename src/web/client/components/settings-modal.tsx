@@ -4,6 +4,7 @@ import { describeBuild, type BuildInfo } from '../../../shared/build-info.ts'
 import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { ThemePreference } from '../lib/theme.ts'
 import { MAX_TERMINAL_FONT_SIZE, MIN_TERMINAL_FONT_SIZE } from '../lib/ui-prefs.ts'
+import { useDialog } from '../hooks/use-dialog.ts'
 import { ThemeSwitch } from './theme-switch.tsx'
 
 interface SettingsModalProps {
@@ -45,7 +46,7 @@ export function SettingsModal({
   onShowDebugBarChange,
   buildInfo,
 }: SettingsModalProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
+  const { dialogRef, handleNativeClose } = useDialog({ open, onClose, returnFocusRef, inertTarget })
   // The confirmation belongs next to the button, not in the terminal header: the
   // settings dialog is a modal on top of that header, so feedback shown there is
   // feedback the user cannot see.
@@ -67,68 +68,6 @@ export function SettingsModal({
     },
     []
   )
-  // Read at event time: the native `close` event also fires when we close the
-  // dialog ourselves, and only a user-initiated close should notify the parent.
-  // Synced in an effect because the only reader is an event handler, which can
-  // never run before the effect for the same render has.
-  const openRef = useRef(open)
-  useEffect(() => {
-    openRef.current = open
-  }, [open])
-  const wasOpenRef = useRef(false)
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    if (open && !dialog.open) {
-      dialog.showModal()
-    } else if (!open && dialog.open) {
-      dialog.close()
-    }
-  }, [open])
-
-  // `showModal()` already makes the rest of the document inert, but setting the
-  // attribute explicitly documents the intent and keeps the app shell out of the
-  // tab order on browsers with a partial top-layer implementation.
-  useEffect(() => {
-    const target = inertTarget?.current
-    if (!target) return
-    if (open) {
-      target.setAttribute('inert', '')
-    } else {
-      target.removeAttribute('inert')
-    }
-    return () => target.removeAttribute('inert')
-  }, [open, inertTarget])
-
-  // Focus returns to the trigger once the background is interactive again. The
-  // effect order matters: the inert attribute is removed above before this runs.
-  useEffect(() => {
-    if (open) {
-      wasOpenRef.current = true
-      return
-    }
-    if (!wasOpenRef.current) return
-    wasOpenRef.current = false
-    returnFocusRef?.current?.focus()
-  }, [open, returnFocusRef])
-
-  const handleNativeClose = useCallback(() => {
-    if (openRef.current) onClose()
-  }, [onClose])
-
-  // Clicks on the backdrop are dispatched at the dialog element itself; clicks
-  // on the panel target its children. The listener is attached imperatively so
-  // the non-interactive dialog needs no JSX click handler.
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    const onClick = (event: MouseEvent) => {
-      if (event.target === dialog) onClose()
-    }
-    dialog.addEventListener('click', onClick)
-    return () => dialog.removeEventListener('click', onClick)
-  }, [onClose])
 
   return (
     <dialog

@@ -1,6 +1,8 @@
-import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useState } from 'react'
 
 import { api } from 'opencode-pty/web/shared/api-client'
+
+import { useDialog } from '../hooks/use-dialog.ts'
 import type { UsageDocsResponse } from 'opencode-pty/web/shared/usage-docs'
 
 interface DocsModalProps {
@@ -25,53 +27,15 @@ type DocsTab = 'humans' | 'llm'
  * layer, ESC handling and the focus trap.
  */
 export function DocsModal({ open, onClose, returnFocusRef, inertTarget }: DocsModalProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
+  const { dialogRef, handleNativeClose } = useDialog({ open, onClose, returnFocusRef, inertTarget })
   const [tab, setTab] = useState<DocsTab>('humans')
   const [docs, setDocs] = useState<UsageDocsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  // Read at event time: the native `close` event also fires when we close the
-  // dialog ourselves, and only a user-initiated close should notify the parent.
-  // Synced in an effect because the only reader is an event handler, which can
-  // never run before the effect for the same render has.
-  const openRef = useRef(open)
-  useEffect(() => {
-    openRef.current = open
-  }, [open])
-  const wasOpenRef = useRef(false)
 
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    if (open && !dialog.open) {
-      dialog.showModal()
-    } else if (!open && dialog.open) {
-      dialog.close()
-    }
-  }, [open])
-
-  useEffect(() => {
-    const target = inertTarget?.current
-    if (!target) return
-    if (open) {
-      target.setAttribute('inert', '')
-    } else {
-      target.removeAttribute('inert')
-    }
-    return () => target.removeAttribute('inert')
-  }, [open, inertTarget])
-
-  useEffect(() => {
-    if (open) {
-      wasOpenRef.current = true
-      return
-    }
-    if (!wasOpenRef.current) return
-    wasOpenRef.current = false
-    returnFocusRef?.current?.focus()
-  }, [open, returnFocusRef])
-
-  // Fetch lazily on first open; the document never changes while the server runs.
+  // Fetched lazily on first open; the document never changes while the server
+  // runs. The guard below already rules out a pending error, so there is nothing
+  // to reset before asking.
   useEffect(() => {
     // The guard above already rules out a pending error, so resetting it here
     // set the state to the value it already had and cost a render.
@@ -89,20 +53,6 @@ export function DocsModal({ open, onClose, returnFocusRef, inertTarget }: DocsMo
       cancelled = true
     }
   }, [open, docs, error])
-
-  const handleNativeClose = useCallback(() => {
-    if (openRef.current) onClose()
-  }, [onClose])
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    const onClick = (event: MouseEvent) => {
-      if (event.target === dialog) onClose()
-    }
-    dialog.addEventListener('click', onClick)
-    return () => dialog.removeEventListener('click', onClick)
-  }, [onClose])
 
   const handleCopy = useCallback(() => {
     if (!docs) return

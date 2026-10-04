@@ -27,6 +27,8 @@ extendedTest.describe('Xterm Content Extraction', () => {
       // Wait for session to initialize
       await waitForTerminalRegex(page, /\$\s*$/)
 
+      // Extract content via the canonical SerializeAddon extractor
+
       // Send interactive command
       await page.locator('.terminal.xterm').click()
       await page.keyboard.type('echo "Hello World"', { delay: 20 })
@@ -35,7 +37,14 @@ extendedTest.describe('Xterm Content Extraction', () => {
       // Wait for command execution
       await waitForTerminalRegex(page, /Hello World/)
 
-      // Extract content via the canonical SerializeAddon extractor
+      // Wait for the shell to be idle again. waitForTerminalRegex only watches
+      // the serialize buffer, so it returns as soon as the output has got there
+      // while the emulator buffer API can still be a chunk behind. The prompt
+      // coming back is the command finishing; without it the two extractors are
+      // compared mid-stream, which passes on an idle machine and fails when
+      // the rest of the suite runs in parallel.
+      await waitForTerminalRegex(page, /\$\s*$/)
+
       const serializeContent = await getTerminalPlainText(page)
 
       // Extract content via the emulator's Terminal buffer API
