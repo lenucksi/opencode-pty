@@ -5,15 +5,17 @@ import { sessionDetailLine, sessionTooltip, sortSessionsByTime } from '../../sha
 import { useWebSocket } from '../hooks/use-web-socket.ts'
 import { useSessionManager } from '../hooks/use-session-manager.ts'
 import { useRawStream } from '../hooks/use-raw-stream.ts'
+import { useAppShortcuts } from '../hooks/use-app-shortcuts.ts'
+import { useCopyFeedback } from '../hooks/use-copy-feedback.ts'
 import { useTerminalResize } from '../hooks/use-terminal-resize.ts'
 import { useTheme } from '../hooks/use-theme.ts'
 import { useUiPrefs } from '../hooks/use-ui-prefs.ts'
-import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
 import type { ThemeScheme } from '../lib/theme.ts'
 
 import { DocsModal } from './docs-modal.tsx'
 import { DownloadMenu } from './download-menu.tsx'
+import { useBulkRemoval } from '../hooks/use-bulk-removal.ts'
 import { RemoveSessionsDialog, UndoToast } from './remove-sessions-dialog.tsx'
 import { Sidebar } from './sidebar.tsx'
 import { SettingsModal } from './settings-modal.tsx'
@@ -150,12 +152,10 @@ export function App() {
   const docsButtonRef = useRef<HTMLButtonElement>(null)
 
   const terminalRef = useRef<RawTerminal>(null)
-  const [copyFeedback, setCopyFeedback] = useState('')
   // Fetched, not baked into the bundle: the bundle is built once, but the server
   // it is talking to is whatever is listening, and a stale bundle next to a fresh
   // server would report a commit that is not running.
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null)
-  const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -173,6 +173,40 @@ export function App() {
       cancelled = true
     }
   }, [sessions])
+
+  const { copyFeedback, handleCopy, handleCopyAll } = useCopyFeedback(
+    activeSession?.id ?? null,
+    terminalRef
+  )
+
+  useAppShortcuts({
+    onCopy: handleCopy,
+    onOpenSettings: () => setSettingsOpen(true),
+    onOpenDocs: () => setDocsOpen(true),
+    settingsOpen,
+  })
+
+  /**
+   * Session pushes arrive over the WebSocket, and the periodic poll is gone, so a
+   * tab that was suspended - or whose socket went half-open - would otherwise keep
+   * a stale list. Refreshing on visibility and focus is what closes that gap.
+   */
+  useEffect(() => {
+    const sync = () => {
+      if (document.visibilityState !== 'visible') return
+      api.sessions
+        .list()
+        .then((fresh) => setSessions(sortSessionsByTime(fresh)))
+        .catch((error) => console.error('Failed to resync sessions', error))
+    }
+
+    document.addEventListener('visibilitychange', sync)
+    window.addEventListener('focus', sync)
+    return () => {
+      document.removeEventListener('visibilitychange', sync)
+      window.removeEventListener('focus', sync)
+    }
+  }, [])
 
   const handleSessionRemoved = useCallback((sessionId: string) => {
     setSessions((prevSessions) => prevSessions.filter((session) => session.id !== sessionId))
@@ -234,123 +268,6 @@ export function App() {
       })
     return () => {
       cancelled = true
-    }
-  }, [])
-
-  const showCopyFeedback = useCallback((message: string) => {
-    setCopyFeedback(message)
-    if (copyFeedbackTimerRef.current) {
-      clearTimeout(copyFeedbackTimerRef.current)
-    }
-    copyFeedbackTimerRef.current = setTimeout(() => setCopyFeedback(''), 2500)
-  }, [])
-
-  useEffect(
-    () => () => {
-      if (copyFeedbackTimerRef.current) {
-        clearTimeout(copyFeedbackTimerRef.current)
-      }
-    },
-    []
-  )
-
-  const reportCopy = useCallback(
-    async (text: string, emptyLabel: string, doneLabel: string) => {
-      if (!text) {
-        showCopyFeedback(emptyLabel)
-        return
-      }
-      const copied = await copyTextToClipboard(text)
-      const lineCount = text.split('\n').length
-      showCopyFeedback(
-        copied ? `${doneLabel} ${lineCount} line${lineCount === 1 ? '' : 's'}` : 'Copy failed'
-      )
-    },
-    [showCopyFeedback]
-  )
-
-  /** Selection if there is one, otherwise what is on screen. */
-  const handleCopy = useCallback(async () => {
-    const text = terminalRef.current?.getCopyText() ?? ''
-    await reportCopy(text, 'Nothing to copy', 'Copied')
-  }, [reportCopy])
-
-  /** The whole transcript, including what the emulator no longer holds. */
-  const handleCopyAll = useCallback(async () => {
-    const sessionId = activeSessionIdRef.current
-    if (!sessionId) return
-    try {
-      const data = await api.session.buffer.plain({ id: sessionId })
-      await reportCopy(data.plain ?? '', 'Nothing to copy', 'Copied all')
-    } catch (error) {
-      console.error('Failed to copy the session transcript', error)
-      showCopyFeedback('Copy failed')
-    }
-  }, [reportCopy, showCopyFeedback])
-
-  // Ctrl+Shift+C - and Cmd+C, where that is the platform convention - copy the
-  // terminal. Plain Ctrl+C is left alone so it keeps sending SIGINT.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'KeyC' || !(event.metaKey || (event.ctrlKey && event.shiftKey))) {
-        return
-      }
-      event.preventDefault()
-      event.stopPropagation()
-      void handleCopy()
-    }
-
-    document.addEventListener('keydown', onKeyDown, { capture: true })
-    return () => document.removeEventListener('keydown', onKeyDown, { capture: true })
-  }, [handleCopy])
-
-  // Ctrl+, / Cmd+, open the settings dialog. Capture phase so the shortcut wins
-  // even while the terminal canvas has focus.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== ',' || !(event.metaKey || event.ctrlKey)) {
-        return
-      }
-      event.preventDefault()
-      setSettingsOpen(true)
-    }
-
-    document.addEventListener('keydown', onKeyDown, { capture: true })
-    return () => document.removeEventListener('keydown', onKeyDown, { capture: true })
-  }, [])
-
-  // Ctrl+/ or Cmd+/ opens the documentation dialog. The settings dialog wins
-  // ties so a stray slash does not stack a second dialog on top of it.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== '/' || !(event.metaKey || event.ctrlKey) || settingsOpen) {
-        return
-      }
-      event.preventDefault()
-      setDocsOpen(true)
-    }
-
-    document.addEventListener('keydown', onKeyDown, { capture: true })
-    return () => document.removeEventListener('keydown', onKeyDown, { capture: true })
-  }, [settingsOpen])
-
-  // Session pushes arrive over the WebSocket; a tab that was suspended (or whose
-  // socket went half-open) would otherwise keep a stale list, because the old
-  // periodic poll is gone. Refresh whenever the tab becomes visible again.
-  useEffect(() => {
-    const sync = () => {
-      if (document.visibilityState !== 'visible') return
-      api.sessions
-        .list()
-        .then((sessions) => setSessions(sortSessionsByTime(sessions)))
-        .catch((error) => console.error('Failed to resync sessions', error))
-    }
-
-    document.addEventListener('visibilitychange', sync)
-    window.addEventListener('focus', sync)
-    return () => {
-      document.removeEventListener('visibilitychange', sync)
-      window.removeEventListener('focus', sync)
     }
   }, [])
 
@@ -438,67 +355,24 @@ export function App() {
   // list the reader is looking at, then the ids are sent as they were picked.
   // Recomputing the plan after the call would report what happened as what was
   // agreed to.
-  const [removalPlan, setRemovalPlan] = useState<{
-    ids: string[]
-    removable: number
-    stoppable: number
-    hiddenByFilter: number
-  } | null>(null)
-  const [undoState, setUndoState] = useState<{ count: number; ids: string[] } | null>(null)
+  const handleSessionsRemoved = useCallback((ids: string[]) => {
+    setSessions((previous) => previous.filter((session) => !ids.includes(session.id)))
+    setActiveSession((current) => (current && ids.includes(current.id) ? null : current))
+  }, [])
 
-  const startRemoval = useCallback(
-    (ids: string[], hiddenByFilter: number) => {
-      const stoppable = ids.filter((id) => {
-        const session = sessions.find((candidate) => candidate.id === id)
-        return session !== undefined && isLiveStatus(session.status)
-      }).length
-      setRemovalPlan({
-        ids,
-        removable: ids.length - stoppable,
-        stoppable,
-        hiddenByFilter,
-      })
-    },
-    [sessions]
-  )
-
-  const cancelRemoval = useCallback(() => setRemovalPlan(null), [])
-
-  const confirmRemoval = useCallback(async () => {
-    const plan = removalPlan
-    if (!plan) return
-    setRemovalPlan(null)
-    try {
-      const result = await api.sessions.bulkRemove({ ids: plan.ids })
-      const gone = [...result.removed, ...result.killed]
-      setSessions((previous) => previous.filter((session) => !gone.includes(session.id)))
-      setActiveSession((current) => (current && gone.includes(current.id) ? null : current))
-      // Undo offers back exactly what came back as restorable. A stopped session
-      // reappears as an empty row, so offering Undo for it and then producing
-      // nothing would be worse than not offering it.
-      setUndoState({ count: gone.length, ids: result.removed })
-    } catch (error) {
-      console.error('Failed to remove selected sessions', error)
-    }
-  }, [removalPlan])
-
-  const undoRemoval = useCallback(async () => {
-    const pending = undoState
-    if (!pending || pending.ids.length === 0) return
-    try {
-      await api.sessions.restore({ ids: pending.ids })
-      // Refetch rather than reinserting: a restored session's metadata has to
-      // come from the store, and inventing it here would be how a restored row
-      // ends up with the wrong exit code.
-      const refreshed = await api.sessions.list()
-      setSessions(refreshed)
-      setUndoState(null)
-    } catch (error) {
-      console.error('Failed to restore removed sessions', error)
-    }
-  }, [undoState])
-
-  const dismissUndo = useCallback(() => setUndoState(null), [])
+  const {
+    plan: removalPlan,
+    undo: undoState,
+    requestRemoval: startRemoval,
+    cancelRemoval,
+    confirmRemoval,
+    undoRemoval,
+    dismissUndo,
+  } = useBulkRemoval({
+    sessions,
+    onRemoved: handleSessionsRemoved,
+    onRestored: setSessions,
+  })
 
   /**
    * `Clear finished` is the same action as a selection of every finished
