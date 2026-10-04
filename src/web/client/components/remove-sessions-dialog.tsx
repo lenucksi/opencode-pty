@@ -164,7 +164,10 @@ export function UndoToast({ count, restorable, onUndo, onDismiss }: UndoToastPro
   if (count === 0) return null
 
   return (
-    <div className="undo-toast" role="status" data-testid="undo-toast">
+    // `<output>` rather than `role="status"` on a div: the element already
+    // carries that role implicitly, and an explicit role on a generic container
+    // is one more place for the announcement to be lost.
+    <output className="undo-toast" data-testid="undo-toast">
       <span className="undo-toast-text">
         Removed {count} session{count === 1 ? '' : 's'}.
         {restorable > 0
@@ -191,6 +194,6 @@ export function UndoToast({ count, restorable, onUndo, onDismiss }: UndoToastPro
       >
         ×
       </button>
-    </div>
+    </output>
   )
 }

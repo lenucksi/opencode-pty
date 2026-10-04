@@ -89,7 +89,7 @@
     "build:version": "bun scripts/version.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.14",
+    "@biomejs/biome": "2.5.15",
     "@playwright/test": "1.63.0",
     "@types/bun": "^1.4.2",
     "@types/react": "^19.3.0",
@@ -98,7 +98,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.1"
+    "vite": "^8.3.2"
   },
   "peerDependencies": {
     "typescript": "^7.0.2"
@@ -108,10 +108,10 @@
     "opencode": ">=1.18.31"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.18.32",
-    "@opencode-ai/sdk": "^1.18.32",
-    "@opencode/plugin": "^2.0.18",
-    "bun-pty": "^0.4.10",
+    "@opencode-ai/plugin": "^1.18.34",
+    "@opencode-ai/sdk": "^1.18.34",
+    "@opencode/plugin": "^2.0.22",
+    "bun-pty": "^0.4.11",
     "ghostty-web": "github:anomalyco/ghostty-web#6e24d040458ddd7aae81572fe2901deec32f9fe7",
     "open": "^11.0.4"
   },
