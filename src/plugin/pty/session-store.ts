@@ -2,19 +2,25 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   renameSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
+import { INDEX_FILE, LOG_FILE, META_FILE, PREVIOUS_LOG_FILE } from './archive-files.ts'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import type { BoundedReadResult, BoundedSearchResult } from './output-manager.ts'
 import { logPtyEvent } from './plugin-log.ts'
-import { applyLineBudget } from './read-budget.ts'
+import { readArchive, readArchiveRaw, searchArchive } from './archive-reader.ts'
+import {
+  emptyTrash,
+  listTrash,
+  moveToTrash,
+  removeArchive,
+  restoreFromTrash,
+} from './archive-trash.ts'
 import { sessionsRoot } from './state-paths.ts'
 import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../constants.ts'
 import type { PTYSessionInfo } from './types.ts'
@@ -67,11 +73,6 @@ export interface SessionStoreOptions {
   flushIntervalMs?: number
   flushBytes?: number
 }
-
-const LOG_FILE = 'output.log'
-const PREVIOUS_LOG_FILE = 'output.log.1'
-const META_FILE = 'meta.json'
-const INDEX_FILE = 'index.json'
 
 function defaultRoot(): string {
   if (process.env.OPENCODE_PTY_STATE_DIR) return process.env.OPENCODE_PTY_STATE_DIR
@@ -280,47 +281,15 @@ export class SessionStore {
    * transcript reported "end of buffer" exactly like the live path did. Sharing
    * `applyLineBudget` keeps the two from drifting apart again.
    */
+  /**
+   * Archived sessions go through the same budget as live ones.
+   *
+   * The implementation lives in `archive-reader`, which needs no store state, so
+   * that sharing `applyLineBudget` with the live path is a call rather than a
+   * parallel copy that could drift.
+   */
   read(id: string, offset = 0, limit?: number, budget?: number): BoundedReadResult | null {
-    const lines = this.lines(id)
-    if (lines === null) return null
-
-    const start = Math.max(0, Math.floor(offset))
-    const slice =
-      limit === undefined ? lines.slice(start) : lines.slice(start, start + Math.max(0, limit))
-
-    // Archived transcripts always start at absolute offset 0, so a line's
-    // absolute offset is the sum of the lines before it.
-    const lineStarts: number[] = []
-    let running = 0
-    for (const [index, line] of lines.entries()) {
-      lineStarts[index] = running
-      running += line.length + 1
-    }
-
-    const budgeted = applyLineBudget(slice, budget, (index) => {
-      const lineStart = lineStarts[start + index]
-      return lineStart ?? null
-    })
-    const delivered = start + budgeted.lines.length
-    const moreLinesExist = delivered < lines.length
-    const hasMore = budgeted.cutIndex !== null || moreLinesExist
-    const since = lineStarts[start] ?? 0
-    // Same reasoning as the live path: the numerator has to be stream
-    // characters, matching the `bufferChars` denominator.
-    const endOffset = budgeted.nextSince ?? lineStarts[delivered] ?? running
-
-    return {
-      lines: budgeted.lines,
-      slices: budgeted.slices,
-      totalLines: lines.length,
-      offset: start,
-      hasMore,
-      shownChars: Math.max(0, endOffset - since),
-      bufferChars: running,
-      truncatedLines: budgeted.truncatedLines,
-      nextSince: hasMore ? endOffset : null,
-      since,
-    }
+    return readArchive(this.sessionDir(id), id, offset, limit, budget)
   }
 
   search(
@@ -330,63 +299,11 @@ export class SessionStore {
     limit?: number,
     budget?: number
   ): BoundedSearchResult | null {
-    const lines = this.lines(id)
-    if (lines === null) return null
-
-    const allMatches = lines
-      .map((text, index) => ({ lineNumber: index + 1, text }))
-      .filter((match) => pattern.test(match.text))
-
-    const start = Math.max(0, Math.floor(offset))
-    const limited =
-      limit === undefined
-        ? allMatches.slice(start)
-        : allMatches.slice(start, start + Math.max(0, limit))
-
-    const budgeted = applyLineBudget(
-      limited.map((match) => match.text),
-      budget,
-      () => null
-    )
-    const matches = limited.slice(0, budgeted.lines.length).map((match, index) => ({
-      lineNumber: match.lineNumber,
-      text: budgeted.lines[index] ?? '',
-    }))
-
-    return {
-      matches,
-      totalMatches: allMatches.length,
-      totalLines: lines.length,
-      offset: start,
-      hasMore: budgeted.truncatedLines === 1 || start + matches.length < allMatches.length,
-      shownChars: budgeted.consumedChars,
-      truncatedLines: budgeted.truncatedLines,
-    }
-  }
-
-  /** All archived lines, or null when the session is unknown. */
-  private lines(id: string): string[] | null {
-    const raw = this.readRaw(id)
-    if (raw === null) return null
-
-    const lines = raw.length === 0 ? [] : raw.split('\n')
-    if (lines.at(-1) === '') lines.pop()
-    return lines
+    return searchArchive(this.sessionDir(id), id, pattern, offset, limit, budget)
   }
 
   readRaw(id: string): string | null {
-    if (!existsSync(this.sessionDir(id))) return null
-
-    let text = ''
-    for (const file of [PREVIOUS_LOG_FILE, LOG_FILE]) {
-      const path = join(this.sessionDir(id), file)
-      try {
-        if (existsSync(path)) text += readFileSync(path, 'utf8')
-      } catch (error) {
-        logPtyEvent('warn', `failed to read archived output of ${id}`, error)
-      }
-    }
-    return text
+    return readArchiveRaw(this.sessionDir(id), id)
   }
 
   // ------------------------------------------------------------------ cleanup
@@ -408,79 +325,49 @@ export class SessionStore {
    * digits, and `loadIndex` reads `index.json` rather than scanning the
    * directory.
    */
+  /**
+   * Remove a session, reversibly.
+   *
+   * The directory is renamed rather than deleted, because removing a session
+   * destroys the only record of what a process printed. A human who removes the
+   * wrong five out of two hundred has no other way back, and that buffer is what
+   * a bug report is written from.
+   *
+   * The window is bounded by construction: `purgeTrash` runs before anything else
+   * at startup, so nothing is restorable across a restart. "Undo" means until the
+   * server restarts, which is when a mistake is actually noticed.
+   */
   remove(id: string): boolean {
     if (!this.enabled) return false
 
     const known = this.index.some((entry) => entry.id === id)
-    const source = this.sessionDir(id)
-    const target = this.trashedDir(id)
-    try {
-      mkdirSync(this.trashRoot(), { recursive: true, mode: 0o700 })
-      renameSync(source, target)
-    } catch (error) {
-      logPtyEvent('error', `failed to remove archived session ${id}`, error)
-      return false
-    }
+    if (!moveToTrash(this.root, id)) return false
 
-    if (known) {
-      this.index = this.index.filter((entry) => entry.id !== id)
-      this.saveIndex()
-    }
-    this.pending.delete(id)
-    this.bytesWritten.delete(id)
+    this.forgetIndexEntry(id)
     return known
   }
 
-  /**
-   * Put a removed session back.
-   *
-   * The index entry is read out of the trashed `meta.json` rather than kept
-   * alongside, so a restore cannot invent metadata that the archive did not
-   * actually have.
-   */
+  /** Put a removed session back, reindexing it from the archive's own metadata. */
   restore(id: string): boolean {
     if (!this.enabled) return false
 
-    const source = this.trashedDir(id)
-    if (!existsSync(source)) return false
-    try {
-      renameSync(source, this.sessionDir(id))
-    } catch (error) {
-      logPtyEvent('error', `failed to restore session ${id}`, error)
-      return false
-    }
-
-    const entry = this.readMeta(this.sessionDir(id))
-    if (entry !== null) {
+    const entry = restoreFromTrash(this.root, id)
+    if (entry === null) return false
+    if (entry !== undefined) {
       this.upsertIndex(entry)
       this.saveIndex()
     }
     return true
   }
 
-  /** Ids that can still be restored, oldest trash entry last. */
+  /** Ids that can still be restored. */
   trashed(): string[] {
-    if (!this.enabled) return []
-    try {
-      return readdirSync(this.trashRoot(), { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name)
-    } catch {
-      return []
-    }
+    return this.enabled ? listTrash(this.root) : []
   }
 
   /** Empty the trash. Returns how many sessions went with it. */
   purgeTrash(): number {
-    if (!this.enabled) return 0
-    const ids = this.trashed()
-    try {
-      rmSync(this.trashRoot(), { recursive: true, force: true })
-    } catch (error) {
-      logPtyEvent('error', 'failed to empty the session trash', error)
-      return 0
-    }
-    return ids.length
+    return this.enabled ? emptyTrash(this.root) : 0
   }
 
   /**
@@ -494,19 +381,9 @@ export class SessionStore {
     if (!this.enabled) return false
 
     const known = this.index.some((entry) => entry.id === id)
-    try {
-      rmSync(this.sessionDir(id), { recursive: true, force: true })
-    } catch (error) {
-      logPtyEvent('error', `failed to purge archived session ${id}`, error)
-      return false
-    }
+    if (!removeArchive(this.root, id)) return false
 
-    if (known) {
-      this.index = this.index.filter((entry) => entry.id !== id)
-      this.saveIndex()
-    }
-    this.pending.delete(id)
-    this.bytesWritten.delete(id)
+    this.forgetIndexEntry(id)
     return known
   }
 
@@ -556,35 +433,6 @@ export class SessionStore {
 
   private sessionDir(id: string): string {
     return join(this.root, id)
-  }
-
-  /**
-   * Where removed sessions wait to be restored.
-   *
-   * Inside `root` rather than beside it, because the store may not be able to
-   * write to the parent: `state-paths` puts the state directory where
-   * `XDG_STATE_HOME` points, and a sibling of that is not necessarily ours.
-   */
-  private trashRoot(): string {
-    return join(this.root, '.trash')
-  }
-
-  private trashedDir(id: string): string {
-    return join(this.trashRoot(), id)
-  }
-
-  /** The metadata a session directory carries, or null when it has none. */
-  private readMeta(dir: string): PersistedSession | null {
-    try {
-      const parsed: unknown = JSON.parse(readFileSync(join(dir, META_FILE), 'utf8'))
-      if (parsed && typeof parsed === 'object' && 'id' in parsed) {
-        return parsed as PersistedSession
-      }
-    } catch {
-      // A directory without readable metadata is still worth restoring; it just
-      // does not rejoin the index, so it stays invisible until its process ends.
-    }
-    return null
   }
 
   private ensureFlushTimer(): void {
@@ -677,6 +525,22 @@ export class SessionStore {
     } catch (error) {
       logPtyEvent('error', 'failed to write the archived session index', error)
     }
+  }
+
+  /**
+   * Drop an id from the index and the flush bookkeeping.
+   *
+   * The pending chunk has to go with it: a session that is no longer on disk
+   * cannot have a buffered write flushed into it later, and the write would
+   * recreate the directory the caller just removed.
+   */
+  private forgetIndexEntry(id: string): void {
+    if (this.index.some((entry) => entry.id === id)) {
+      this.index = this.index.filter((entry) => entry.id !== id)
+      this.saveIndex()
+    }
+    this.pending.delete(id)
+    this.bytesWritten.delete(id)
   }
 
   private upsertIndex(entry: PersistedSession): void {
