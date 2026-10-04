@@ -1,12 +1,11 @@
 import { afterAll, describe, expect, it } from 'bun:test'
+import { manager, setManagerNotifier } from '../src/plugin/pty/manager.ts'
 import {
-  manager,
   registerRawOutputCallback,
   registerSessionUpdateCallback,
   removeRawOutputCallback,
   removeSessionUpdateCallback,
-  setManagerNotifier,
-} from '../src/plugin/pty/manager.ts'
+} from '../src/plugin/pty/manager-notifications.ts'
 import { NotificationManager } from '../src/plugin/pty/notification-manager.ts'
 import type { PTYSessionInfo } from '../src/plugin/pty/types.ts'
 

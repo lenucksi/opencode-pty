@@ -1,5 +1,9 @@
 import { tool } from '@opencode-ai/plugin'
-import { manager, registerSessionUpdateCallback, removeSessionUpdateCallback } from '../manager.ts'
+import { manager } from '../manager.ts'
+import {
+  registerSessionUpdateCallback,
+  removeSessionUpdateCallback,
+} from '../manager-notifications.ts'
 import { DEFAULT_READ_MAX_TOKENS, charsForTokens } from '../../../shared/constants.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
 import { formatLine, TRUNCATION_MARKER } from '../formatters.ts'

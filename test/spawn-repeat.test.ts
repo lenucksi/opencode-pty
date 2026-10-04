@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { OpencodeClient } from '@opencode-ai/sdk'
-import { initManager, manager, rawOutputCallbacks } from '../src/plugin/pty/manager.ts'
+import { initManager, manager } from '../src/plugin/pty/manager.ts'
+import { rawOutputCallbacks } from '../src/plugin/pty/manager-notifications.ts'
 import { RawOutputCollector } from './utils.ts'
 import type { Subprocess } from 'bun'
 

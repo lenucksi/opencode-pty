@@ -5,7 +5,7 @@ import {
   removeRawOutputCallback,
   removeSessionRemovedCallback,
   removeSessionUpdateCallback,
-} from '../../plugin/pty/manager'
+} from '../../plugin/pty/manager-notifications.ts'
 import type { PTYSessionInfo } from '../../plugin/pty/types'
 import type {
   WSMessageServerSessionRemoved,

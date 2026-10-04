@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { manager } from '../src/plugin/pty/manager.ts'
 import {
-  manager,
   registerRawOutputCallback,
   registerSessionUpdateCallback,
-} from '../src/plugin/pty/manager.ts'
+} from '../src/plugin/pty/manager-notifications.ts'
 import type { PTYSessionInfo } from '../src/plugin/pty/types.ts'
 import { PTYServer } from '../src/web/server/server.ts'
 import { ManagedTestServer } from './utils.ts'

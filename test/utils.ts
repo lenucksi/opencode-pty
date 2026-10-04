@@ -1,13 +1,12 @@
 import { OpencodeClient } from '@opencode-ai/sdk'
+import { initManager, manager } from '../src/plugin/pty/manager'
 import {
-  initManager,
-  manager,
+  rawOutputCallbacks,
   registerRawOutputCallback,
   removeRawOutputCallback,
   sessionRemovedCallbacks,
   sessionUpdateCallbacks,
-  rawOutputCallbacks,
-} from '../src/plugin/pty/manager'
+} from '../src/plugin/pty/manager-notifications.ts'
 import { PTYServer } from '../src/web/server/server'
 import type {
   WSMessageServer,

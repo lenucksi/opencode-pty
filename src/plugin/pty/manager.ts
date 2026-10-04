@@ -16,6 +16,12 @@ import {
   type PersistSessionInput,
   SessionStore,
 } from './session-store.ts'
+
+import {
+  notifyRawOutput,
+  notifySessionRemoved,
+  notifySessionUpdate,
+} from './manager-notifications.ts'
 import { buildBoundedRaw, type BoundedRawResult } from './read-budget.ts'
 import { SessionLifecycleManager } from './session-lifecycle.ts'
 import type {
@@ -63,85 +69,6 @@ if (typeof original === 'function') {
       return original.apply(this, args)
     }
   )
-}
-
-type SessionUpdateCallback = (session: PTYSessionInfo) => void
-
-export const sessionUpdateCallbacks: SessionUpdateCallback[] = []
-
-export function registerSessionUpdateCallback(callback: SessionUpdateCallback) {
-  sessionUpdateCallbacks.push(callback)
-}
-
-export function removeSessionUpdateCallback(callback: SessionUpdateCallback) {
-  const index = sessionUpdateCallbacks.indexOf(callback)
-  if (index !== -1) {
-    sessionUpdateCallbacks.splice(index, 1)
-  }
-}
-
-function notifySessionUpdate(session: PTYSessionInfo) {
-  // The copy is load-bearing: `pty_wait` unregisters its own callback from
-  // inside the callback it is being called through (tools/wait.ts), so walking
-  // the live array would skip the element behind the removed one.
-  // aislop-ignore-next-line unicorn/no-useless-spread -- a callback deregisters itself while being notified
-  for (const callback of [...sessionUpdateCallbacks]) {
-    try {
-      callback(session)
-    } catch {
-      // Ignore callback errors
-    }
-  }
-}
-
-type RawOutputCallback = (sessionId: string, rawData: string, offset: number) => void
-
-export const rawOutputCallbacks: RawOutputCallback[] = []
-
-export function registerRawOutputCallback(callback: RawOutputCallback): void {
-  rawOutputCallbacks.push(callback)
-}
-
-export function removeRawOutputCallback(callback: RawOutputCallback): void {
-  const index = rawOutputCallbacks.indexOf(callback)
-  if (index !== -1) {
-    rawOutputCallbacks.splice(index, 1)
-  }
-}
-
-function notifyRawOutput(sessionId: string, rawData: string, offset: number): void {
-  for (const callback of rawOutputCallbacks) {
-    try {
-      callback(sessionId, rawData, offset)
-    } catch {
-      // Ignore callback errors
-    }
-  }
-}
-
-type SessionRemovedCallback = (sessionId: string) => void
-
-export const sessionRemovedCallbacks: SessionRemovedCallback[] = []
-
-export function registerSessionRemovedCallback(callback: SessionRemovedCallback): void {
-  sessionRemovedCallbacks.push(callback)
-}
-
-export function removeSessionRemovedCallback(callback: SessionRemovedCallback): void {
-  const index = sessionRemovedCallbacks.indexOf(callback)
-  if (index !== -1) {
-    sessionRemovedCallbacks.splice(index, 1)
-  }
-}
-
-function notifySessionRemoved(sessionId: string): void {
-  for (const callback of sessionRemovedCallbacks) {
-    try {
-      callback(sessionId)
-    } catch {
-      // Ignore callback errors
-    }
-  }
 }
 
 export class PTYManager {
