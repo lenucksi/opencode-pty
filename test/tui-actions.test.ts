@@ -362,7 +362,7 @@ describe('opening the output dialog', () => {
 
     expect(recorded.dialogs).toHaveLength(1)
     expect(state.dialog?.id).toBe(id)
-    expect(state.dialog?.buffer).toContain('hallo')
+    expect(state.dialog?.output).toContain('hallo')
     // 120 columns is the "large" band; anything narrower would have overflowed.
     expect(recorded.dialogs[0]?.size).toBe('large')
   })
@@ -396,7 +396,7 @@ describe('opening the output dialog', () => {
     }) as never
 
     await createActions(closeDials).openOutput(session({ id }))
-    expect(state.dialog?.buffer).toContain('x')
+    expect(state.dialog?.output).toContain('x')
 
     onClose?.()
     expect(state.dialog).toBeNull()
@@ -406,7 +406,7 @@ describe('opening the output dialog', () => {
     await startServer()
     const state = liveState({ origin: origin(), sessions: [] })
     await createActions(deps(state)).openOutput(session({ id: 'pty_does_not_exist' }))
-    expect(state.dialog?.buffer).toContain('failed to read buffer')
+    expect(state.dialog?.output).toContain('failed to read buffer')
   })
 })
 

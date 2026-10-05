@@ -10,7 +10,7 @@ import {
   initialPanelState,
   isRunning,
   MAX_START_FAILURES,
-  noteDialogBuffer,
+  noteDialogOutput,
   noteDialogClosed,
   noteDialogOpened,
   noteDialogTick,
@@ -270,14 +270,14 @@ describe('the dialog transitions', () => {
   test('opening shows a placeholder rather than an empty output', () => {
     const state = initialPanelState()
     noteDialogOpened(state, 'pty_7', 1000)
-    expect(state.dialog).toEqual({ id: 'pty_7', buffer: 'loading…', now: 1000 })
+    expect(state.dialog).toEqual({ id: 'pty_7', output: 'loading…', now: 1000 })
   })
 
   test('a read lands in the open dialog', () => {
     const state = initialPanelState()
     noteDialogOpened(state, 'pty_7', 1000)
-    noteDialogBuffer(state, 'hello')
-    expect(state.dialog?.buffer).toBe('hello')
+    noteDialogOutput(state, 'hello')
+    expect(state.dialog?.output).toBe('hello')
   })
 
   // A stale buffer is what a second dialog shows for a poll interval, which reads
@@ -285,7 +285,7 @@ describe('the dialog transitions', () => {
   test('closing clears it, so the next dialog cannot inherit it', () => {
     const state = initialPanelState()
     noteDialogOpened(state, 'pty_7', 1000)
-    noteDialogBuffer(state, 'first session output')
+    noteDialogOutput(state, 'first session output')
     noteDialogClosed(state)
     expect(state.dialog).toBeNull()
   })
@@ -307,7 +307,7 @@ describe('the dialog transitions', () => {
 
   test('a late read with no dialog open is a no-op, not a crash', () => {
     const state = initialPanelState()
-    noteDialogBuffer(state, 'late')
+    noteDialogOutput(state, 'late')
     expect(state.dialog).toBeNull()
   })
 })

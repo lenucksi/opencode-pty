@@ -218,13 +218,38 @@ export function formatDuration(ms: number | null | undefined): string {
  * Accepts a bare string too, so a caller that gets the body directly is not
  * punished for it.
  */
-export function decodeBuffer(raw: unknown): string {
-  if (typeof raw === 'string') return raw.replace(/\r\n/g, '\n')
-  if (raw && typeof raw === 'object') {
-    const plain = (raw as { plain?: unknown }).plain
-    if (typeof plain === 'string') return plain.replace(/\r\n/g, '\n')
+
+/**
+ * Decode a `/api/sessions/:id/screen` response into displayable text.
+ *
+ * The endpoint returns the RENDERED screen - one string per row, trailing blanks
+ * already removed - not the bytes the program wrote. That distinction is the whole
+ * point: `buffer/plain` is `Bun.stripANSI(raw)`, so a cursor move is deleted along
+ * with the colour codes and a full-screen program's output arrives unpainted with its
+ * layout gone. The screen carries the layout.
+ *
+ * The rows are joined with newlines and nothing else. A line too wide for the screen
+ * therefore occupies two rows here too, which is what the program itself shows; the
+ * response's `continuedRows` is there for a reader who needs to know they are one line.
+ *
+ * Returns '' for anything unreadable rather than throwing: a dialog that cannot show
+ * output should show an empty box, not take the panel's refresh down with it.
+ */
+export function decodeScreen(raw: unknown): string {
+  const rows = (value: unknown): string[] | null => {
+    if (Array.isArray(value)) {
+      return value.filter((line): line is string => typeof line === 'string')
+    }
+    if (value && typeof value === 'object') {
+      const lines = (value as { lines?: unknown }).lines
+      if (Array.isArray(lines))
+        return lines.filter((line): line is string => typeof line === 'string')
+    }
+    return null
   }
-  return ''
+  // A bare array is accepted so a caller that gets the body directly is not punished
+  // for it, exactly as `decodeBuffer` accepted a bare string.
+  return (rows(raw) ?? []).join('\n')
 }
 
 /**

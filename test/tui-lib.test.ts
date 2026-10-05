@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test'
 import {
   archiveLabel,
   clearActionLabel,
-  decodeBuffer,
+  decodeScreen,
   finishedSessions,
   formatDetail,
   formatDuration,
@@ -220,20 +220,43 @@ describe('formatDuration', () => {
   })
 })
 
-describe('decodeBuffer', () => {
-  it('unwraps the {plain, byteLength} envelope the endpoint actually returns', () => {
-    expect(decodeBuffer({ plain: 'a\r\nb', byteLength: 4 })).toBe('a\nb')
+describe('decodeScreen', () => {
+  // The endpoint returns the RENDERED screen, one string per row with trailing blanks
+  // already removed. Joining the rows is the whole of the decoding - which is the point:
+  // there is no ANSI to strip and no cursor position to lose, because the emulator has
+  // already applied both.
+  // Trailing blank rows are kept, trailing newline included: the blank bottom of a
+  // screen is part of what the screen shows, and trimming it would make a cleared
+  // terminal look like one that printed something.
+  it('joins the screen rows into displayable text', () => {
+    expect(decodeScreen({ id: 'pty_1', cols: 40, rows: 3, lines: ['top', 'second', ''] })).toBe(
+      'top\nsecond\n'
+    )
   })
 
-  it('accepts a bare string, so a direct body is not punished for it', () => {
-    expect(decodeBuffer('a\r\nb')).toBe('a\nb')
+  // A row too wide for the screen occupies two screen rows, and that is what the program
+  // shows - so this must not silently join them into one longer line.
+  it('keeps the rows separate rather than rejoining a wrapped line', () => {
+    expect(decodeScreen({ lines: ['first half', 'second half'] })).toBe('first half\nsecond half')
   })
 
+  it('accepts a bare array, so a direct body is not punished for it', () => {
+    expect(decodeScreen(['a', 'b'])).toBe('a\nb')
+  })
+
+  // Anything unreadable yields an empty box rather than throwing: a dialog that cannot
+  // show output must not take the panel's refresh down with it.
   it('returns empty for anything else rather than throwing', () => {
-    expect(decodeBuffer(null)).toBe('')
-    expect(decodeBuffer(undefined)).toBe('')
-    expect(decodeBuffer(42)).toBe('')
-    expect(decodeBuffer({ byteLength: 4 })).toBe('')
+    expect(decodeScreen(null)).toBe('')
+    expect(decodeScreen(undefined)).toBe('')
+    expect(decodeScreen(42)).toBe('')
+    expect(decodeScreen({ cols: 40, rows: 3 })).toBe('')
+  })
+
+  // A single unusable row must not poison the rows around it: the screen is an array of
+  // strings from the wire, and one surprise in it should cost one row, not all of them.
+  it('drops unusable rows and keeps the rest', () => {
+    expect(decodeScreen({ lines: ['good', 42, null, 'also good'] })).toBe('good\nalso good')
   })
 })
 

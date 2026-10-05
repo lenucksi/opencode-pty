@@ -3,14 +3,14 @@ import type { Plugin } from '@opencode/plugin/tui'
 
 import { isFinished, type PanelSession } from './lib.ts'
 import {
-  noteDialogBuffer,
+  noteDialogOutput,
   noteDialogClosed,
   noteDialogOpened,
   noteDialogTick,
   type PanelState,
 } from './panel-state.ts'
 import { dialogRows, dialogSize, outputDialogView } from './render.ts'
-import { cleanupSession, findProjectOrigin, readBuffer } from './server.ts'
+import { cleanupSession, findProjectOrigin, readScreen } from './server.ts'
 
 /**
  * What a person can do to a session from the panel, and what each one costs.
@@ -199,10 +199,10 @@ export function createOpenOutput(deps: ActionDeps) {
     let stopped = false
     const load = async (): Promise<void> => {
       try {
-        const text = await readBuffer(origin, session.id)
-        deps.update((draft) => noteDialogBuffer(draft, text))
+        const text = await readScreen(origin, session.id)
+        deps.update((draft) => noteDialogOutput(draft, text))
       } catch (error) {
-        deps.update((draft) => noteDialogBuffer(draft, '(failed to read buffer)'))
+        deps.update((draft) => noteDialogOutput(draft, '(failed to read buffer)'))
         deps.debug('output.failed', { id: session.id, error: String(error) })
       }
     }
@@ -224,7 +224,7 @@ export function createOpenOutput(deps: ActionDeps) {
           session,
           live: live(),
           now: deps.state.dialog?.now ?? Date.now(),
-          buffer: deps.state.dialog?.buffer ?? '',
+          output: deps.state.dialog?.output ?? '',
           rows: dialogRows(deps.context.renderer.height),
         }),
       () => {

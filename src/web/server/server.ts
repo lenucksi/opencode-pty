@@ -5,6 +5,7 @@ import { CallbackManager } from './callback-manager.ts'
 import { handleHealth } from './handlers/health.ts'
 import { getParentSessions } from './handlers/parent-sessions.ts'
 import { handleServerInfo } from './handlers/server-info.ts'
+import { getSessionScreen } from './handlers/session-screen.ts'
 import {
   bulkRemoveSessions,
   cleanupSession,
@@ -243,6 +244,9 @@ export class PTYServer implements Disposable {
         },
         [routes.session.buffer.plain.path]: {
           GET: getPlainBuffer,
+        },
+        [routes.session.screen.path]: {
+          GET: getSessionScreen,
         },
       },
 

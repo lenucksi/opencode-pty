@@ -15,7 +15,7 @@ export interface DialogState {
   /** Which session the dialog is showing. */
   id: string
   /** Its plain buffer, or a message saying why it could not be read. */
-  buffer: string
+  output: string
   /** The clock the run timer reads, advanced once a second while it is open. */
   now: number
 }
@@ -231,7 +231,7 @@ export function noteStartError(state: PanelState, error: unknown): void {
 
 /** The dialog opened on this session, showing a placeholder until the read lands. */
 export function noteDialogOpened(state: PanelState, id: string, now: number): void {
-  state.dialog = { id, buffer: 'loading…', now }
+  state.dialog = { id, output: 'loading…', now }
 }
 
 /**
@@ -250,6 +250,6 @@ export function noteDialogTick(state: PanelState, now: number): void {
 }
 
 /** A buffer read landed, or failed and says so. */
-export function noteDialogBuffer(state: PanelState, buffer: string): void {
-  if (state.dialog !== null) state.dialog.buffer = buffer
+export function noteDialogOutput(state: PanelState, buffer: string): void {
+  if (state.dialog !== null) state.dialog.output = buffer
 }

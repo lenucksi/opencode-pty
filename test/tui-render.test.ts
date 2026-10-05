@@ -225,7 +225,7 @@ describe('outputDialogView', () => {
     session: session({ id: 'pty_7', title: 'dev-server', status: 'running', pid: 42 }),
     live: session({ id: 'pty_7', title: 'dev-server', status: 'running', pid: 42 }),
     now: Date.parse('2026-01-01T10:02:30.000Z'),
-    buffer: '',
+    output: '',
     rows: 6,
     ...over,
   })
@@ -323,14 +323,14 @@ describe('outputDialogView', () => {
   })
 })
 
-/** The dialog with a buffer, which is the one thing every case here needs. */
-function dialog2(buffer: string) {
+/** The dialog with output, which is the one thing every case here needs. */
+function dialog2(output: string) {
   return outputDialogView({
     tones,
     session: session({ id: 'pty_7', title: 'dev-server', status: 'running' }),
     live: session({ id: 'pty_7', title: 'dev-server', status: 'running' }),
     now: Date.now(),
-    buffer,
+    output,
     rows: 6,
   })
 }

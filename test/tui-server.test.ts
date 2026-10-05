@@ -3,7 +3,6 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { decodeBuffer } from '../src/tui/lib.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import {
@@ -11,7 +10,7 @@ import {
   findProjectOrigin,
   isHealthy,
   listSessions,
-  readBuffer,
+  readScreen,
 } from '../src/tui/server.ts'
 import { PTYServer } from '../src/web/server/server.ts'
 
@@ -182,44 +181,36 @@ describe('listSessions', () => {
   })
 })
 
-describe('readBuffer', () => {
-  test('decodes the envelope the endpoint actually returns', async () => {
+describe('readScreen', () => {
+  test('shows the screen the program drew, with the cursor position applied', async () => {
     await startServer()
-    // A plain newline, not a CRLF: a PTY turns `\n` into `\r\n` on the way out, so
-    // an argument that already carried `\r` arrives as a doubled pair - which is a
-    // different case, covered below.
-    const id = await spawnSession('buffered', 'printf', ['hello\nworld'])
-    // The archive is written when the process ends, so the buffer is not there the
+    // A cursor move and nothing else. `buffer/plain` deletes the escape sequence along
+    // with the colour codes, so this arrives as unpainted text with the indentation
+    // gone - which is the whole reason the dialog reads the screen now.
+    const id = await spawnSession('laid-out', 'printf', ['%b', 'top\r\nsecond\r\n\u001b[3;7Hmoved'])
+    // The archive is written when the process ends, so the screen is not there the
     // instant the spawn returns. Polled rather than slept on.
-    let seen = 'nie gelesen'
+    let seen = 'never read'
     for (let attempt = 0; attempt < 100; attempt++) {
-      seen = await readBuffer(origin(), id).catch((error: unknown) => `Fehler: ${String(error)}`)
-      if (seen.includes('hello') && seen.includes('world')) {
-        // CRLF is normalised: the endpoint returns a terminal buffer.
-        expect(seen).not.toContain('\r')
+      seen = await readScreen(origin(), id).catch((error: unknown) => `failed: ${String(error)}`)
+      if (seen.includes('moved')) {
+        expect(seen).toContain('top')
+        expect(seen).toContain('second')
+        // Six columns in, on the third row: the layout the escape sequence asked for,
+        // preserved because the emulator applied it.
+        expect(seen.split('\n')[2]).toBe('      moved')
         return
       }
       await Bun.sleep(25)
     }
-    throw new Error(`der Buffer enthielt nie die Ausgabe. Gelesen wurde: ${seen.slice(0, 160)}`)
-  })
-
-  // Only the PAIR is normalised. A lone CR is a real control character that
-  // programs use to return the cursor, so stripping it would corrupt output rather
-  // than tidy it - which is why the case above is written with a plain newline.
-  test('keeps a lone carriage return rather than deleting it', () => {
-    // decodeBuffer is the whole of the normalisation; asserted here because the
-    // buffer endpoint's envelope is what carries the text.
-    expect(decodeBuffer({ plain: 'a\rb' })).toBe('a\rb')
-    expect(decodeBuffer({ plain: 'a\r\nb' })).toBe('a\nb')
+    throw new Error(`the screen never showed the output. Read: ${seen.slice(0, 160)}`)
   })
 
   test('names a failure rather than returning empty text', async () => {
     await startServer()
-    await expect(readBuffer(origin(), 'pty_does_not_exist')).rejects.toThrow()
+    await expect(readScreen(origin(), 'pty_does_not_exist')).rejects.toThrow()
   })
 })
-
 describe('cleanupSession', () => {
   test('removes the entry, which is what a plain kill does not do', async () => {
     await startServer()

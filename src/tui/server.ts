@@ -1,5 +1,5 @@
 import { candidateOrigins, originsForProject } from '../shared/runtime.ts'
-import { decodeBuffer, isPtyHealth, type PanelSession } from './lib.ts'
+import { decodeScreen, isPtyHealth, type PanelSession } from './lib.ts'
 
 /**
  * Everything the panel needs from the PTY server, over HTTP.
@@ -71,11 +71,24 @@ export async function listSessions(origin: string): Promise<PanelSession[]> {
   return Array.isArray(list) ? (list as PanelSession[]) : []
 }
 
-/** A session's plain output, newlines normalised for display. */
-export async function readBuffer(origin: string, id: string): Promise<string> {
-  const res = await fetchWithTimeout(`${origin}/api/sessions/${id}/buffer/plain`)
+/**
+ * A session's screen, as the program currently draws it.
+ *
+ * The screen, not the raw bytes. `buffer/plain` is `Bun.stripANSI(raw)`: the ANSI
+ * codes go, and the cursor movement goes with them, so a full-screen program arrives as
+ * unpainted text with its layout gone. The screen endpoint replays the same bytes
+ * through the same VT emulator `pty_screen` uses and answers the question a dialog
+ * actually asks - what does this look like now.
+ *
+ * No `cols`/`rows`: the endpoint defaults to the geometry the process was given at
+ * spawn and every `pty_resize` recorded, so the snapshot is the screen the program
+ * believes it has. Asking for a different size would answer a different question, and
+ * the dialog has no width to ask with.
+ */
+export async function readScreen(origin: string, id: string): Promise<string> {
+  const res = await fetchWithTimeout(`${origin}/api/sessions/${id}/screen`)
   if (!res.ok) throw new Error(`the server answered ${res.status}`)
-  return decodeBuffer(await res.json())
+  return decodeScreen(await res.json())
 }
 
 /**

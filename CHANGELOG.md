@@ -67,6 +67,29 @@ beside the built-in sidebar items rather than replacing them.
 - `@babel/core`, pulled in by `@opentui/solid`'s Babel plugin, is overridden past
   advisory GHSA-4. Nothing here runs Babel; only `jsx-runtime` is used.
 
+- **The panel's output dialog reads that screen instead of the plain buffer.** It asked
+  `/api/sessions/:id/buffer/plain`, which is `Bun.stripANSI(raw)`: the colour codes go and
+  the cursor movement goes with them, so a full-screen program's output arrived unpainted
+  with its layout gone - every repaint on its own line. The dialog now reads the screen
+  endpoint, which replays the same bytes through the same VT emulator `pty_screen` uses.
+  Measured on `printf '%b' 'top\r\nsecond\r\n\e[3;7Hmoved'`: the plain buffer yields
+  `moved`, the screen yields `      moved`. The rows are kept as they are, trailing blank
+  rows included, so a line too wide for the terminal occupies two rows in the dialog
+  exactly as it does on the terminal. `buffer/plain` itself is untouched - it is the right
+  answer to "what bytes did the program write", and `pty_read` and the web UI both depend
+  on it.
+- `GET /api/sessions/:id/screen` returns the rendered screen - lines, cursor,
+  colour spans - for a session. `buffer/plain` answers "what bytes did the program
+  write" and is unchanged: it is the ANSI-stripped byte stream, which is the right
+  answer to that question and what `pty_read` depends on. The new route answers
+  "what does it look like?", which that one cannot: the layout of a full-screen
+  program lives in the escape sequences, so stripping them leaves every repaint as
+  text on its own line. The web UI never needed this - it reconstructs the screen on
+  the client from the raw buffer - but a TUI plugin has no DOM and no renderer of
+  its own, so the server has to do the replay. It is the same `renderScreen` call
+  `pty_screen` makes, at the same geometry, and `?cols`/`?rows` render at another
+  size without resizing the session.
+
 ### Changed
 
 - `@opentui/core`, `@opentui/solid`, `solid-js` and `@opencode/theme` are optional

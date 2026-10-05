@@ -218,7 +218,7 @@ export interface DialogView {
   /** The clock the run timer reads. */
   readonly now: number
   /** Its plain output. */
-  readonly buffer: string
+  readonly output: string
   /** Height of the scrollable output area, in rows. */
   readonly rows: number
 }
@@ -283,7 +283,7 @@ export function outputDialogView(view: DialogView) {
     width: '100%',
     height: view.rows,
     overflow: 'hidden',
-    children: jsx('text', { children: (): string => tail(view.buffer, view.rows) }),
+    children: jsx('text', { children: (): string => tail(view.output, view.rows) }),
   })
   const frame = jsx('box', {
     width: '100%',
