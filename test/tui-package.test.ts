@@ -37,6 +37,26 @@ describe('the TUI entrypoint', () => {
   })
 })
 
+describe('the TUI entrypoint behind the V2 subpath', () => {
+  // The documented V2 config entry is the package name with a subpath, and the host
+  // builds the TUI specifier from that name: a configured `opencode-pty/v2` is
+  // probed as `opencode-pty/v2/tui`. Without this entry the server half loads and
+  // the panel silently never appears - measured with the host's own resolver.
+  const viaV2 = manifest.exports['./v2/tui']
+
+  it('is declared, because the host probes <configured-name>/tui', () => {
+    expect(viaV2).toEqual({
+      types: './dist/src/tui/index.d.ts',
+      default: './dist/src/tui/index.js',
+    })
+  })
+
+  it('names the same module as the bare entry, so both spellings agree', () => {
+    if (!viaV2 || !entry) throw new Error('a TUI export is missing')
+    expect(viaV2.default).toBe(entry.default)
+  })
+})
+
 describe('the TUI dependencies', () => {
   // The floors are the SDK's own peer dependencies, copied rather than chosen:
   // a host that satisfies @opencode/plugin satisfies us. Getting them from the

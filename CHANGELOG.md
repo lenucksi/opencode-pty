@@ -31,6 +31,11 @@ beside the built-in sidebar items rather than replacing them.
   and `stickyScroll` together with `stickyStart: 'bottom'` blanks it even for a
   single line. The box shows exactly as many lines as it has rows, so the newest
   output is what lands on screen. The full history stays in the web UI.
+- `opencode-pty/v2` now also resolves `/tui`. OpenCode builds the TUI specifier from
+  the configured plugin name, so the documented V2 entry was probed as
+  `opencode-pty/v2/tui` and the panel was never found - while the tools loaded
+  normally, which is what makes it a silent failure. Found by running OpenCode's own
+  resolver against the built package.
 - `opencode-pty/tui` is now a declared export. The `exports` wildcards did not reach
   it - `./*` matches one path segment and pointed at `dist/src/tui.js` rather than
   the directory's `index.js` - so opencode's resolver reported the plugin as having

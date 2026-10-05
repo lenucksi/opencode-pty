@@ -232,8 +232,24 @@ session, which does not belong on a load path. If the PTY plugin is not
 registered in the project's `opencode.jsonc`, the header says so rather than
 offering a retry that cannot work.
 
-Requires an OpenCode build with the V2 TUI plugin API. The panel is additive, so
-if your build does not have it, nothing changes.
+### Requirements
+
+The panel needs an OpenCode build with the V2 TUI plugin API (2.0.23 and later), and
+four packages alongside the plugin:
+
+```bash
+bun add @opentui/solid@0.5.14 @opentui/core@0.5.14 solid-js@1.9.15 @opencode/theme@2.0.23
+```
+
+They are **optional peer** dependencies on purpose: without them the tools and the
+web UI work exactly as before, and installing them costs about 400 packages you do
+not need for those. But they are not optional *for the panel*, and OpenCode does not
+supply them — the TUI bundles its own copy inside the binary, where a plugin cannot
+reach it. Without them the plugin is reported as failed to load in `/plugins`, and
+the rest of it keeps working.
+
+The panel is additive, so on a build without the V2 TUI API it simply does not
+appear.
 
 ## Web UI
 
