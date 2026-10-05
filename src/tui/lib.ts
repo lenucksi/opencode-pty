@@ -1,3 +1,5 @@
+import { formatDurationMs } from '../web/shared/session-meta.ts'
+
 /**
  * Pure logic for the PTY sidebar: no TUI, no I/O, no host API.
  *
@@ -202,22 +204,22 @@ export function sessionDurationMs(session: PanelSession, now: number): number | 
 }
 
 /**
- * A duration as a compact label.
+ * A duration as a label, for the run timer.
  *
- * Seconds zero-padded below an hour (`1m 05s`), minutes above it (`2h 07m`): the
- * unit that matters is the leading one. Non-finite, negative and missing inputs
- * all become `0s`, because a `NaN` or an empty cell in a corner of the terminal
- * is worse than a floor.
+ * Delegates to the shared formatter with the `precise` preset rather than computing its
+ * own, for the reason the shared module documents: two implementations of "how long did
+ * that run" is how a 90-second build reads `1m 30s` in one surface and `2m` in another.
+ *
+ * ONE behaviour change came with the delegation, and it was chosen, not absorbed: a
+ * duration that is zero or negative now renders as EMPTY rather than `0s`. The old floor
+ * existed so a corner of the terminal would never be blank, but `0s` on a run that has
+ * not measurably started is a claim, and the callers already handle the empty case
+ * deliberately - `sessionDurationMs` returns null for an unmeasurable run and the dialog
+ * renders nothing then. So the empty case is the truthful one, and it now has one owner.
  */
 export function formatDuration(ms: number | null | undefined): string {
-  const totalSeconds =
-    typeof ms === 'number' && Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : 0
-  const seconds = totalSeconds % 60
-  const minutes = Math.floor(totalSeconds / 60) % 60
-  const hours = Math.floor(totalSeconds / 3600)
-  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`
-  if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, '0')}s`
-  return `${seconds}s`
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return ''
+  return formatDurationMs(ms, 'precise')
 }
 
 /**

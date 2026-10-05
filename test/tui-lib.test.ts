@@ -193,17 +193,29 @@ describe('sessionDurationMs', () => {
       1_000
     )
     expect(ms).toBeLessThan(0)
-    expect(formatDuration(ms)).toBe('0s')
+    // The span is reported truthfully rather than nulled, and the LABEL is empty. An old
+    // floor rendered `0s` here, which claimed the run lasted nothing; empty says the
+    // clock is not to be trusted, and the caller already renders empty deliberately.
+    expect(formatDuration(ms)).toBe('')
   })
 })
 
 describe('formatDuration', () => {
+  // Delegates to the shared formatter with the `precise` preset; the preset itself is
+  // tested in `session-meta.test.ts`. What is pinned HERE is that the panel asks for the
+  // precise one and that rubbish renders as nothing rather than as `NaN`.
   it('counts in seconds below a minute, zero-padded seconds after it', () => {
-    expect(formatDuration(0)).toBe('0s')
-    expect(formatDuration(999)).toBe('0s')
     expect(formatDuration(1000)).toBe('1s')
     expect(formatDuration(65_000)).toBe('1m 05s')
     expect(formatDuration(3_599_000)).toBe('59m 59s')
+  })
+
+  // Rounded, not floored: a run of 999ms reads as one second rather than zero. The old
+  // implementation floored, and its floor was the reason `0s` appeared on a timer for a
+  // process that had demonstrably been alive.
+  it('rounds a sub-second run up to a second, and shows nothing for no run at all', () => {
+    expect(formatDuration(999)).toBe('1s')
+    expect(formatDuration(0)).toBe('')
   })
 
   it('counts in minutes above an hour', () => {
@@ -211,12 +223,21 @@ describe('formatDuration', () => {
     expect(formatDuration(7_380_000)).toBe('2h 03m')
   })
 
-  it('floors rubbish to zero rather than rendering NaN', () => {
-    expect(formatDuration(null)).toBe('0s')
-    expect(formatDuration(undefined)).toBe('0s')
-    expect(formatDuration(Number.NaN)).toBe('0s')
-    expect(formatDuration(-5000)).toBe('0s')
-    expect(formatDuration(Number.POSITIVE_INFINITY)).toBe('0s')
+  // Days are for the web sidebar, which has the room. A 40-column column shows hours and
+  // leaves the reader to wonder - and the shared preset is where that is decided, not here.
+  it('never writes days, even for a very long run', () => {
+    expect(formatDuration(31 * 3_600_000)).toBe('31h')
+  })
+
+  // Empty, not `NaN` and not `0s`. `NaN` in a corner of the terminal is the failure this
+  // guards against, and `0s` was the old answer to it - a claim that the run lasted
+  // nothing, on a clock that cannot be trusted.
+  it('renders rubbish as nothing rather than NaN or a zero duration', () => {
+    expect(formatDuration(null)).toBe('')
+    expect(formatDuration(undefined)).toBe('')
+    expect(formatDuration(Number.NaN)).toBe('')
+    expect(formatDuration(-5000)).toBe('')
+    expect(formatDuration(Number.POSITIVE_INFINITY)).toBe('')
   })
 })
 

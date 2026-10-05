@@ -67,6 +67,24 @@ beside the built-in sidebar items rather than replacing them.
 - `@babel/core`, pulled in by `@opentui/solid`'s Babel plugin, is overridden past
   advisory GHSA-4. Nothing here runs Babel; only `jsx-runtime` is used.
 
+- **The session list is ordered by `exitAt`, in the browser as well as the sidebar.**
+  `endedAt` is lost across a restart - that is the reason `exitAt` exists - so a restarted
+  session had no end time and fell back to its start when the list was ordered. A session
+  that finished twenty minutes ago therefore sorted ABOVE one that finished a minute ago,
+  on every surface. `sortSessionsByTime` now prefers `exitAt`, then `endedAt`, then
+  `createdAt`.
+- **One duration formatter with two presets.** `formatDurationMs` is the implementation;
+  `compact` gives `2h 04m` for the web sidebar and `precise` gives `1m 05s` for the 40-column
+  one, both from the same arithmetic. The sidebar's run timer is no longer a second
+  implementation, and two surfaces can no longer disagree about how long a run was.
+  One deliberate behaviour change: a duration of zero or less now renders as EMPTY rather
+  than `0s`, because `0s` claimed a run lasted nothing on a clock that cannot be trusted -
+  and the callers already render the empty case deliberately.
+- The sidebar panel's ordering is now the shared rule plus one step of its own. The
+  partition (running above finished) stays local, because a live process below a page of
+  records is one you have to scroll to find. The order inside each half comes from the
+  shared sort, which also brought its deterministic tie-break: two sessions with the same
+  timestamp are separated by id rather than by whichever order the server sent them in.
 - **A `session.panel` for the PTYs of the conversation you are in.** A PTY session belongs to
   the OpenCode session that spawned it - the web UI groups its list by `parentSessionId` for
   the same reason - so the panel claims `session.panel`, the host's own place for an extra

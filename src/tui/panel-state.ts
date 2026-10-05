@@ -1,4 +1,5 @@
 import { isFinished, type PanelSession } from './lib.ts'
+import { sortSessionsByTime } from '../web/shared/session-meta.ts'
 
 /**
  * The panel's state, and every transition it can make.
@@ -96,8 +97,14 @@ export function statusWhenUnavailable(failures: number, cause: string | null): s
 }
 
 /**
- * The order the panel lists sessions in: running first, then finished, newest first
- * within each group.
+ * The order the panel lists sessions in: running first, then finished.
+ *
+ * The partition is this file's; the order inside each half is the SHARED one
+ * (`sortSessionsByTime`), which is what makes the sidebar and the web UI agree about
+ * which run is newer. An earlier version had its own comparator here, ordered by
+ * `createdAt`, and disagreed with the web list for every session that had actually
+ * finished - the server exposes `exitAt` precisely because `endedAt` is lost across a
+ * restart, and this file was sorting on the weaker field.
  *
  * The list is every session the server knows, so on a machine with any history it is
  * hundreds of finished records. Listed in the server's order, the one process that is
@@ -106,14 +113,14 @@ export function statusWhenUnavailable(failures: number, cause: string | null): s
  * nothing is hidden by the ordering.
  */
 export function orderForDisplay(sessions: readonly PanelSession[]): PanelSession[] {
-  const rank = (session: PanelSession): number => (isRunning(session) ? 0 : 1)
-  return [...sessions].sort((left, right) => {
-    const group = rank(left) - rank(right)
-    if (group !== 0) return group
-    // Newest first within a group. An unreadable timestamp sorts last rather than
-    // throwing the comparison, which would make the order depend on the input.
-    return timestamp(right) - timestamp(left)
-  })
+  // Two steps, and only the first is ours. The PARTITION - running above finished - is
+  // the sidebar's own requirement: a live process below a page of records is one you have
+  // to scroll to find. The ORDER WITHIN each half is the shared rule, so a 90-second run
+  // and a restarted one land where the web UI puts them rather than where this file once
+  // decided by itself.
+  const running = sortSessionsByTime(sessions.filter(isRunning))
+  const finished = sortSessionsByTime(sessions.filter((session) => !isRunning(session)))
+  return [...running, ...finished]
 }
 
 /** Whether a session is one a reader would want to watch. */
@@ -174,11 +181,6 @@ export function visibleSessions(
   const running = sessions.filter(isRunning)
   if (!showFinished) return running
   return [...running, ...failedFinished(sessions)]
-}
-
-function timestamp(session: PanelSession): number {
-  const parsed = Date.parse(session.createdAt ?? '')
-  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY
 }
 
 /** How many sessions, in words. One is not "1 sessions". */

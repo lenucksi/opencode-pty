@@ -22,22 +22,68 @@ export function formatClock(iso: string | undefined): string {
   })
 }
 
-/** Compact duration: `42s`, `18m`, `2h 04m`, `1d 3h`. */
-export function formatDuration(startIso: string, endIso?: string): string {
+/**
+ * How precisely a duration is written.
+ *
+ * Two surfaces with very different room, so two presets out of ONE implementation: a
+ * re-implementation per surface is how a 90-second build ends up reading `1m 30s` in
+ * one place and `2m` in another, with nobody having decided either.
+ */
+export type DurationPrecision =
+  /** `42s`, `18m`, `2h 04m`, `1d 3h` - one unit. For the web sidebar, which has room. */
+  | 'compact'
+  /**
+   * `5s`, `1m 05s`, `2h 07m` - seconds kept below the hour, never days.
+   *
+   * For a 40-column sidebar: a run under an hour is usually worth naming to the
+   * second, and a two-day run is a forgotten process rather than a measurement.
+   */
+  | 'precise'
+
+/**
+ * A run's length, from its start to its end.
+ *
+ * The `precise` preset needs no second implementation; it needs the seconds the
+ * compact form drops, so both come out of the same arithmetic and cannot drift.
+ */
+export function formatDuration(
+  startIso: string,
+  endIso?: string,
+  precision: DurationPrecision = 'compact'
+): string {
   const start = Date.parse(startIso)
   const end = endIso === undefined ? Date.now() : Date.parse(endIso)
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return ''
+  return formatDurationMs(end - start, precision)
+}
 
-  const seconds = Math.round((end - start) / 1000)
+/**
+ * The same duration from milliseconds, which is what a caller that already holds a
+ * running clock has.
+ *
+ * This is the one that both surfaces must use. A caller holding milliseconds has no
+ * business converting them to timestamps to borrow the ISO wrapper, and doing that
+ * conversion is how a second implementation grows next to the first.
+ */
+export function formatDurationMs(ms: number, precision: DurationPrecision = 'compact'): string {
+  if (!Number.isFinite(ms) || ms <= 0) return ''
+
+  const seconds = Math.round(ms / 1000)
   if (seconds < 60) return `${seconds}s`
 
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m`
+  if (minutes < 60) {
+    return precision === 'precise' && seconds % 60 !== 0
+      ? `${minutes}m ${String(seconds % 60).padStart(2, '0')}s`
+      : `${minutes}m`
+  }
 
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}h ${String(minutes % 60).padStart(2, '0')}m`
 
-  return `${Math.floor(hours / 24)}d ${hours % 24}h`
+  // Days only make sense where there is room for them: a sidebar too narrow to say
+  // "1d 3h" without truncating the title should say "31h" and let the reader wonder.
+  return precision === 'precise' ? `${hours}h` : `${Math.floor(hours / 24)}d ${hours % 24}h`
 }
 
 /** The command that was actually started, arguments included. */
@@ -119,15 +165,48 @@ export function formatBytes(chars: number): string {
  * exited should not sink below one that started later but ended earlier), a
  * running one by its start time. Stable for equal timestamps. Shared by the
  * server (list responses) and the client (WebSocket updates), so both agree.
+ *
+ * `exitAt` first, and the reason is measured rather than cosmetic: `endedAt` is LOST
+ * across a restart - see the field's comment in the session type - while `exitAt`
+ * records when the process actually stopped. A restarted session therefore has no
+ * `endedAt` and used to sort as if it were still running, which put it above sessions
+ * that had finished later. Preferring `exitAt` only changes the order for those
+ * sessions, and it changes it to the correct one.
  */
-export function sortSessionsByTime(sessions: PTYSessionInfo[]): PTYSessionInfo[] {
-  const activity = (session: PTYSessionInfo): number =>
-    Date.parse(session.endedAt ?? session.createdAt) || 0
+/**
+ * The fields this ordering reads, and nothing else.
+ *
+ * Generic over them rather than over `PTYSessionInfo`, because the rule belongs to a
+ * LIST and a list can be narrower than the full session record - the sidebar panel
+ * carries a trimmed shape and must order by exactly the same rule as the web UI, which
+ * is the whole point of sharing it. Same reason `filterGroups` is generic.
+ */
+export interface TimeOrdered {
+  readonly id: string
+  /**
+   * Optional on purpose, and only here.
+   *
+   * The server always sends it - `PTYSessionInfo` requires it - but the sidebar panel
+   * reads the payload across a process boundary and must not fall over on a malformed
+   * one. A missing timestamp degrades to `0`, which sorts it last instead of throwing, and
+   * that is worth more than a stricter type at a boundary nobody controls. Every web-side
+   * caller passes a real one, so nothing there changes.
+   */
+  readonly createdAt?: string
+  readonly endedAt?: string
+  readonly exitAt?: string
+}
+
+export function sortSessionsByTime<T extends TimeOrdered>(sessions: readonly T[]): T[] {
+  const activity = (session: T): number =>
+    // `?? ''` at the end: NaN becomes 0 through the `||`, which is what puts a session
+    // without a usable timestamp last instead of throwing.
+    Date.parse(session.exitAt ?? session.endedAt ?? session.createdAt ?? '') || 0
 
   return [...sessions].sort(
     (a, b) =>
       activity(b) - activity(a) ||
-      b.createdAt.localeCompare(a.createdAt) ||
+      (b.createdAt ?? '').localeCompare(a.createdAt ?? '') ||
       a.id.localeCompare(b.id)
   )
 }

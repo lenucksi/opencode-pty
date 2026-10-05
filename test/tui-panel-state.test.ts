@@ -172,7 +172,20 @@ describe('orderForDisplay', () => {
       session({ id: 'dated', status: 'running', createdAt: at(5) }),
       session({ id: 'broken', status: 'running', createdAt: 'not a date' }),
     ]
-    expect(orderForDisplay(list).map((s) => s.id)).toEqual(['dated', 'no-date', 'broken'])
+    expect(orderForDisplay(list).map((s) => s.id)).toEqual(['dated', 'broken', 'no-date'])
+  })
+
+  // The two with no usable timestamp have the same activity, and the tie is broken by id
+  // rather than by input position - so the order does not depend on which way the server
+  // happened to send them. The private comparator this replaced left that to chance.
+  test('breaks a tie deterministically, not by input order', () => {
+    const forwards = [
+      session({ id: 'a-broken', status: 'running', createdAt: 'nonsense' }),
+      session({ id: 'b-broken', status: 'running', createdAt: 'nonsense' }),
+    ]
+    const backwards = [...forwards].reverse()
+    expect(orderForDisplay(forwards).map((s) => s.id)).toEqual(['a-broken', 'b-broken'])
+    expect(orderForDisplay(backwards).map((s) => s.id)).toEqual(['a-broken', 'b-broken'])
   })
 
   test('handles an empty list', () => {
