@@ -423,6 +423,26 @@ describe('the PTY sidebar panel', () => {
     }
   })
 
+  // A click delivers BOTH a mouse-down and a mouse-up, so a toggle registered on each
+  // fires twice: the panel opened and shut again inside one gesture. It looked like a
+  // panel that refuses to open, and the bootstrap test below passed anyway - it
+  // asserted the effect (a server was started) rather than the state (still open).
+  test('one click on the header leaves the panel open', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    await waitFor(() =>
+      panelStore(seen).status === 'starting…' ? undefined : panelStore(seen).status
+    )
+
+    const prefs = seen.stores.get('opencode-pty.sidebar')
+    if (!prefs) throw new Error('the plugin never created its prefs store')
+    expect(prefs.collapsed).toBe(true)
+
+    await clickHeader(seen)
+
+    expect(prefs.collapsed).toBe(false)
+  })
+
   // The whole reason the panel may create a session: a host with no server running
   // gets one started through the plugin's own command, in a session nobody sees.
   test('starts the server when the panel is expanded, and cleans the scratch session up', async () => {
@@ -479,8 +499,14 @@ describe('the PTY sidebar panel', () => {
     // The scratch session is cleaned up on the failure path too.
     expect(seen.sessionCalls).toContain('remove')
 
-    await clickHeader(seen)
-    await clickHeader(seen)
+    // Retrying means collapsing and expanding again: the header toggles, and a
+    // header that is already open must not start anything on a click meant to close
+    // it. Two clicks per attempt, which is what a person does - and what the header's
+    // own wording ("toggle the panel to retry") tells them to do.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await clickHeader(seen)
+      await clickHeader(seen)
+    }
 
     const reported = await waitFor(() => {
       const status = String(panelStore(seen).status)

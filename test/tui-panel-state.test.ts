@@ -13,6 +13,7 @@ import {
   noteNoServer,
   noteStartError,
   noteUnreachable,
+  orderForDisplay,
   sessionCountLabel,
   statusWhenUnavailable,
 } from '../src/tui/panel-state.ts'
@@ -50,11 +51,18 @@ describe('sessionCountLabel', () => {
 })
 
 describe('statusWhenUnavailable', () => {
-  // No cause means nobody tried, so the text must point at the click rather than
-  // apologise for a server that was never looked for.
-  test('invites the click when there is no cause to report', () => {
+  test('invites the click while retries remain and nothing said why', () => {
     expect(statusWhenUnavailable(0, null)).toBe(IDLE_STATUS)
-    expect(statusWhenUnavailable(3, null)).toBe(IDLE_STATUS)
+    expect(statusWhenUnavailable(2, null)).toBe(IDLE_STATUS)
+  })
+
+  // With the retries spent, the click no longer starts anything. "click to start"
+  // would invite a gesture that does nothing, so the text names the one that does.
+  test('names the gesture that still works once the retries are spent', () => {
+    expect(statusWhenUnavailable(MAX_START_FAILURES, null)).toBe('unavailable — toggle to retry')
+    expect(statusWhenUnavailable(MAX_START_FAILURES + 5, null)).toBe(
+      'unavailable — toggle to retry'
+    )
   })
 
   test('says it is trying until the retries are used up', () => {
@@ -115,13 +123,87 @@ describe('noteNoServer', () => {
   })
 })
 
+describe('orderForDisplay', () => {
+  const at = (minutes: number): string =>
+    new Date(Date.parse('2026-01-01T12:00:00Z') + minutes * 60_000).toISOString()
+
+  // The list is every session the server knows, so on a machine with history it is
+  // hundreds of finished records. A live one below them is a live one you cannot
+  // watch, which is the whole reason this ordering exists.
+  test('puts a running session above every finished one', () => {
+    const list = [
+      session({ id: 'old-finished', status: 'exited', createdAt: at(0) }),
+      session({ id: 'live', status: 'running', createdAt: at(300) }),
+      session({ id: 'new-finished', status: 'exited', createdAt: at(400) }),
+    ]
+    expect(orderForDisplay(list).map((s) => s.id)).toEqual(['live', 'new-finished', 'old-finished'])
+  })
+
+  test('keeps newest first inside each group', () => {
+    const list = [
+      session({ id: 'a', status: 'running', createdAt: at(10) }),
+      session({ id: 'b', status: 'running', createdAt: at(20) }),
+      session({ id: 'c', status: 'killed', createdAt: at(5) }),
+      session({ id: 'd', status: 'exited', createdAt: at(30) }),
+    ]
+    expect(orderForDisplay(list).map((s) => s.id)).toEqual(['b', 'a', 'd', 'c'])
+  })
+
+  test('leaves the input alone, so the caller keeps what the server sent', () => {
+    const list = [
+      session({ id: 'a', status: 'exited', createdAt: at(0) }),
+      session({ id: 'b', status: 'running', createdAt: at(1) }),
+    ]
+    orderForDisplay(list)
+    expect(list.map((s) => s.id)).toEqual(['a', 'b'])
+  })
+
+  // A missing timestamp must not make the comparison throw and fall back to input
+  // order, which would look like the ordering simply not applying.
+  test('sorts a session without a usable timestamp last, without throwing', () => {
+    const list = [
+      session({ id: 'no-date', status: 'running' }),
+      session({ id: 'dated', status: 'running', createdAt: at(5) }),
+      session({ id: 'broken', status: 'running', createdAt: 'not a date' }),
+    ]
+    expect(orderForDisplay(list).map((s) => s.id)).toEqual(['dated', 'no-date', 'broken'])
+  })
+
+  test('handles an empty list', () => {
+    expect(orderForDisplay([])).toEqual([])
+  })
+})
+
 describe('noteListSuccess', () => {
   test('records the server, the sessions and the count', () => {
     const state = initialPanelState()
     noteListSuccess(state, 'http://127.0.0.1:4200', [session({ id: 'a' }), session({ id: 'b' })])
     expect(state.origin).toBe('http://127.0.0.1:4200')
-    expect(state.sessions.map((s) => s.id)).toEqual(['a', 'b'])
+    expect(state.sessions.map((s) => s.id)).toHaveLength(2)
     expect(state.status).toBe('2 sessions')
+  })
+
+  // Every path that fills the list goes through here, so ordering it here is what
+  // keeps the panel useful - a list built by any other route would arrive unsorted.
+  test('stores the list already ordered, running first', () => {
+    const state = initialPanelState()
+    noteListSuccess(state, 'http://x', [
+      session({ id: 'finished', status: 'exited', createdAt: '2026-01-01T10:00:00.000Z' }),
+      session({ id: 'live', status: 'running', createdAt: '2026-01-01T09:00:00.000Z' }),
+    ])
+    expect(state.sessions.map((s) => s.id)).toEqual(['live', 'finished'])
+  })
+
+  // The count names everything, so the ordering hides nothing.
+  test('counts every session, not only the ones it could show', () => {
+    const state = initialPanelState()
+    noteListSuccess(
+      state,
+      'http://x',
+      Array.from({ length: 200 }, (_, n) => session({ id: `s${n}`, status: 'exited' }))
+    )
+    expect(state.status).toBe('200 sessions')
+    expect(state.sessions).toHaveLength(200)
   })
 
   // The backoff has to reset here, or one success followed by one later failure

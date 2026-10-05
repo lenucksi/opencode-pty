@@ -26,6 +26,13 @@ beside the built-in sidebar items rather than replacing them.
   duration.
 - The panel polls rather than subscribing: the web UI has a WebSocket for this and
   a TUI has no equivalent, so `POLL_MS` is the floor for how stale it may look.
+- The list is ordered with running sessions first, then finished ones newest first.
+  It holds every session the server knows, which on a machine with any history is
+  hundreds of records - and a live process below all of them is one you have to
+  scroll to find. The header's count stays the true total, so nothing is hidden.
+- Once a start has failed repeatedly, the status names the gesture that still works
+  (toggle the panel again) rather than inviting a click that no longer starts
+  anything.
 - The output dialog uses a plain box rather than a scrollbox. Measured against
   opentui 0.5.14: a scrollbox renders nothing when its text contains a line break,
   and `stickyScroll` together with `stickyStart: 'bottom'` blanks it even for a

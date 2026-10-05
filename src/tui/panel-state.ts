@@ -46,6 +46,14 @@ export const STARTING_STATUS = 'starting…'
 /** Consecutive failures after which the panel stops trying on its own. */
 export const MAX_START_FAILURES = 3
 
+/**
+ * The status once the retries are spent and nothing said why.
+ *
+ * Names the gesture that does work - toggle the panel - because the one that worked
+ * before no longer does.
+ */
+export const RETRY_STATUS = 'unavailable — toggle to retry'
+
 export function initialPanelState(): PanelState {
   return {
     sessions: [],
@@ -66,10 +74,47 @@ export function initialPanelState(): PanelState {
  * that. Before them it says it is trying, which is what it is doing.
  */
 export function statusWhenUnavailable(failures: number, cause: string | null): string {
-  if (cause === null) return IDLE_STATUS
+  if (cause === null) {
+    // Nobody has asked yet, so the click is the way forward and the text should say
+    // so. Once the retries are used up the click no longer starts anything, and
+    // "click to start" would invite a gesture that does nothing - so the text has to
+    // name the gesture that does: collapsing and expanding again.
+    return failures >= MAX_START_FAILURES ? RETRY_STATUS : IDLE_STATUS
+  }
   if (failures < MAX_START_FAILURES) return 'starting server…'
   const first = cause.split('\n')[0] ?? cause
   return `unavailable: ${first.slice(0, 44)}`
+}
+
+/**
+ * The order the panel lists sessions in: running first, then finished, newest first
+ * within each group.
+ *
+ * The list is every session the server knows, so on a machine with any history it is
+ * hundreds of finished records. Listed in the server's order, the one process that is
+ * actually running sits below all of them - a live session you have to scroll to find
+ * is not a live session you can watch. The header's count stays the true total, so
+ * nothing is hidden by the ordering.
+ */
+export function orderForDisplay(sessions: readonly PanelSession[]): PanelSession[] {
+  const rank = (session: PanelSession): number => (isRunning(session) ? 0 : 1)
+  return [...sessions].sort((left, right) => {
+    const group = rank(left) - rank(right)
+    if (group !== 0) return group
+    // Newest first within a group. An unreadable timestamp sorts last rather than
+    // throwing the comparison, which would make the order depend on the input.
+    return timestamp(right) - timestamp(left)
+  })
+}
+
+/** Whether a session is one a reader would want to watch. */
+export function isRunning(session: PanelSession): boolean {
+  return session.status === 'running'
+}
+
+function timestamp(session: PanelSession): number {
+  const parsed = Date.parse(session.createdAt ?? '')
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY
 }
 
 /** How many sessions, in words. One is not "1 sessions". */
@@ -94,7 +139,7 @@ export function noteListSuccess(
   sessions: readonly PanelSession[]
 ): void {
   state.origin = origin
-  state.sessions = [...sessions]
+  state.sessions = orderForDisplay(sessions)
   state.startFailures = 0
   state.lastStartError = null
   state.status = sessionCountLabel(sessions.length)

@@ -110,8 +110,12 @@ function headerFor(view: PanelView) {
       jsx('text', {
         flexGrow: 1,
         fg: view.tones.base,
+        // `onMouseDown` ONLY, and that is load-bearing. A click delivers both events,
+        // so registering the toggle on each flipped the panel twice: it opened and
+        // shut again within the same gesture, which looks like a panel that refuses
+        // to open. The built-in sidebar headers register one handler for the same
+        // reason.
         onMouseDown: toggle,
-        onMouseUp: toggle,
         // An accessor, so the status text follows the poll without the panel being
         // torn down and rebuilt.
         children: (): string => headerLabel({ collapsed: view.collapsed, status: view.status }),
