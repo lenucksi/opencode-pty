@@ -3,10 +3,11 @@ import type { PanelSession } from './lib.ts'
 /**
  * The panel's state, and every transition it can make.
  *
- * All of it pure: a transition takes the state as a draft and mutates it, exactly
- * as the host's store does. That split exists so the decisions - what the header
- * says, when a start is given up on, what a failure does to the list - can be
- * tested without a terminal, a server or a host.
+ * All of it pure: a transition takes the state as a draft and mutates it, exactly as
+ * the host's store does. That split exists so the decisions - what the header says,
+ * when a start is given up on, what a failure does to a list that was correct a moment
+ * ago - can be tested without a terminal, a server or a host, which is the only way
+ * they could be tested at all.
  */
 
 /** The output dialog's own state. */

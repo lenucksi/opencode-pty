@@ -31,17 +31,17 @@ import { runtimeDir } from '../shared/runtime.ts'
  *
  * ## Why the state lives in the host's store
  *
- * The host loads a TUI plugin with a plain `import()`, so the plugin resolves
- * `solid-js` itself - and under Bun that goes through the `node` export condition
- * to `dist/server.js`, where reactivity is a no-op: `createSignal` returns an inert
- * pair. The reconciler inside `@opentui/solid` imports the client build directly,
- * so its accessor machinery is live while anything the plugin creates itself is
- * not. A plugin-local signal would therefore render once and never again, and the
- * failure is invisible because the first frame is correct.
+ * Two reasons, and neither is that a plugin-local signal would not work - it would.
+ * The host registers a runtime module map that rewrites `solid-js` and
+ * `@opentui/solid` onto the modules it has already loaded, so a signal created here
+ * is live. (Outside the host it is not: a plain `bun` process resolves `solid-js`
+ * through the `node` export condition to a build where reactivity is a no-op, which
+ * is why a probe run in one will happily tell you the wrong thing.)
  *
- * `context.storage` is the one reactive substrate available: the host creates it,
- * with its own solid instance, and opencode's own slot plugins read it the same
- * way. So every mutable thing the panel shows is in there.
+ * What decided it: `context.storage` survives a plugin hot reload with the old and
+ * new generation sharing one store, so an edited panel does not lose the list it was
+ * showing; and it keeps every dynamic part an accessor over a host-owned value, which
+ * is what lets the render stay a pure function of its inputs and be tested headlessly.
  *
  * ## Why the panel polls
  *

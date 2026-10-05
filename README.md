@@ -234,19 +234,29 @@ offering a retry that cannot work.
 
 ### Requirements
 
-The panel needs an OpenCode build with the V2 TUI plugin API (2.0.23 and later), and
-four packages alongside the plugin:
+The panel needs an OpenCode build with the V2 TUI plugin API — 2.0.23 and later.
+There is nothing else to install: the host maps `@opentui/solid`, its JSX runtime,
+`solid-js` and `@opencode/plugin/tui` onto the copies it has already loaded, so the
+panel uses the same runtime instances the built-in sidebar items do rather than a
+second set of its own.
 
-```bash
-bun add @opentui/solid@0.5.14 @opentui/core@0.5.14 solid-js@1.9.15 @opencode/theme@2.0.23
+They are declared as **optional peer** dependencies anyway, at the floors
+`@opencode/plugin` itself declares, because that is what the SDK asks for and because
+it keeps them visible: they are needed to *build* the panel, and the development
+dependencies pin them so the TUI contract is type-checked.
+
+What the panel does need from the configuration is a **package** entry rather than a
+path to a file:
+
+```json
+{
+  "plugin": [{ "package": "opencode-pty/v2", "options": { "port": 4200, "autostart": true } }]
+}
 ```
 
-They are **optional peer** dependencies on purpose: without them the tools and the
-web UI work exactly as before, and installing them costs about 400 packages you do
-not need for those. But they are not optional *for the panel*, and OpenCode does not
-supply them — the TUI bundles its own copy inside the binary, where a plugin cannot
-reach it. Without them the plugin is reported as failed to load in `/plugins`, and
-the rest of it keeps working.
+OpenCode probes `<configured name>/tui`, so only a package name can reach the panel.
+A local `.ts` wrapper loads the tools but leaves the sidebar without a panel, which
+looks like a broken panel rather than a missing declaration.
 
 The panel is additive, so on a build without the V2 TUI API it simply does not
 appear.
