@@ -24,16 +24,32 @@ import type { Tones } from './render.ts'
  * next to the conversation that asked for them: while a build fails on screen, the chat
  * that commissioned it is right there.
  *
- * ## Read-only, and that is the SDK's ceiling on 2.0.23
+ * ## Read-only, and what the ceiling actually is
  *
  * The panel cannot type into a session, and the reason is measured rather than assumed:
  * `context.keymap` offers exactly `layer()`, `dispatch()` and `shortcuts()`, so a plugin
  * can bind NAMED COMMANDS and nothing else. There is no access to raw key events -
  * `packages/plugin/src/tui/context.ts` declares neither `intercept` nor `useKeyboard`,
  * while the host's own terminal pane uses `Keymap.use()` from the internal TUI context,
- * which a plugin does not get. So `pty_write` from free typing, scrolling the output and
- * resizing are all unreachable from a TUI plugin on this version. What is left is a
- * better place to READ, which is what this is.
+ * which a plugin does not get. The renderer is NOT the obstacle: see below. So
+ * `pty_write` from free typing, scrolling and resizing are unreachable from a TUI plugin
+ * on this version, and what is left is a better place to READ.
+ *
+ * ## What the SDK would still have to change
+ *
+ * Not typing and not the renderer: `EmbeddedTerminalRenderable` is FULLY typed in
+ * opentui 0.5.14 - `renderables/EmbeddedTerminal.d.ts:28` declares it with `write`,
+ * `screen()` and `handleKeyPress(key: KeyEvent): boolean`. An earlier note in this file
+ * claimed it was missing from the type declarations; that was a grep in the wrong file,
+ * since `index.d.ts` is a re-export barrel with no `declare class` of its own.
+ *
+ * The real gap is the KEYSTROKE. `context.keymap` binds named commands and nothing else,
+ * while the host's own terminal pane takes raw keys through `keymap.intercept` on the
+ * internal `Keymap` context. `KeymapCommand.run(input?, event?: KeyEvent)` does hand the
+ * triggering event to a bound command, and `KeymapLayer.target` can scope a layer to a
+ * focused renderable - so a plugin CAN drive `handleKeyPress` from bound commands. The
+ * price is that every key has to be bound, and a binding is the user's to give up: the
+ * host takes all keys at priority 100.
  *
  * This file is pure state plus a view, like `panel-state.ts` and `render.ts`, so the
  * decisions can be tested without a terminal.
