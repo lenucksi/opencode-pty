@@ -95,6 +95,24 @@ beside the built-in sidebar items rather than replacing them.
   sidebar - the panel's rows are a subset of that list, so a second fetch would be a second
   answer to a question already answered.
 
+- **The session panel has a way out. It did not have one, and a reader reported the
+  consequence.** OpenCode has no key for closing a plugin panel: all four `panels.close()`
+  call sites in the TUI are side effects of something else - changing session, selecting a
+  terminal, opening the sidebar - so every route out of the panel was a DIFFERENT action
+  that happened to close it. Opening `/pty-sessions` therefore left a reader with a panel
+  they could not leave, and the only remaining move was killing the terminal. Three exits
+  now exist: a palette entry, `ctrl+y` (the command's id is
+  `opencode-pty.session-panel.close`, so it can be moved), and a `✕ close` control in the
+  panel header. The key is only live while a panel is open, because a binding that does
+  nothing the rest of the time teaches the reader to distrust the one time it matters.
+- **The panel's screen box fills the panel instead of claiming a row count.** It computed
+  half of `renderer.height` - the TERMINAL's height - and asked for that many rows inside a
+  panel far smaller, so the box overflowed the session view rather than filling it; a
+  reader reported the panel ignoring the available length. It now grows, which is both
+  correct and what the host's own terminal pane does. `panelScreenRows` is gone.
+- **An empty panel no longer draws an empty black rectangle.** The framed screen is drawn
+  only when a session is selected. Next to the sentence explaining that the conversation
+  started nothing, a large empty frame read as a rendering failure rather than an absence.
   **It is read-only, and that is the SDK's ceiling rather than a choice.** `context.keymap`
   offers exactly `layer()`, `dispatch()` and `shortcuts()`, so a plugin can bind named
   commands and nothing else; there is no access to raw key events, and the host's own

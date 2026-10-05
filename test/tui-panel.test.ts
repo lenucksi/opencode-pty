@@ -102,8 +102,24 @@ interface Observed {
   sessionPanels: RenderedSessionPanel[]
   /** Names passed to `ui.panel.open`, in order. */
   opened: string[]
+  /**
+   * Every close of a session panel, from either route.
+   *
+   * A count rather than a list: the routes are `ui.panel.close` and `PanelInput.close`, and
+   * a reader stuck in this panel could only escape by one of them working - so what matters
+   * is how many times the panel was actually closed, not from where.
+   */
+  panelCloses: number
   /** Keymap layers the plugin registered, so a command can be invoked. */
-  layers: { commands?: readonly { id?: string; run?: () => void }[] }[]
+  layers: {
+    commands?: readonly {
+      id?: string
+      run?: () => void
+      palette?: boolean
+      bind?: string
+      enabled?: () => boolean
+    }[]
+  }[]
   /**
    * What `ui.panel.current()` reports. A holder, because a test flips it after setup.
    */
@@ -212,7 +228,9 @@ function makeContext(observed: Observed): TuiContext {
             presentation: 'panel',
             focused: true,
             focus: () => {},
-            close: () => {},
+            close: () => {
+              observed.panelCloses += 1
+            },
             toggleFullscreen: () => {},
           },
         })
@@ -242,7 +260,10 @@ function makeContext(observed: Observed): TuiContext {
         observed.activePanel = { name, sessionID: 'test-parent-session' }
         return true
       },
-      close: () => {},
+      close: () => {
+        observed.panelCloses += 1
+        observed.activePanel = undefined
+      },
       current: () => observed.activePanel,
     },
     tabs: {
@@ -294,6 +315,7 @@ function observed(onCommand?: () => Promise<void>): Observed {
     footers: [],
     sessionPanels: [],
     opened: [],
+    panelCloses: 0,
     layers: [],
     activePanel: undefined,
     toasts: [],
@@ -373,6 +395,21 @@ async function renderSessionPanel(observed: Observed): Promise<TestRendererSetup
   })
   await setup.renderOnce()
   return setup
+}
+
+/**
+ * Click the panel's `✕ close` control.
+ *
+ * The column comes out of the rendered frame rather than a constant, and the click goes
+ * through opentui's dispatch, so this exercises the real wiring instead of calling the
+ * handler the view was built with.
+ */
+async function clickPanelClose(observed: Observed): Promise<void> {
+  const setup = await renderSessionPanel(observed)
+  const column = setup.captureCharFrame().split('\n')[0]?.indexOf('✕') ?? -1
+  if (column < 0) throw new Error('the panel draws no close control to click')
+  await setup.mockMouse.click(column, 0)
+  await setup.renderOnce()
 }
 
 /**
@@ -680,6 +717,54 @@ describe('the PTY sidebar panel', () => {
     // leave the panel open and permanently empty, with nothing failing.
     expect(seen.opened).toEqual(['opencode-pty'])
     expect(seen.activePanel?.name).toBe('opencode-pty')
+  })
+
+  // The way out, by mouse. Reported by a reader who opened this panel and could not leave
+  // it: the host has no key for closing a plugin panel, so every route they had - change
+  // session, pick a terminal, open the sidebar - was a DIFFERENT action that happened to
+  // close it. The only thing that worked was killing the terminal.
+  test('the panel header closes the panel when its close control is clicked', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    await clickPanelClose(seen)
+    // Exactly once: a click delivers a mouse-down and a mouse-up, and a handler on each
+    // would fire twice - which reads as "nothing happened" rather than as "twice".
+    expect(seen.panelCloses).toBe(1)
+  })
+
+  // The way out, without a mouse. `palette: true` is the guaranteed route, because the
+  // palette is a host overlay this plugin cannot shadow - so it works even while the panel
+  // holds focus and the composer is unreachable.
+  test('registers a close command in the palette', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+    const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel.close')
+    if (!command) throw new Error('the plugin registered no command to close the panel')
+    expect(command.palette).toBe(true)
+  })
+
+  test('the close command closes the panel', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+    const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel.close')
+    if (!command?.run) throw new Error('the close command cannot be run')
+    command.run()
+    expect(seen.panelCloses).toBe(1)
+  })
+
+  // A binding that does nothing the rest of the time teaches the reader to distrust the
+  // one time it matters, so the key only exists while there is something to leave.
+  test('the close key is only live while a panel is open', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+    const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel.close')
+    if (!command?.enabled) throw new Error('the close command has no enabled predicate')
+    expect(command.enabled()).toBe(false)
+    seen.activePanel = { name: 'opencode-pty', sessionID: 'test-parent-session' }
+    expect(command.enabled()).toBe(true)
   })
 
   // Expanding the sidebar is the only trigger that may start a server, and opening this

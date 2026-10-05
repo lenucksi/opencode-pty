@@ -9,7 +9,6 @@ import {
   noteSessionPanelList,
   noteSessionScreen,
   noteSessionSelected,
-  panelScreenRows,
   selectedSession,
   sessionPanelView,
   type SessionPanelState,
@@ -47,8 +46,10 @@ export interface SessionPanelHostDeps {
 export interface SessionPanelHost {
   /** Called on the sidebar's poll tick; returns once the panel is in step. */
   readonly sync: () => Promise<void>
-  /** Registers the slot claim and the keymap command. */
+  /** Registers the slot claim and the command that opens the panel. */
   readonly register: () => void
+  /** Registers the command that closes it again. */
+  readonly registerClose: () => void
 }
 
 export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanelHost {
@@ -109,7 +110,9 @@ export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanel
     registerSessionPanelCommand(context, deps)
   }
 
-  return { sync, register }
+  const registerClose = (): void => registerSessionPanelCloseCommand(context)
+
+  return { sync, register, registerClose }
 }
 
 /**
@@ -136,7 +139,7 @@ function claimSessionPanel(
         live: deps.panel.sessions,
         focused: input.focused,
         fullscreen: input.presentation === 'fullscreen',
-        screenRows: panelScreenRows(context.renderer.height, state.sessions.length),
+        onClose: input.close,
         onSelect: (id) => {
           select(id)
           void sync()
@@ -175,6 +178,48 @@ function registerSessionPanelCommand(context: Plugin.Context, deps: SessionPanel
           // empty on a host where nothing else ever asked for one.
           void deps.refresh(true)
         },
+      },
+    ],
+  }))
+}
+
+/**
+ * The command that closes the panel again.
+ *
+ * The host has NO binding for closing a plugin panel. All four `panels.close()` call sites
+ * are side effects of something else - changing session, selecting a terminal, opening the
+ * sidebar - so a plugin that opens a panel owes its reader a way out of it. Without this,
+ * `/pty-sessions` opened a panel with no exit: the thing one presses to leave it went
+ * nowhere, and the only remaining move was killing the terminal. Measured, not inferred -
+ * and the first version of this panel shipped exactly that trap.
+ *
+ * Three exits, because each covers a case the others do not:
+ *
+ * - the palette entry is guaranteed: it is a host overlay, which no plugin can shadow, so
+ *   it works even while this panel holds focus and the composer is unreachable;
+ * - `bind` is the shortcut for the mouse-free case, on a key measured free in
+ *   packages/tui/src/config/keybind.ts. This is the one deliberate departure from the
+ *   opening command above, which binds nothing: there, a binding would only duplicate two
+ *   routes that already work, and a wrong guess collides with a host command. Here the
+ *   reader has nowhere else to go. The command's id lets the user move or drop it;
+ * - the `✕ close` control in the panel header, for the same reason by mouse.
+ *
+ * `enabled` keeps the key from lying: a binding that does nothing the rest of the time
+ * teaches the reader to distrust the one time it matters.
+ */
+function registerSessionPanelCloseCommand(context: Plugin.Context): void {
+  context.keymap.layer(() => ({
+    mode: 'global',
+    commands: [
+      {
+        id: 'opencode-pty.session-panel.close',
+        title: 'Close the PTY panel',
+        description: 'Leave the PTY panel and go back to the conversation.',
+        group: 'opencode-pty',
+        palette: true,
+        bind: 'ctrl+y',
+        enabled: () => context.ui.panel.current() !== undefined,
+        run: () => context.ui.panel.close(),
       },
     ],
   }))

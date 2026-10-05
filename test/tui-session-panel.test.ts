@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { testRender } from '@opentui/solid'
+import type { TestRendererSetup } from '@opentui/core/testing'
 
 import type { PanelSession } from '../src/tui/lib.ts'
 import {
@@ -10,7 +11,6 @@ import {
   noteSessionPanelList,
   noteSessionScreen,
   noteSessionSelected,
-  panelScreenRows,
   selectedLive,
   selectedSession,
   sessionsForSession,
@@ -214,20 +214,6 @@ describe('noteSessionScreen', () => {
   })
 })
 
-describe('panelScreenRows', () => {
-  test('leaves room for the list and the frame', () => {
-    expect(panelScreenRows(40, 4)).toBe(12)
-  })
-
-  // Never zero: a screen box with no height shows nothing at all, which looks like a
-  // broken panel rather than a small terminal.
-  test('never drops below three rows, however small the terminal', () => {
-    expect(panelScreenRows(10, 40)).toBe(3)
-    expect(panelScreenRows(4, 40)).toBe(3)
-    expect(panelScreenRows(0, 0)).toBe(3)
-  })
-})
-
 describe('sessionPanelView', () => {
   const view = (over: Partial<Parameters<typeof sessionPanelView>[0]> = {}): SessionPanelView => ({
     tones,
@@ -235,15 +221,42 @@ describe('sessionPanelView', () => {
     live: [],
     focused: false,
     fullscreen: false,
-    screenRows: 6,
+    onClose: () => {},
     onSelect: () => {},
     ...over,
   })
 
+  /** The rendered panel's height, named because a case below asserts against a row of it. */
+  const PANEL_ROWS = 20
+  const PANEL_COLS = 60
+
+  async function setup(element: () => unknown): Promise<TestRendererSetup> {
+    const created = await testRender(element as () => never, {
+      width: PANEL_COLS,
+      height: PANEL_ROWS,
+    })
+    await created.renderOnce()
+    return created
+  }
+
   async function frame(element: () => unknown): Promise<string> {
-    const setup = await testRender(element as () => never, { width: 60, height: 20 })
-    await setup.renderOnce()
-    return setup.captureCharFrame()
+    return (await setup(element)).captureCharFrame()
+  }
+
+  /**
+   * Click whatever the first row spells `✕ close`.
+   *
+   * The column comes from the rendered frame rather than a constant, so the case tests the
+   * wiring wherever the header lays out - and the click goes through opentui's own dispatch
+   * instead of calling the callback, which would pass even if the handler were unreachable.
+   */
+  async function clickCloseControl(element: () => unknown): Promise<number> {
+    const rendered = await setup(element)
+    const column = rendered.captureCharFrame().split('\n')[0]?.indexOf('✕') ?? -1
+    if (column < 0) throw new Error('the panel header draws no close control to click')
+    await rendered.mockMouse.click(column, 0)
+    await rendered.renderOnce()
+    return column
   }
 
   // An empty box reads as a panel that failed to load. Saying what is true costs one
@@ -325,5 +338,55 @@ describe('sessionPanelView', () => {
   test('reports focus, because a focused panel may be the one taking keys', async () => {
     const text = await frame(() => sessionPanelView(view({ focused: true })))
     expect(text).toContain('(focused)')
+  })
+
+  // ------------------------------------------------------------------------------------
+  // The way out. This panel shipped with none: the host has no key for closing a plugin
+  // panel, and every route the reader has - change session, pick a terminal, open the
+  // sidebar - is a different action that happens to close it as a side effect. So opening
+  // `/pty-sessions` left a reader with a panel they could not leave, and the only thing
+  // that worked was killing the terminal. Reported by a reader, measured here.
+  // ------------------------------------------------------------------------------------
+
+  // A control nobody has been told about is not an exit, so it says what it does.
+  test('offers a close control that names itself', async () => {
+    const text = await frame(() => sessionPanelView(view()))
+    expect(text).toContain('✕ close')
+  })
+
+  // Dispatched through opentui, so this fails if the handler is unreachable rather than
+  // passing because a callback was invoked directly. One click, one call: a click delivers
+  // a mouse-down AND a mouse-up, so a handler on each would fire twice.
+  test('the close control closes the panel, once per click', async () => {
+    let closes = 0
+    const element = () => sessionPanelView(view({ onClose: () => closes++ }))
+    await clickCloseControl(element)
+    expect(closes).toBe(1)
+  })
+
+  // A large empty black rectangle says nothing, and next to the sentence explaining why
+  // there is nothing it reads as a rendering failure rather than as an absence.
+  test('draws no framed screen box while nothing is selected', async () => {
+    const text = await frame(() => sessionPanelView(view()))
+    expect(text).toContain('this conversation started no PTY session')
+    expect(text).not.toContain('┌')
+  })
+
+  // The screen box grows into the panel instead of claiming a row count. The first version
+  // computed half of `renderer.height` - the TERMINAL's height - and asked for it inside a
+  // panel far smaller, which overflowed the session view rather than filling it; a reader
+  // reported the panel ignoring the available length. Growing is both correct and what the
+  // host's own terminal pane does (panel-host.tsx:26-31).
+  test('the framed screen reaches the last row of the panel', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a' })], ME)
+    noteSessionSelected(state, 'a')
+    noteSessionScreen(state, 'line one', 1)
+    const lines = (await frame(() => sessionPanelView(view({ state })))).split('\n')
+    const bottom = lines.findIndex((line) => line.startsWith('└'))
+    // Row 19 of PANEL_ROWS, not merely the last non-empty one: a screen box with a fixed
+    // height also ends its frame somewhere and leaves blank rows under it, so "the frame is
+    // the last thing drawn" would pass on exactly the code that is wrong here.
+    expect(bottom).toBe(PANEL_ROWS - 1)
   })
 })

@@ -261,6 +261,37 @@ looks like a broken panel rather than a missing declaration.
 The panel is additive, so on a build without the V2 TUI API it simply does not
 appear.
 
+## Session Panel
+
+The sidebar lists every PTY session. This panel shows the ones belonging to **the
+conversation you are in** — the processes this chat started — with one of them on screen.
+It claims OpenCode's `session.panel` slot, the same place its own Review and Files views
+live.
+
+Open it from the command palette or with `/pty-sessions`. It lists this conversation's
+processes only, so a conversation that started none says so rather than showing an empty
+box.
+
+**Three ways out, on purpose.** OpenCode has no key for closing a plugin panel — the
+routes that do close it (switching session, picking a terminal, opening the sidebar) are
+different actions that happen to close it as a side effect. So this panel owes you a way
+out of it and offers three:
+
+| Route      | How                                                    |
+| ---------- | ------------------------------------------------------ |
+| Palette    | *Close the PTY panel*                                  |
+| Key        | `ctrl+y`, while the panel is open                      |
+| Pointer    | `✕ close` in the panel header                          |
+
+The command's id is `opencode-pty.session-panel.close`, so the key can be moved or
+dropped in your keymap config. Without this panel having an exit of its own, opening it
+left no way back except killing the terminal.
+
+The panel is **read-only**: it shows what the processes have printed and offers the
+remove control, but it does not accept typing. A plugin gets named commands from
+`context.keymap` and no raw key events, so `pty_write` from free typing is not reachable
+from a plugin on this version.
+
 ## Web UI
 
 This plugin includes a modern React-based web interface for monitoring and interacting with PTY sessions.

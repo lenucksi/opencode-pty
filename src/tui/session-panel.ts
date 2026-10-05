@@ -175,19 +175,6 @@ export function noteSessionScreen(state: SessionPanelState, screen: string, now:
   state.now = now
 }
 
-/**
- * How many rows of output the panel may show.
- *
- * A budget, not a measurement: `PanelInput` carries a width but no height, and the host
- * does not report the panel's own height. So this spends what the terminal has, minus
- * the header and the list, and the screen box is sized from it - which means the box and
- * its content are always the same height and the output cannot push the layout around.
- * Half the terminal is the share: the list needs the rest.
- */
-export function panelScreenRows(rendererHeight: number, listRows: number): number {
-  return Math.max(3, Math.floor(rendererHeight / 2) - listRows - 4)
-}
-
 export interface SessionPanelView {
   readonly tones: Tones
   readonly state: SessionPanelState
@@ -197,7 +184,15 @@ export interface SessionPanelView {
   readonly focused: boolean
   /** `fullscreen` when the reader asked for the whole screen. */
   readonly fullscreen: boolean
-  readonly screenRows: number
+  /**
+   * Close the panel.
+   *
+   * Not a convenience: the host has NO key for closing a plugin panel. All four
+   * `panels.close()` call sites are side effects of something else - changing session,
+   * selecting a terminal, opening the sidebar - so a plugin that opens a panel owes the
+   * reader a way out of it. Ours has three: this control, a palette entry and a keybind.
+   */
+  readonly onClose: () => void
   readonly onSelect: (id: string) => void
 }
 
@@ -240,9 +235,16 @@ function rowFor(view: SessionPanelView, session: PanelSession) {
  * instead of being torn down and rebuilt - which is what keeps the reader's scroll
  * position and the host's focus where they were.
  */
-export function sessionPanelView(view: SessionPanelView) {
-  const chosen = selectedLive(view.state, view.live)
-  const header = jsx('box', {
+/**
+ * The panel's header: what it is showing, how to leave it, and for how long.
+ *
+ * `✕ close` is the middle item rather than a trailing glyph because it is the answer to
+ * the question a reader has first - how do I get out - and a right-aligned control is the
+ * last place a reader looks for it. Three exits exist in total (this, the palette entry
+ * and `ctrl+y`); see `registerSessionPanelCloseCommand` for why the other two are needed.
+ */
+function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
+  return jsx('box', {
     flexDirection: 'row',
     width: '100%',
     children: [
@@ -259,6 +261,16 @@ export function sessionPanelView(view: SessionPanelView) {
       }),
       jsx('text', {
         fg: view.tones.muted,
+        // ONE handler, and on mouse-down only: a click delivers a mouse-down AND a
+        // mouse-up, so a toggle on each fires twice.
+        onMouseDown: (event: MouseEvent) => {
+          event.stopPropagation()
+          view.onClose()
+        },
+        children: '✕ close',
+      }),
+      jsx('text', {
+        fg: view.tones.muted,
         // The run timer of the selected session, in the header's right corner. Empty
         // rather than "0s" when the start cannot be read: a duration nobody can compute
         // should not be shown as none.
@@ -270,6 +282,50 @@ export function sessionPanelView(view: SessionPanelView) {
       }),
     ],
   })
+}
+
+/**
+ * The framed screen, or nothing at all while no session is selected.
+ *
+ * Returns undefined rather than an empty box: an empty frame is a large black rectangle
+ * that says nothing, and right next to the sentence explaining why there is nothing, it
+ * reads as a rendering failure rather than as an absence.
+ */
+function framedScreen(view: SessionPanelView): unknown {
+  if (view.state.selected === null) return undefined
+
+  const screen = jsx('box', {
+    width: '100%',
+    // `flexGrow` + `minHeight: 0`, NOT a fixed height. The earlier version computed a row
+    // count from `renderer.height` - the TERMINAL's height - and asked for half of it
+    // inside a panel that is far smaller, which overflowed the session view instead of
+    // filling the panel. The host's panel is `flexGrow: 1` with `minHeight: 0`
+    // (packages/tui/src/component/panel-host.tsx:26-31), and its own terminal pane grows
+    // the same way.
+    flexGrow: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    // A plain box rather than a scrollbox, for the measured reason in `render.ts`: a
+    // scrollbox renders nothing when its text contains a line break.
+    children: jsx('text', { children: (): string => view.state.screen }),
+  })
+
+  const frame = jsx('box', {
+    width: '100%',
+    flexGrow: 1,
+    minHeight: 0,
+    border: true,
+    borderStyle: 'single',
+    borderColor: view.tones.border,
+    backgroundColor: view.tones.raised,
+  })
+  insert(frame, screen)
+  return frame
+}
+
+export function sessionPanelView(view: SessionPanelView) {
+  const chosen = selectedLive(view.state, view.live)
+  const header = panelHeader(view, chosen)
 
   const list = jsx('box', {
     flexDirection: 'column',
@@ -287,26 +343,12 @@ export function sessionPanelView(view: SessionPanelView) {
     },
   })
 
-  const screen = jsx('box', {
-    width: '100%',
-    height: view.screenRows,
-    overflow: 'hidden',
-    // A plain box rather than a scrollbox, for the measured reason in `render.ts`: a
-    // scrollbox renders nothing when its text contains a line break.
-    children: jsx('text', { children: (): string => view.state.screen }),
-  })
-
-  const frame = jsx('box', {
-    width: '100%',
-    border: true,
-    borderStyle: 'single',
-    borderColor: view.tones.border,
-    backgroundColor: view.tones.raised,
-  })
-  insert(frame, screen)
+  const screen = framedScreen(view)
   return jsx('box', {
     flexDirection: 'column',
     width: '100%',
-    children: [header, list, frame],
+    flexGrow: 1,
+    minHeight: 0,
+    children: screen === undefined ? [header, list] : [header, list, screen],
   })
 }

@@ -343,6 +343,7 @@ export default Plugin.define({
     })
 
     sessionPanelHost.register()
+    sessionPanelHost.registerClose()
 
     debug('setup')
 
