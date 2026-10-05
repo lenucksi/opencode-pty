@@ -1,13 +1,30 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":semanticCommits"],
-  "schedule": ["before 6am on monday"],
+  "extends": ["config:recommended", ":semanticCommits", ":configMigration"],
+  "schedule": ["every 2 day"],
+  "minimumReleaseAge": "1 day",
+  "timezone": "Etc/UTC",
   "labels": ["dependencies"],
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 6,
+  "prHourlyLimit": 3,
+  "branchConcurrentLimit": 10,
   "lockFileMaintenance": {
     "enabled": true,
-    "schedule": ["before 6am on monday"]
+    "schedule": ["every 2 day"]
   },
   "packageRules": [
+    {
+      "description": "A pin on a fork commit, not a version. Renovate cannot know whether a newer SHA on someone else's branch is what we want, and bumping the SHA without the patch key it is only half of - see patchedDependencies in package.json - installs ghostty-web unpatched. The copy E2E then fails pointing at the copy function rather than at the cause. Bump it by hand, both halves together.",
+      "matchPackageNames": ["ghostty-web"],
+      "enabled": false
+    },
+    {
+      "description": "The packages whose updates are the reason this file exists: a minor in the plugin SDK changes the API this repo compiles against, and a TypeScript minor can change declaration output. Own PR, a label that survives triage, never automerged. No minimumReleaseAge override on purpose - the global one day already covers a published-broken version being pulled, and a longer age here would work against staying fresh.",
+      "matchPackageNames": ["@opencode/plugin", "bun-pty", "typescript"],
+      "addLabels": ["core-dep"],
+      "automerge": false
+    },
     {
       "groupName": "opencode-ai",
       "matchPackageNames": ["@opencode-ai/plugin", "@opencode-ai/sdk"]
@@ -18,13 +35,7 @@
     },
     {
       "groupName": "test tooling",
-      "matchPackageNames": [
-        "@playwright/test",
-        "playwright-core",
-        "happy-dom",
-        "jsdom",
-        "@types/jsdom"
-      ]
+      "matchPackageNames": ["@playwright/test", "playwright-core", "happy-dom", "jsdom"]
     },
     {
       "groupName": "lint and formatting",
