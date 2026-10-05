@@ -28,7 +28,8 @@
   },
   "homepage": "https://github.com/shekohex/opencode-pty#readme",
   "files": [
-    "dist"
+    "dist",
+    "patches"
   ],
   "license": "MIT",
   "packageManager": "bun@1.4.2",
