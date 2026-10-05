@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
 import {
+  archiveLabel,
   clearActionLabel,
   decodeBuffer,
   finishedSessions,
@@ -281,5 +282,41 @@ describe('isPtyHealth', () => {
     expect(isPtyHealth({ status: 'healthy', sessions: 7 })).toBe(false)
     expect(isPtyHealth('<html>CUPS</html>')).toBe(false)
     expect(isPtyHealth(null)).toBe(false)
+  })
+})
+describe('archiveLabel', () => {
+  // Absent unless something failed. A finished session with an exit 0 is a record, not
+  // an event, and the expansion shows only failures - so a line offering to open
+  // nothing would be a control with no answer.
+  it('says nothing when nothing finished', () => {
+    expect(archiveLabel({ finished: 0, failed: 0, shown: 0, expanded: false })).toBeNull()
+  })
+
+  it('says nothing when nothing failed, however many finished', () => {
+    expect(archiveLabel({ finished: 200, failed: 0, shown: 0, expanded: false })).toBeNull()
+    expect(archiveLabel({ finished: 200, failed: 0, shown: 0, expanded: true })).toBeNull()
+  })
+
+  it('names the archive and the failures', () => {
+    expect(archiveLabel({ finished: 200, failed: 3, shown: 3, expanded: false })).toBe(
+      '\u25b8 200 finished \u00b7 3 failed'
+    )
+  })
+
+  // The list is capped and the count is not, so when the two differ the line has to say
+  // so - otherwise it describes the screen rather than the archive.
+  it('admits it is showing a subset when the cap cut the list', () => {
+    expect(archiveLabel({ finished: 200, failed: 17, shown: 10, expanded: true })).toBe(
+      '\u25be 200 finished \u00b7 10 of 17 failed'
+    )
+  })
+
+  // The arrow points at what a click would do, so it is the only difference between the
+  // two states a reader has to act on.
+  it('the arrow follows the expansion', () => {
+    const closed = archiveLabel({ finished: 5, failed: 1, shown: 1, expanded: false })
+    const open = archiveLabel({ finished: 5, failed: 1, shown: 1, expanded: true })
+    expect(closed?.startsWith('\u25b8')).toBe(true)
+    expect(open?.startsWith('\u25be')).toBe(true)
   })
 })

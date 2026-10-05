@@ -2,8 +2,13 @@ import { describe, expect, test } from 'bun:test'
 
 import type { PanelSession } from '../src/tui/lib.ts'
 import {
+  endedBadly,
+  failedFinished,
+  failureCount,
+  FINISHED_FAILURE_LIMIT,
   IDLE_STATUS,
   initialPanelState,
+  isRunning,
   MAX_START_FAILURES,
   noteDialogBuffer,
   noteDialogClosed,
@@ -16,6 +21,7 @@ import {
   orderForDisplay,
   sessionCountLabel,
   statusWhenUnavailable,
+  visibleSessions,
 } from '../src/tui/panel-state.ts'
 
 /**
@@ -303,5 +309,145 @@ describe('the dialog transitions', () => {
     const state = initialPanelState()
     noteDialogBuffer(state, 'late')
     expect(state.dialog).toBeNull()
+  })
+})
+describe('endedBadly', () => {
+  test('a non-zero exit is news', () => {
+    expect(endedBadly(session({ status: 'exited', exitCode: 1 }))).toBe(true)
+    expect(endedBadly(session({ status: 'exited', exitCode: 2 }))).toBe(true)
+  })
+
+  // An exit 0 is a record, not an event. On a machine with history there are hundreds
+  // of them, and treating them as interesting is what put 200 rows in a 40-column
+  // sidebar.
+  test('a clean exit is not', () => {
+    expect(endedBadly(session({ status: 'exited', exitCode: 0 }))).toBe(false)
+    expect(endedBadly(session({ status: 'killed' }))).toBe(false)
+  })
+
+  // A signal has no exit code, so a run killed by one reports the signal rather than
+  // reading as "no reason given".
+  test('a signal counts as a failure even without an exit code', () => {
+    expect(endedBadly(session({ status: 'exited', exitSignal: 'SIGSEGV' }))).toBe(true)
+    expect(endedBadly(session({ status: 'exited', exitSignal: '' }))).toBe(false)
+  })
+})
+
+describe('visibleSessions', () => {
+  // Written in a scrambled order and handed through `orderForDisplay`, because that is
+  // the contract: these functions filter a list that `noteListSuccess` has already
+  // ordered, they do not sort it. A second sort here would be a second place for the two
+  // to disagree about which run is newer.
+  const archive = (): PanelSession[] =>
+    orderForDisplay([
+      session({ id: 'ok-1', status: 'exited', exitCode: 0, createdAt: '2026-01-01T10:00:00Z' }),
+      session({ id: 'bad-1', status: 'exited', exitCode: 1, createdAt: '2026-01-01T11:00:00Z' }),
+      session({ id: 'live', status: 'running', lineCount: 12, createdAt: '2026-01-01T09:00:00Z' }),
+      session({
+        id: 'bad-2',
+        status: 'killed',
+        exitSignal: 'SIGTERM',
+        createdAt: '2026-01-01T12:00:00Z',
+      }),
+      session({ id: 'ok-2', status: 'exited', exitCode: 0, createdAt: '2026-01-01T13:00:00Z' }),
+    ])
+
+  // The sidebar wins at glance, not at lookup: 200 finished records cannot be scanned
+  // in 40 columns, and the three that carry news sit below 197 exit-0 rows.
+  test('with the archive collapsed, only the running session is a row', () => {
+    expect(visibleSessions(archive(), false).map((s) => s.id)).toEqual(['live'])
+  })
+
+  // Additive on purpose: expanding the archive must never hide the process that is
+  // alive, so the running rows come first and are not replaced.
+  test('expanding the archive appends the failed ones and keeps the live one', () => {
+    expect(visibleSessions(archive(), true).map((s) => s.id)).toEqual(['live', 'bad-2', 'bad-1'])
+  })
+
+  // Newest first within the failed group. The order is inherited from
+  // `orderForDisplay`, and this is what catches it if that stops sorting.
+  test('the failed rows come newest first', () => {
+    expect(
+      visibleSessions(archive(), true)
+        .slice(1)
+        .map((s) => s.id)
+    ).toEqual(['bad-2', 'bad-1'])
+  })
+
+  // `killing` is the transient state before the exit callback reports `killed`, and
+  // there is nothing a reader could do about it.
+  test('a session on its way out is not a row', () => {
+    const list = [session({ id: 'going', status: 'killing', exitCode: 1 })]
+    expect(visibleSessions(list, false)).toEqual([])
+    expect(visibleSessions(list, true)).toEqual([])
+  })
+
+  test('an empty list stays empty', () => {
+    expect(visibleSessions([], false)).toEqual([])
+    expect(visibleSessions([], true)).toEqual([])
+  })
+
+  test('leaves the input alone', () => {
+    const list = archive()
+    visibleSessions(list, true)
+    expect(list).toHaveLength(5)
+  })
+
+  // The filter preserves the order the list already has. This case fails if a second
+  // sort is ever introduced here and disagrees with `orderForDisplay` about which run
+  // is newer - which is the disagreement this contract exists to prevent.
+  test('the failed rows keep the order the list already has', () => {
+    const newestFirst = [
+      session({ id: 'newer', status: 'exited', exitCode: 1, createdAt: '2026-01-01T12:00:00Z' }),
+      session({ id: 'older', status: 'exited', exitCode: 2, createdAt: '2026-01-01T10:00:00Z' }),
+    ]
+    expect(failedFinished(newestFirst).map((s) => s.id)).toEqual(['newer', 'older'])
+  })
+})
+
+describe('failureCount and failedFinished', () => {
+  const manyFailures = (n: number): PanelSession[] =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `bad-${i}`,
+      status: 'exited' as const,
+      exitCode: 1,
+      createdAt: new Date(Date.parse('2026-01-01T12:00:00Z') + i * 60_000).toISOString(),
+    }))
+
+  // The count is the archive's, not the visible rows'. If the count were capped like
+  // the list, the footer would describe the screen instead of the state.
+  test('the count is uncapped while the rows are capped', () => {
+    const list = manyFailures(FINISHED_FAILURE_LIMIT + 7)
+    expect(failureCount(list)).toBe(FINISHED_FAILURE_LIMIT + 7)
+    expect(failedFinished(list)).toHaveLength(FINISHED_FAILURE_LIMIT)
+  })
+
+  test('keeps the newest failures when it has to cut', () => {
+    const rows = failedFinished(orderForDisplay(manyFailures(FINISHED_FAILURE_LIMIT + 3)))
+    expect(rows[0]?.id).toBe(`bad-${FINISHED_FAILURE_LIMIT + 2}`)
+    expect(rows.at(-1)?.id).toBe('bad-3')
+  })
+
+  test('clean exits are neither counted nor shown', () => {
+    const list = [
+      session({ id: 'ok', status: 'exited', exitCode: 0 }),
+      session({ id: 'bad', status: 'exited', exitCode: 3 }),
+    ]
+    expect(failureCount(list)).toBe(1)
+    expect(failedFinished(list).map((s) => s.id)).toEqual(['bad'])
+  })
+
+  test('nothing finished means nothing failed', () => {
+    expect(failureCount([session({ status: 'running' })])).toBe(0)
+    expect(failedFinished([])).toEqual([])
+  })
+})
+
+describe('isRunning', () => {
+  test('only a running session is running', () => {
+    expect(isRunning(session({ status: 'running' }))).toBe(true)
+    for (const status of ['exited', 'killed', 'killing', undefined]) {
+      expect(isRunning(session({ status }))).toBe(false)
+    }
   })
 })

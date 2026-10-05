@@ -34,6 +34,7 @@ const session = (over: Partial<PanelSession> = {}): PanelSession => ({ id: 'pty_
 
 interface Handlers {
   onToggle: () => void
+  onToggleArchive: () => void
   onClear: () => void
   onOpen: (session: PanelSession) => void
   onRemove: (session: PanelSession) => void
@@ -44,20 +45,32 @@ const handlers = (): Handlers & { calls: string[] } => {
   return {
     calls,
     onToggle: () => calls.push('toggle'),
+    onToggleArchive: () => calls.push('archive'),
     onClear: () => calls.push('clear'),
     onOpen: (s) => calls.push(`open:${s.id}`),
     onRemove: (s) => calls.push(`remove:${s.id}`),
   }
 }
 
-const view = (over: Partial<PanelView> = {}): PanelView => ({
-  tones,
-  collapsed: false,
-  status: '2 sessions',
-  sessions: [],
-  ...handlers(),
-  ...over,
-})
+const view = (over: Partial<PanelView> = {}): PanelView => {
+  const sessions = over.sessions ?? []
+  return {
+    tones,
+    collapsed: false,
+    // A fixed fixture default, not derived from `sessions`: the status is a separate
+    // input the real panel computes, and a test about the header should not have to
+    // state a count to see a count.
+    status: '2 sessions',
+    sessions,
+    // Defaults to whatever the caller handed over, so a test that only cares about one
+    // row does not also have to assert that the row is visible. A test ABOUT the filter
+    // passes `visible` itself and says which rows it expects to survive.
+    visible: over.visible ?? sessions,
+    showFinished: over.showFinished ?? false,
+    ...handlers(),
+    ...over,
+  }
+}
 
 /** Render an element and return the character frame. */
 async function frame(element: () => unknown, width = 60, height = 16): Promise<string> {
@@ -107,9 +120,21 @@ describe('sidebarView', () => {
     expect(text).not.toContain('hidden')
   })
 
-  test('says so when there is nothing to list', async () => {
-    const text = await frame(() => sidebarView(view({ status: '0 sessions', sessions: [] })))
-    expect(text).toContain('(none)')
+  // A finished record is not a row. With the archive collapsed the body says what is
+  // true - nothing is running - rather than rendering an empty box, which reads as a
+  // panel that failed to load. The count of finished sessions is the footer's job.
+  test('says nothing is running rather than showing an empty box', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({
+          status: '200 sessions',
+          sessions: [session({ id: 'a', status: 'exited', exitCode: 0 })],
+          visible: [],
+        })
+      )
+    )
+    expect(text).toContain('nothing running')
+    expect(text).not.toContain('(none)')
   })
 
   // A header offering to clear nothing is a control that invites a click with no

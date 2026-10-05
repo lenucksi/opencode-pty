@@ -49,6 +49,7 @@ import { PTYServer } from '../src/web/server/server.ts'
  */
 type SlotClaim = Parameters<Plugin.Context['ui']['slot']>[0]
 type SidebarClaim = Extract<SlotClaim, { readonly append: 'sidebar.content' }>
+type FooterClaim = Extract<SlotClaim, { readonly append: 'sidebar.footer' }>
 type TuiContext = Plugin.Context
 
 interface Toast {
@@ -61,9 +62,17 @@ interface RenderedClaim {
   input: { readonly sessionID: string }
 }
 
+/** The footer claim, which is the second slot the plugin registers. */
+interface RenderedFooter {
+  claim: FooterClaim
+  input: { readonly sessionID: string }
+}
+
 /** Everything the fixture observed the plugin doing. */
 interface Observed {
   claims: RenderedClaim[]
+  /** The footer claim, so the archive line can be rendered and clicked. */
+  footers: RenderedFooter[]
   toasts: Toast[]
   dialogs: { close?: () => void }[]
   confirms: { title: string; message: string }[]
@@ -146,10 +155,14 @@ function makeContext(observed: Observed): TuiContext {
 
   const ui = {
     slot: (claim: SlotClaim): (() => void) => {
-      // Only the sidebar claim is exercised here, and the fixture must record it
-      // with its input type attached - see SidebarClaim.
+      // Both claims the plugin registers, each with its input type attached - see
+      // SidebarClaim and FooterClaim. The footer carries the archive's size, so it has
+      // to be rendered to be clicked.
       if ('append' in claim && claim.append === 'sidebar.content') {
         observed.claims.push({ claim, input: { sessionID: 'session-1' } })
+      }
+      if ('append' in claim && claim.append === 'sidebar.footer') {
+        observed.footers.push({ claim, input: { sessionID: 'session-1' } })
       }
       return () => {}
     },
@@ -215,6 +228,7 @@ function makeContext(observed: Observed): TuiContext {
 function observed(onCommand?: () => Promise<void>): Observed {
   return {
     claims: [],
+    footers: [],
     toasts: [],
     dialogs: [],
     confirms: [],
@@ -261,6 +275,35 @@ async function sidebarFrame(observed: Observed): Promise<string> {
  */
 async function clickHeader(observed: Observed): Promise<void> {
   const setup = await renderSidebar(observed)
+  await setup.mockMouse.click(4, 0)
+  await setup.renderOnce()
+}
+
+/** Render the footer claim headlessly, with the same mouse harness. */
+async function renderFooter(observed: Observed): Promise<TestRendererSetup> {
+  const claimed = observed.footers[0]
+  if (!claimed) throw new Error('the plugin claimed no footer slot')
+  const setup = await testRender(() => claimed.claim.render(claimed.input), {
+    width: 60,
+    height: 6,
+  })
+  await setup.renderOnce()
+  return setup
+}
+
+/** The footer's character frame, for assertions about what a reader sees. */
+async function footerFrame(observed: Observed): Promise<string> {
+  return (await renderFooter(observed)).captureCharFrame()
+}
+
+/**
+ * Click the archive line in the footer.
+ *
+ * Through opentui's own dispatch, like the header, so this tests the wiring rather than
+ * a callback invoked directly. Row 0 is the only row the footer has.
+ */
+async function clickFooter(observed: Observed): Promise<void> {
+  const setup = await renderFooter(observed)
   await setup.mockMouse.click(4, 0)
   await setup.renderOnce()
 }
@@ -373,11 +416,14 @@ describe('the PTY sidebar panel', () => {
   test('lists a session it found through the origin record, and names it', async () => {
     const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
     try {
-      await spawnSession('web-build')
+      // A run that failed, because a finished session is only a row when it carries
+      // news - an `exit 0` is a record, and 200 of those are what made this panel
+      // unreadable. The clean case has its own case below.
+      await spawnSession('web-build', 'sh', ['-c', 'exit 1'])
       const seen = observed()
       await tuiPanel.setup(makeContext(seen))
 
-      // `exited`, not merely present: the row must say `exit 0`, and a row
+      // `exited`, not merely present: the row must say `exit 1`, and a row
       // rendered while the process was still up would say `0L`.
       const row = await waitForRow(seen, 'web-build', 'exited')
       if (!row) throw new Error('the panel never listed the spawned session as finished')
@@ -387,16 +433,21 @@ describe('the PTY sidebar panel', () => {
       // needed one per poll.
       expect(seen.sessionCalls).toEqual([])
 
-      // Expand, or the collapsed panel draws no rows.
+      // Expand, or the collapsed panel draws no rows - and open the archive, or the
+      // only rows it will draw are the running ones.
       const prefs = seen.stores.get('opencode-pty.sidebar')
       if (!prefs) throw new Error('the plugin never created its prefs store')
       prefs.collapsed = false
 
+      // Nothing is running, so with the archive closed the body says so.
+      expect(await sidebarFrame(seen)).toContain('nothing running')
+
+      prefs.showFinished = true
       const frame = await sidebarFrame(seen)
       expect(frame).toContain('web-build')
-      // `exit 0` rather than `exit ?`: a session that ended on its own has a code,
+      // `exit 1` rather than `exit ?`: a session that ended on its own has a code,
       // and a row reading "exit ?" looks like a bug in the panel.
-      expect(frame).toContain('exit 0')
+      expect(frame).toContain('exit 1')
     } finally {
       server[Symbol.dispose]()
     }
@@ -445,6 +496,93 @@ describe('the PTY sidebar panel', () => {
 
   // The whole reason the panel may create a session: a host with no server running
   // gets one started through the plugin's own command, in a session nobody sees.
+  // The archive's size lives in the sidebar's bottom, the one place a summary does not
+  // push the host's own items down.
+  test('claims the footer slot as well as the sidebar', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    expect(seen.footers[0]?.claim).toHaveProperty('append', 'sidebar.footer')
+  })
+
+  // The count must be the ARCHIVE's, not the visible rows'. The body below shows
+  // nothing - no session is running and the failed one is hidden - and the footer still
+  // names it. A footer that counted the rows would read "0 finished" exactly when the
+  // reader needs to know there is something to look at.
+  test('the footer counts the archive, not the rows on screen', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('footer-archive-run', 'sh', ['-c', 'exit 3'])
+      const seen = observed()
+      await tuiPanel.setup(makeContext(seen))
+      await waitForRow(seen, 'footer-archive-run', 'exited')
+
+      const prefs = seen.stores.get('opencode-pty.sidebar')
+      if (!prefs) throw new Error('the plugin never created its prefs store')
+      prefs.collapsed = false
+      prefs.showFinished = false
+
+      // Expanded, and still nothing to draw: the one finished run failed, and the
+      // archive is closed.
+      expect(await sidebarFrame(seen)).toContain('nothing running')
+
+      const closed = await footerFrame(seen)
+      expect(closed).toContain('finished')
+      expect(closed).toContain('1 failed')
+      // Closed, and offering to open: the arrow points at what a click would do.
+      expect(closed).toContain('\u25b8')
+
+      prefs.showFinished = true
+      expect(await sidebarFrame(seen)).toContain('footer-archive-run')
+      const open = await footerFrame(seen)
+      expect(open).toContain('\u25be')
+      expect(open).not.toContain('\u25b8')
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
+  // The same double-fire the header had: a click delivers both events, so a toggle
+  // registered on each would open and immediately close, and the footer would look
+  // broken rather than wrong.
+  test('one click on the footer opens the archive, and one more closes it', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('footer-toggle-run', 'sh', ['-c', 'exit 1'])
+      const seen = observed()
+      await tuiPanel.setup(makeContext(seen))
+      await waitForRow(seen, 'footer-toggle-run', 'exited')
+
+      const prefs = seen.stores.get('opencode-pty.sidebar')
+      if (!prefs) throw new Error('the plugin never created its prefs store')
+      expect(prefs.showFinished).toBe(false)
+
+      await clickFooter(seen)
+      expect(prefs.showFinished).toBe(true)
+
+      await clickFooter(seen)
+      expect(prefs.showFinished).toBe(false)
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
+  // Expanding the panel may start a server - it is the only trigger that does. The
+  // archive line looks like a control too, so it must not become a second one: the
+  // sessions it would show are already in the store, so it needs no refresh at all.
+  test('opening the archive does not start a server', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    await waitFor(() =>
+      panelStore(seen).status === 'starting…' ? undefined : panelStore(seen).status
+    )
+
+    await clickFooter(seen)
+
+    const prefs = seen.stores.get('opencode-pty.sidebar')
+    expect(prefs?.showFinished).toBe(true)
+    expect(seen.sessionCalls).not.toContain('create')
+  })
+
   test('starts the server when the panel is expanded, and cleans the scratch session up', async () => {
     // A holder rather than a `let`: the assignment happens inside the fixture's
     // callback, which control-flow analysis does not connect to the read.

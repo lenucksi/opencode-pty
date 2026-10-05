@@ -121,6 +121,39 @@ export function headerLabel(input: { collapsed: boolean; status: string }): stri
 }
 
 /**
+ * The footer line: how many sessions are finished, how many of them failed, and
+ * whether the expansion is open.
+ *
+ * Null when there is nothing to expand, so the footer never offers a click that would
+ * open nothing - the same rule the header's clear control follows.
+ *
+ * The count is the ARCHIVE's, not the visible rows': the list shows at most
+ * `FINISHED_FAILURE_LIMIT` failed rows, and a line that said "3 failed" while showing
+ * 3 of 17 would be describing the screen instead of the state. When the two numbers
+ * differ the line states both.
+ */
+export function archiveLabel(input: {
+  finished: number
+  failed: number
+  shown: number
+  expanded: boolean
+}): string | null {
+  // Null unless something failed. A finished session with an exit 0 is a record, not an
+  // event, and the expansion shows only failures - so a line reading "1 finished, none
+  // failed" would be a click that opens nothing. The header already carries the true
+  // total, so nothing is lost by staying absent.
+  if (input.finished === 0 || input.failed === 0) return null
+  const arrow = input.expanded ? '▾' : '▸'
+  // `N of M failed` when the cap cut the list: the two numbers differ, and a line that
+  // named only the visible ones would describe the screen instead of the archive.
+  const detail =
+    input.shown < input.failed
+      ? `${input.shown} of ${input.failed} failed`
+      : `${input.failed} failed`
+  return `${arrow} ${input.finished} finished · ${detail}`
+}
+
+/**
  * Header block for the output dialog - the detail that does not fit a row.
  *
  * Capped at TWO lines on purpose: every line spent here is a line unavailable to

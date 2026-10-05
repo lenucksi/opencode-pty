@@ -1,4 +1,4 @@
-import type { PanelSession } from './lib.ts'
+import { isFinished, type PanelSession } from './lib.ts'
 
 /**
  * The panel's state, and every transition it can make.
@@ -53,6 +53,15 @@ export const MAX_START_FAILURES = 3
  * before no longer does.
  */
 export const RETRY_STATUS = 'unavailable — toggle to retry'
+
+/**
+ * How many failed finished rows the expansion shows before it admits there are more.
+ *
+ * The sidebar is ~40 columns and the archive is hundreds of entries, so the expansion
+ * cannot show all of it - and it must not pretend to. The footer states how many are
+ * shown when the two numbers differ.
+ */
+export const FINISHED_FAILURE_LIMIT = 10
 
 export function initialPanelState(): PanelState {
   return {
@@ -110,6 +119,61 @@ export function orderForDisplay(sessions: readonly PanelSession[]): PanelSession
 /** Whether a session is one a reader would want to watch. */
 export function isRunning(session: PanelSession): boolean {
   return session.status === 'running'
+}
+
+/**
+ * Whether a finished session ended badly.
+ *
+ * A non-zero exit or a signal. An `exit 0` is a record, not an event: it can only ever
+ * be found again through the web UI, and on a machine with history there are hundreds
+ * of them. What the expansion shows is the rows that carry news.
+ */
+export function endedBadly(session: PanelSession): boolean {
+  if (typeof session.exitCode === 'number') return session.exitCode !== 0
+  return typeof session.exitSignal === 'string' && session.exitSignal.length > 0
+}
+
+/**
+ * How many finished sessions ended badly, uncapped.
+ *
+ * Uncapped on purpose: the footer reports this while the list shows at most
+ * `FINISHED_FAILURE_LIMIT` of them, so a capped count would describe the visible
+ * rows rather than the archive.
+ */
+export function failureCount(sessions: readonly PanelSession[]): number {
+  return sessions.filter((session) => isFinished(session) && endedBadly(session)).length
+}
+
+/**
+ * The failed finished rows, newest first, capped.
+ *
+ * Order comes from the input, which `orderForDisplay` already put newest-first within
+ * the finished group - filtering preserves it, so there is no second sort to disagree
+ * with the first.
+ */
+export function failedFinished(sessions: readonly PanelSession[]): PanelSession[] {
+  return sessions
+    .filter((session) => isFinished(session) && endedBadly(session))
+    .slice(0, FINISHED_FAILURE_LIMIT)
+}
+
+/**
+ * What the panel's body lists.
+ *
+ * Running sessions always, because that is what a glance is for. The failed finished
+ * ones only when the footer asked for them - so the expansion is additive and can
+ * never hide the one process that is alive.
+ *
+ * A `killing` session is neither: it is the transient state before the exit callback
+ * reports `killed`, and listing it would show a state the user cannot act on.
+ */
+export function visibleSessions(
+  sessions: readonly PanelSession[],
+  showFinished: boolean
+): PanelSession[] {
+  const running = sessions.filter(isRunning)
+  if (!showFinished) return running
+  return [...running, ...failedFinished(sessions)]
 }
 
 function timestamp(session: PanelSession): number {

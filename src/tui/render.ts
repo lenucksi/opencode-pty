@@ -3,6 +3,7 @@ import { insert } from '@opentui/solid'
 import { jsx } from '@opentui/solid/jsx-runtime'
 
 import {
+  archiveLabel,
   clearActionLabel,
   finishedSessions,
   formatDetail,
@@ -16,6 +17,7 @@ import {
   tail,
   type PanelSession,
 } from './lib.ts'
+import { failedFinished, failureCount } from './panel-state.ts'
 
 /**
  * What the panel draws, as plain inputs and plain callbacks.
@@ -46,9 +48,22 @@ export interface PanelView {
   readonly tones: Tones
   readonly collapsed: boolean
   readonly status: string
+  /**
+   * Every session the server reported, in display order.
+   *
+   * The counts and the clear control read THIS, not `visible`: a count that described
+   * the visible rows would report 3 while the archive holds 200, and a clear that acted
+   * on the visible rows would silently keep the other 197.
+   */
   readonly sessions: readonly PanelSession[]
+  /** The rows to draw: every running session, plus the failed ones when expanded. */
+  readonly visible: readonly PanelSession[]
+  /** Whether the footer has asked for the failed finished rows. */
+  readonly showFinished: boolean
   /** Expand/collapse the header. */
   readonly onToggle: (event: MouseEvent) => void
+  /** Show or hide the failed finished rows. */
+  readonly onToggleArchive: (event: MouseEvent) => void
   /** Clear every finished session. */
   readonly onClear: (event: MouseEvent) => void
   /** Open a session's output. */
@@ -137,16 +152,19 @@ function headerFor(view: PanelView) {
 }
 
 /** The rows, or nothing at all while collapsed. */
+/** The rows, or nothing at all while collapsed. */
 function listFor(view: PanelView) {
   return jsx('box', {
     flexDirection: 'column',
     width: '100%',
     children: (): unknown[] => {
       if (view.collapsed) return []
-      if (view.sessions.length === 0) {
-        return [jsx('text', { fg: view.tones.muted, children: '   (none)' })]
+      if (view.visible.length === 0) {
+        // Says what is true rather than showing an empty box: nothing is running. The
+        // footer carries the archive count, so this line does not repeat it.
+        return [jsx('text', { fg: view.tones.muted, children: '   nothing running' })]
       }
-      return view.sessions.map((session) => rowFor(view, session))
+      return view.visible.map((session) => rowFor(view, session))
     },
   })
 }
@@ -157,6 +175,38 @@ export function sidebarView(view: PanelView) {
     flexDirection: 'column',
     width: '100%',
     children: [headerFor(view), listFor(view)],
+  })
+}
+
+/**
+ * The footer contribution: one line carrying the archive's size.
+ *
+ * A separate slot rather than another header row, because the sidebar's bottom is the
+ * one place a summary does not push the built-in items down - and the count is the
+ * least interesting thing on the screen, so it should cost the least space.
+ */
+export function sidebarFooterView(view: PanelView) {
+  return jsx('box', {
+    width: '100%',
+    children: jsx('text', {
+      fg: view.tones.muted,
+      // `onMouseDown` ONLY, for the same reason as the header: a click delivers both
+      // events, so registering on each would toggle twice and appear to do nothing.
+      onMouseDown: (event: MouseEvent) => {
+        event.stopPropagation()
+        view.onToggleArchive(event)
+      },
+      // An accessor, so the line follows the poll. Empty rather than a placeholder when
+      // nothing is finished: a zero-width element presents no hit target, so the footer
+      // never offers a click that would expand an empty list.
+      children: (): string =>
+        archiveLabel({
+          finished: finishedSessions(view.sessions).length,
+          failed: failureCount(view.sessions),
+          shown: failedFinished(view.sessions).length,
+          expanded: view.showFinished,
+        }) ?? '',
+    }),
   })
 }
 

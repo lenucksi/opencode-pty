@@ -33,6 +33,22 @@ beside the built-in sidebar items rather than replacing them.
 - Once a start has failed repeatedly, the status names the gesture that still works
   (toggle the panel again) rather than inviting a click that no longer starts
   anything.
+- **The sidebar lists the running sessions, and the archive is one click away in the
+  footer.** Measured on the author's machine the list held 200 entries in a ~40-column
+  sidebar, of which three carried news (`exit 1`, `exit 2`) and 197 were `exit 0`; the
+  section also displaced the host's own MCP and LSP sections. Ordering could not fix
+  that, because a status strip cannot be a session manager. So `sidebar.content` draws
+  one row per RUNNING session - or one dim line saying nothing is running - and a new
+  `sidebar.footer` slot carries the archive's size. Clicking that line expands the
+  finished runs that FAILED, newest first, capped at 10. An `exit 0` is a record, not
+  an event: on a machine with history there are hundreds of them, and the only place
+  they are still browsable is the web UI. The header's count stays the true total, and
+  the footer names the archive rather than the rows on screen - when the cap cuts the
+  list it says so (`10 of 17 failed`). The line is absent when nothing failed, because
+  a click that opens nothing is a control with no answer.
+- Opening the archive does not start a server. Expanding the panel is the only trigger
+  that does, and the sessions the archive shows are already in the panel state, so the
+  expansion needs no refresh at all.
 - The output dialog uses a plain box rather than a scrollbox. Measured against
   opentui 0.5.14: a scrollbox renders nothing when its text contains a line break,
   and `stickyScroll` together with `stickyStart: 'bottom'` blanks it even for a

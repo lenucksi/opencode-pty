@@ -12,9 +12,10 @@ import {
   noteStartError,
   noteUnreachable,
   statusWhenUnavailable,
+  visibleSessions,
   type PanelState,
 } from './panel-state.ts'
-import { sidebarView, type PanelView } from './render.ts'
+import { sidebarFooterView, sidebarView, type PanelView } from './render.ts'
 import { findProjectOrigin, isHealthy, listSessions } from './server.ts'
 import { runtimeDir } from '../shared/runtime.ts'
 
@@ -104,7 +105,12 @@ export default Plugin.define({
     const [panel, setPanel] = context.storage.memory<PanelState>(PANEL_KEY, {
       initial: initialPanelState(),
     })
-    const [prefs, setPrefs] = context.storage.store(PREFS_KEY, { initial: { collapsed: true } })
+    const [prefs, setPrefs] = context.storage.store(PREFS_KEY, {
+      // Both durable, both preferences rather than session state: whether someone
+      // wants to see the failed finished rows is their choice, like the collapsed
+      // state, and it should survive a restart the same way.
+      initial: { collapsed: true, showFinished: false },
+    })
 
     let disposed = false
     let refreshing = false
@@ -249,6 +255,23 @@ export default Plugin.define({
       if (!next) void refresh(true)
     }
 
+    /**
+     * Show or hide the failed finished rows.
+     *
+     * Deliberately does NOT refresh: the archive is already in the panel state, since
+     * `/api/sessions` returns finished sessions too. Expanding is a view change, and
+     * the only refresh allowed to start a server is one the user asked for by expanding
+     * the panel itself - a second trigger here would start a server from a click on a
+     * line that looks like a count.
+     */
+    const onToggleArchive = (): void => {
+      const next = !prefs.showFinished
+      setPrefs((draft) => {
+        draft.showFinished = next
+      })
+      debug('archive.toggle', { showFinished: next })
+    }
+
     const onOpen = (session: PanelSession): void => {
       // Mouse UP, deferred one tick. Opening on DOWN meant the dialog's
       // click-outside dismissal saw the trailing click land outside the brand-new
@@ -275,7 +298,10 @@ export default Plugin.define({
       collapsed: prefs.collapsed,
       status: panel.status,
       sessions: panel.sessions,
+      visible: visibleSessions(panel.sessions, prefs.showFinished),
+      showFinished: prefs.showFinished,
       onToggle,
+      onToggleArchive,
       onClear: actions.onClear,
       onOpen,
       onRemove: actions.confirmRemove,
@@ -287,6 +313,13 @@ export default Plugin.define({
       // lives in.
       append: 'sidebar.content',
       render: () => sidebarView(view()),
+    })
+
+    context.ui.slot({
+      // The archive's size, in the one place that does not push the built-in items
+      // down. Additive for the same reason as the panel itself.
+      append: 'sidebar.footer',
+      render: () => sidebarFooterView(view()),
     })
 
     debug('setup')
