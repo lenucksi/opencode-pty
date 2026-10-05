@@ -191,6 +191,9 @@ export class SessionLifecycleManager {
       session.exitCode = exitCode
       session.exitSignal = signal
       session.endedAt = new Date()
+      // Set here rather than derived from endedAt: this is the process's exit,
+      // and it is the only timestamp that survives a restart.
+      session.exitAt = new Date()
       onExit(session, exitCode)
     })
   }
@@ -308,6 +311,7 @@ export class SessionLifecycleManager {
       timedOut: session.timedOut,
       exitCode: session.exitCode,
       exitSignal: session.exitSignal,
+      ...(session.exitAt === undefined ? {} : { exitAt: session.exitAt.toISOString() }),
       pid: session.pid,
       createdAt: session.createdAt.toISOString(),
       parentSessionId: session.parentSessionId,
