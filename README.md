@@ -206,6 +206,35 @@ This plugin provides slash commands that can be used in OpenCode chat:
 | `/pty-open-background-spy` | Open the PTY web server interface in the browser   |
 | `/pty-show-server-url`     | Show the URL of the running PTY web server instance |
 
+## TUI Sidebar Panel
+
+OpenCode's terminal UI has no page for PTY sessions, so a session the agent
+started is invisible there: the terminal shows the chat, not the processes. This
+plugin contributes a collapsible **PTY** section to the sidebar, next to the
+built-in items (MCP, File Tree, Todo), and shows a session's live output in a
+dialog.
+
+| Row shows        | Meaning                                                     |
+| ---------------- | ----------------------------------------------------------- |
+| `120L`           | Running, with that many lines of output                     |
+| `exit 0`         | Ended on its own with that exit code                        |
+| `signal SIGTERM` | Ended on a signal                                            |
+| `killing`        | Asked to stop; the teardown is still running                 |
+| `killed`         | Stopped, no exit code of its own                            |
+
+Each row has a `✕`. On a running session it asks first, because it kills a live
+process; on a finished one it acts at once. The header offers *(clear finished)*
+whenever there is something finished to clear — never for a running session.
+
+The panel needs the PTY server, and starts it when you expand the section. It
+does **not** start it on OpenCode's startup: starting it creates and deletes a
+session, which does not belong on a load path. If the PTY plugin is not
+registered in the project's `opencode.jsonc`, the header says so rather than
+offering a retry that cannot work.
+
+Requires an OpenCode build with the V2 TUI plugin API. The panel is additive, so
+if your build does not have it, nothing changes.
+
 ## Web UI
 
 This plugin includes a modern React-based web interface for monitoring and interacting with PTY sessions.

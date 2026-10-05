@@ -1,0 +1,311 @@
+import { describe, expect, test } from 'bun:test'
+
+import { testRender } from '@opentui/solid'
+import { RGBA } from '@opentui/core'
+
+import type { PanelSession } from '../src/tui/lib.ts'
+import {
+  clearTargetCount,
+  dialogRows,
+  dialogSize,
+  outputDialogView,
+  sidebarView,
+  REMOVE_GLYPH,
+  type PanelView,
+} from '../src/tui/render.ts'
+
+/**
+ * What the panel draws, rendered headlessly.
+ *
+ * The builders take plain inputs and plain callbacks, so the element tree can be
+ * built from a literal - which is the only way to assert on it without a terminal.
+ */
+
+const tones = {
+  base: RGBA.fromHex('#d8dee9'),
+  muted: RGBA.fromHex('#7b8494'),
+  success: RGBA.fromHex('#a3be8c'),
+  error: RGBA.fromHex('#bf616a'),
+  border: RGBA.fromHex('#3b4252'),
+  raised: RGBA.fromHex('#242832'),
+}
+
+const session = (over: Partial<PanelSession> = {}): PanelSession => ({ id: 'pty_1', ...over })
+
+interface Handlers {
+  onToggle: () => void
+  onClear: () => void
+  onOpen: (session: PanelSession) => void
+  onRemove: (session: PanelSession) => void
+}
+
+const handlers = (): Handlers & { calls: string[] } => {
+  const calls: string[] = []
+  return {
+    calls,
+    onToggle: () => calls.push('toggle'),
+    onClear: () => calls.push('clear'),
+    onOpen: (s) => calls.push(`open:${s.id}`),
+    onRemove: (s) => calls.push(`remove:${s.id}`),
+  }
+}
+
+const view = (over: Partial<PanelView> = {}): PanelView => ({
+  tones,
+  collapsed: false,
+  status: '2 sessions',
+  sessions: [],
+  ...handlers(),
+  ...over,
+})
+
+/** Render an element and return the character frame. */
+async function frame(element: () => unknown, width = 60, height = 16): Promise<string> {
+  const setup = await testRender(element as () => never, { width, height })
+  await setup.renderOnce()
+  return setup.captureCharFrame()
+}
+
+describe('sidebarView', () => {
+  test('draws the header with the panel name, chevron and status', async () => {
+    const text = await frame(() => sidebarView(view({ collapsed: true })))
+    expect(text).toContain('PTY')
+    expect(text).toContain('2 sessions')
+    // Collapsed, so the chevron offers to expand.
+    expect(text).toContain('▶')
+  })
+
+  test('points the chevron the other way once expanded', async () => {
+    const text = await frame(() => sidebarView(view({ collapsed: false })))
+    expect(text).toContain('▼')
+  })
+
+  test('draws one row per session, with what the row says', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({
+          status: '2 sessions',
+          sessions: [
+            session({ id: 'a', title: 'dev-server', status: 'running', lineCount: 120 }),
+            session({ id: 'b', title: 'build', status: 'exited', exitCode: 1 }),
+          ],
+        })
+      )
+    )
+    expect(text).toContain('dev-server')
+    expect(text).toContain('120L')
+    expect(text).toContain('build')
+    expect(text).toContain('exit 1')
+  })
+
+  test('draws no rows while collapsed, even with sessions behind it', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({ collapsed: true, sessions: [session({ title: 'hidden', status: 'running' })] })
+      )
+    )
+    expect(text).not.toContain('hidden')
+  })
+
+  test('says so when there is nothing to list', async () => {
+    const text = await frame(() => sidebarView(view({ status: '0 sessions', sessions: [] })))
+    expect(text).toContain('(none)')
+  })
+
+  // A header offering to clear nothing is a control that invites a click with no
+  // answer, and reads as though it would touch live sessions.
+  test('offers no clear action when nothing is finished', async () => {
+    const text = await frame(() =>
+      sidebarView(view({ sessions: [session({ status: 'running' })] }))
+    )
+    expect(text).not.toContain('clear finished')
+  })
+
+  test('offers the clear action once something is finished', async () => {
+    const text = await frame(() =>
+      sidebarView(view({ sessions: [session({ status: 'exited', exitCode: 0 })] }))
+    )
+    expect(text).toContain('clear finished')
+  })
+
+  test('truncates a long title so the state stays visible', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({
+          sessions: [session({ title: 'x'.repeat(80), status: 'running', lineCount: 42 })],
+        })
+      )
+    )
+    expect(text).toContain('…')
+    expect(text).toContain('42L')
+  })
+
+  test('renders the remove control on every row', async () => {
+    const text = await frame(() =>
+      sidebarView(view({ sessions: [session({ id: 'a', status: 'running' })] }))
+    )
+    expect(text).toContain(REMOVE_GLYPH.trim())
+  })
+})
+
+describe('clearTargetCount', () => {
+  test('counts only what may be cleared', () => {
+    expect(
+      clearTargetCount([
+        session({ status: 'exited' }),
+        session({ status: 'running' }),
+        session({ status: 'killed' }),
+        session({ status: 'killing' }),
+      ])
+    ).toBe(2)
+  })
+
+  test('is zero for an empty list', () => {
+    expect(clearTargetCount([])).toBe(0)
+  })
+})
+
+describe('dialogRows', () => {
+  // The host pins a dialog's top edge a quarter of the screen down and grows it
+  // downward, so height is the only shape lever; these pin what is left of the
+  // screen once the chrome is subtracted.
+  test('leaves the tallest box that still fits the screen', () => {
+    expect(dialogRows(40)).toBe(40 - 10 - 12)
+    expect(dialogRows(100)).toBe(100 - 25 - 12)
+  })
+
+  // A very short terminal would otherwise be handed a negative height, and every
+  // line of output would be pushed off a screen that has none.
+  test('never returns less than a usable box', () => {
+    expect(dialogRows(10)).toBe(6)
+    expect(dialogRows(1)).toBe(6)
+    expect(dialogRows(0)).toBe(6)
+  })
+})
+
+describe('dialogSize', () => {
+  test('scales with the terminal width', () => {
+    expect(dialogSize(140)).toBe('xlarge')
+    expect(dialogSize(128)).toBe('xlarge')
+    expect(dialogSize(127)).toBe('large')
+    expect(dialogSize(96)).toBe('large')
+    expect(dialogSize(95)).toBe('medium')
+    expect(dialogSize(40)).toBe('medium')
+  })
+})
+
+describe('outputDialogView', () => {
+  const dialog = (over: Partial<Parameters<typeof outputDialogView>[0]> = {}) => ({
+    tones,
+    session: session({ id: 'pty_7', title: 'dev-server', status: 'running', pid: 42 }),
+    live: session({ id: 'pty_7', title: 'dev-server', status: 'running', pid: 42 }),
+    now: Date.parse('2026-01-01T10:02:30.000Z'),
+    buffer: '',
+    rows: 6,
+    ...over,
+  })
+
+  test('names the session and shows its invocation', async () => {
+    const text = await frame(() =>
+      outputDialogView(
+        dialog({
+          session: session({
+            id: 'pty_7',
+            title: 'dev-server',
+            status: 'running',
+            pid: 42,
+            command: 'bun',
+            args: ['run', 'dev'],
+            workdir: '/srv/app',
+          }),
+        })
+      )
+    )
+    expect(text).toContain('dev-server')
+    expect(text).toContain('pty_7')
+    expect(text).toContain('bun run dev')
+    expect(text).toContain('/srv/app')
+    expect(text).toContain('esc to close')
+  })
+
+  test('shows the output it was given', async () => {
+    const text = await frame(() => dialog2('letzte Zeile des Puffers'))
+    expect(text).toContain('letzte Zeile des Puffers')
+  })
+
+  test('shows how long a running session has been up', async () => {
+    const created = '2026-01-01T10:00:00.000Z'
+    const text = await frame(() =>
+      outputDialogView(
+        dialog({
+          now: Date.parse('2026-01-01T10:02:30.000Z'),
+          session: session({ id: 'a', status: 'running', createdAt: created }),
+          live: session({ id: 'a', status: 'running', createdAt: created }),
+        })
+      )
+    )
+    expect(text).toContain('2m 30s')
+  })
+
+  // Without exitAt a finished session would measure to "now", so a transcript read
+  // an hour later would claim to have run an hour.
+  test('freezes the run timer at the exit once the process has stopped', async () => {
+    const created = '2026-01-01T10:00:00.000Z'
+    const text = await frame(() =>
+      outputDialogView(
+        dialog({
+          now: Date.parse('2026-01-01T11:30:00.000Z'),
+          session: session({
+            id: 'a',
+            status: 'exited',
+            exitCode: 0,
+            createdAt: created,
+            exitAt: '2026-01-01T10:00:05.000Z',
+          }),
+          live: session({
+            id: 'a',
+            status: 'exited',
+            exitCode: 0,
+            createdAt: created,
+            exitAt: '2026-01-01T10:00:05.000Z',
+          }),
+        })
+      )
+    )
+    expect(text).toContain('5s')
+    expect(text).not.toContain('1h 30m')
+  })
+
+  // A duration nobody can compute should be absent, not shown as none.
+  test('shows no timer at all when the start is unknown', async () => {
+    const text = await frame(() =>
+      outputDialogView(
+        dialog({ session: session({ status: 'running' }), live: session({ status: 'running' }) })
+      )
+    )
+    expect(text).not.toContain('0s')
+  })
+
+  // The line budget IS the box height, so the newest output is what lands on
+  // screen. A viewport of eight rows over fifty lines must show the END, not the
+  // beginning: the whole point of watching a process is its latest output.
+  test('shows the newest lines of a long output, and says it cut', async () => {
+    const long = Array.from({ length: 50 }, (_, n) => `zeile ${n}`).join('\n')
+    const text = await frame(() => dialog2(long), 40, 14)
+    expect(text).toContain('…')
+    expect(text).toContain('zeile 49')
+    expect(text).not.toContain('zeile 0')
+  })
+})
+
+/** The dialog with a buffer, which is the one thing every case here needs. */
+function dialog2(buffer: string) {
+  return outputDialogView({
+    tones,
+    session: session({ id: 'pty_7', title: 'dev-server', status: 'running' }),
+    live: session({ id: 'pty_7', title: 'dev-server', status: 'running' }),
+    now: Date.now(),
+    buffer,
+    rows: 6,
+  })
+}

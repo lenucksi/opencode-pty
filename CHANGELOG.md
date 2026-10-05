@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+**TUI sidebar panel**
+
+A PTY section in OpenCode's terminal sidebar, listing this project's sessions and
+opening a session's live output in a dialog. Contributed additively through the
+V2 TUI plugin API (`Plugin.define` plus the `sidebar.content` slot), so it sits
+beside the built-in sidebar items rather than replacing them.
+
+- The server publishes its bound address to a small record under
+  `$XDG_RUNTIME_DIR/opencode-pty/`, which is how the panel finds it. A reader
+  validates every candidate with `/health`, and the owner removes its own record
+  on shutdown.
+- Sessions now record `exitAt`: when the process actually stopped, as opposed to
+  `endedAt`, which is written from the exit notification and lost on a restart. It
+  travels into the archive, which is what lets the dialog show a finished run's
+  duration.
+- The panel polls rather than subscribing: the web UI has a WebSocket for this and
+  a TUI has no equivalent, so `POLL_MS` is the floor for how stale it may look.
+- The output dialog uses a plain box rather than a scrollbox. Measured against
+  opentui 0.5.14: a scrollbox renders nothing when its text contains a line break,
+  and `stickyScroll` together with `stickyStart: 'bottom'` blanks it even for a
+  single line. The box shows exactly as many lines as it has rows, so the newest
+  output is what lands on screen. The full history stays in the web UI.
+- `opencode-pty/tui` is now a declared export. The `exports` wildcards did not reach
+  it - `./*` matches one path segment and pointed at `dist/src/tui.js` rather than
+  the directory's `index.js` - so opencode's resolver reported the plugin as having
+  no TUI feature, which reads as "the panel never appears" rather than as a
+  packaging mistake.
+- `@babel/core`, pulled in by `@opentui/solid`'s Babel plugin, is overridden past
+  advisory GHSA-4. Nothing here runs Babel; only `jsx-runtime` is used.
+
+### Changed
+
+- `@opentui/core`, `@opentui/solid`, `solid-js` and `@opencode/theme` are optional
+  peer dependencies, at the floors `@opencode/plugin` itself declares. They are
+  also development dependencies, so the TUI contract is type-checked in CI. A host
+  with no TUI can still install this package.
+
 ## [0.5.1] - 2026-10-05
 
 ### Fixed

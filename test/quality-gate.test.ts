@@ -8,6 +8,11 @@ import {
 } from '../scripts/quality/aislop.ts'
 import {
   compareVersions,
+  excuseRecentReleases,
+  isOutdatedRowNoise,
+  minimumReleaseAgeDays,
+  outdatedRowName,
+  outdatedRowVersion,
   parseOutdatedDependencies,
   validateBunToolchain,
 } from '../scripts/quality/dependencies.ts'
@@ -47,6 +52,112 @@ describe('local quality gate helpers', () => {
     expect(() => validateBunToolchain('1.4.3', 'bun@1.4.2')).not.toThrow()
     expect(() => validateBunToolchain('1.4.1', 'bun@1.4.2')).toThrow('Bun 1.4.2+ is required')
     expect(() => validateBunToolchain('1.4.2', 'bun@1.3.8')).toThrow('packageManager')
+  })
+
+  describe('the release-age window', () => {
+    const DAY = 24 * 60 * 60 * 1000
+    const NOW = Date.parse('2026-10-05T12:00:00Z')
+    const row = (name: string, latest: string): string => `| ${name} | 1.0.0 | 1.0.0 | ${latest} |`
+
+    test('reads the window from renovate.json, so the gate and the bot cannot disagree', async () => {
+      // One home for "how new is too new". If the gate hard-coded its own number,
+      // the bot and the gate would drift and one of them would be lying.
+      expect(await minimumReleaseAgeDays()).toBe(1)
+    })
+
+    test('waits out a release that is younger than the window', async () => {
+      const fresh = async (): Promise<number> => NOW - 3 * 60 * 60 * 1000
+      const kept = await excuseRecentReleases([row('vite', '9.0.0')], 1, fresh, NOW)
+      expect(kept).toEqual([])
+    })
+
+    test('still reports a release that has settled', async () => {
+      const settled = async (): Promise<number> => NOW - 5 * DAY
+      const rows = [row('vite', '9.0.0')]
+      expect(await excuseRecentReleases(rows, 1, settled, NOW)).toEqual(rows)
+    })
+
+    test('reports everything when the window is zero, rather than excusing all', async () => {
+      const rows = [row('vite', '9.0.0')]
+      expect(await excuseRecentReleases(rows, 0, async () => NOW, NOW)).toEqual(rows)
+    })
+
+    // A lookup that fails must not turn the gate green: that is the failure mode a
+    // network hiccup would otherwise produce.
+    test('reports a dependency whose release date could not be determined', async () => {
+      const rows = [row('vite', '9.0.0')]
+      const unknown = async (): Promise<null> => null
+      expect(await excuseRecentReleases(rows, 1, unknown, NOW)).toEqual(rows)
+    })
+
+    // Once the real findings are excused, the header and separator lines are all
+    // that is left. Keeping them failed the gate on an EMPTY table, which reads as
+    // a broken check rather than as "nothing to do".
+    test('drops the table furniture instead of reporting it as a dependency', async () => {
+      const furniture = [
+        '|--------------------------------------------------------|',
+        '| Package                    | Current | Update | Latest |',
+        '|----------------------------|---------|--------|--------|',
+        '|--------------------------------------------------------|',
+      ]
+      // A settled publish time, so the age rule excuses nothing and only the
+      // furniture rule can be what drops these. With a fresh time they would be
+      // excused anyway, and the test would pass for the wrong reason.
+      const settled = async (): Promise<number> => NOW - 5 * DAY
+      expect(await excuseRecentReleases(furniture, 1, settled, NOW)).toEqual([])
+    })
+
+    // The opposite failure mode: something the parser does not recognise must
+    // still be reported, or a parsing regression would pass the gate quietly.
+    test('reports a row whose release date could not be read', async () => {
+      const rows = ['| @unknown/dep | 1.0.0 | 1.0.1 | 1.0.1 |']
+      expect(await excuseRecentReleases(rows, 1, async () => null, NOW)).toEqual(rows)
+    })
+  })
+
+  describe('reading an outdated row', () => {
+    // bun annotates the name with where it comes from, and those annotations are
+    // not part of the name. A lookup that keeps them 404s, which reads as "date
+    // unknown", which reads as "old enough" - so the gate then fails on exactly
+    // the release it meant to wait out. That is what these pin down.
+    test('strips the annotation bun puts after the name', () => {
+      expect(outdatedRowName('| @vitejs/plugin-react (dev) | 6.1.1   | 6.1.2  | 6.1.2  |')).toBe(
+        '@vitejs/plugin-react'
+      )
+      expect(outdatedRowName('| open (optional) | 11.0.3 | 11.0.4 | 11.0.4 |')).toBe('open')
+      expect(outdatedRowName('| typescript (peer) | 7.0.1 | 7.0.2 | 7.0.2 |')).toBe('typescript')
+    })
+
+    test('leaves an unannotated name alone', () => {
+      expect(outdatedRowName('| ghostty-web | 1.0.0 | 1.0.1 | 1.0.1 |')).toBe('ghostty-web')
+      // A scoped name with no annotation must survive intact, slash included.
+      expect(outdatedRowName('| @opencode/plugin | 2.0.23 | 2.0.24 | 2.0.24 |')).toBe(
+        '@opencode/plugin'
+      )
+    })
+
+    test('returns nothing for a row with no name at all', () => {
+      expect(outdatedRowName('| | | | |')).toBe('')
+      expect(outdatedRowName('kein table hier')).toBe('')
+    })
+
+    test('recognises furniture without mistaking a dependency for it', () => {
+      expect(isOutdatedRowNoise('|--------------------|')).toBe(true)
+      expect(isOutdatedRowNoise('| Package | Current | Update | Latest |')).toBe(true)
+      expect(isOutdatedRowNoise('|  package |')).toBe(true)
+      expect(isOutdatedRowNoise('| vite | 8.3.0 | 8.3.1 | 8.4.0 |')).toBe(false)
+      // A dependency whose name merely starts with "package" is a dependency.
+      expect(isOutdatedRowNoise('| package-json | 1.0.0 | 1.0.1 | 1.0.1 |')).toBe(false)
+    })
+
+    test('reads the version the row would move to', () => {
+      expect(outdatedRowVersion('| vite | 8.3.0 | 8.3.1 | 8.4.0 |')).toBe('8.3.1')
+    })
+
+    test('has no version when the update column names nothing usable', () => {
+      expect(outdatedRowVersion('| vite | 8.3.0 | Latest | 8.4.0 |')).toBe('')
+      expect(outdatedRowVersion('| vite | | | |')).toBe('')
+    })
   })
 
   test('treats only lines after the bun outdated header as findings', () => {

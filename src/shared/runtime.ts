@@ -157,21 +157,18 @@ export function readOrigins(): OriginRecord[] {
 }
 
 /**
- * The records for this project, most specific match first.
+ * The records for this project, an exact directory match first.
  *
- * Both sides must know the project directory — in this repository the V2 plugin
- * context's `ctx.location.directory` and, for a reader, the TUI's
- * `state.path.directory`/`worktree` — and that shared path is what lets a record
- * be attributed to the instance that wrote it. It is the job `/proc` used to do
- * by process ownership, and it is not optional: see `writeOrigin`, which writes
- * nothing without a key, so a server started from a host that supplies no
- * project path (the V1 entry, whose context carries no directory) is invisible
- * here rather than merely un-looked-up.
+ * A record is attributed to the instance that wrote it by a shared project path:
+ * the writer's `ctx.location.directory`, and the reader's own. In this repository
+ * only the V2 plugin context supplies one - the V1 entry's context has no
+ * directory, and `writeOrigin` publishes nothing without a key, so a server
+ * started from it is absent from the runtime directory.
  *
- * `directory` is the precise key (two instances of one worktree differ by it),
- * so an exact directory match wins outright; `worktree` is only a fallback for a
- * host that could not supply one. Returning both kinds together would make two
- * instances in different subdirectories of one worktree ambiguous.
+ * `directory` is the precise key, so two instances of one worktree are told apart
+ * by it; `worktree` is a fallback for a host that could not supply one. Returning
+ * both kinds together would make two instances in different subdirectories of one
+ * worktree ambiguous.
  */
 export function originsForProject(directory?: string, worktree?: string): OriginRecord[] {
   const wantedDirectory = canonical(directory)
