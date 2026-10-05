@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-05
+
+### Fixed
+
+- The published tarball referenced a patch file it did not contain, so
+  `bun install` in the extracted package failed. `patches/` is now part of the
+  published files.
+
 ## [0.5.0] - 2026-10-04
 
 The release that brings the web UI to parity with the tools, and makes the tools
@@ -89,5 +97,6 @@ say what they actually did.
   is resolved.
 - Exit-notification delivery failures are logged rather than swallowed.
 
-[Unreleased]: https://github.com/lenucksi/opencode-pty/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/lenucksi/opencode-pty/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/lenucksi/opencode-pty/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/lenucksi/opencode-pty/compare/v0.4.0...v0.5.0
