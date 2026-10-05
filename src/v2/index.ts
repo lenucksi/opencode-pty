@@ -120,6 +120,13 @@ export const Plugin: PluginV2 = define({
         const server = await getOrCreateServer({
           port: ctx.options.port,
           hostname: ctx.options.hostname,
+          // Published so a TUI can find this server by project. Without it
+          // writeOrigin writes no record at all: an unkeyed one cannot be
+          // attributed to an instance, and /api/server reports no project, so
+          // even a probed candidate could not be told apart from another
+          // instance's. A host that supplies no location therefore gets no
+          // origin, rather than one that looks findable and is not.
+          directory: ctx.location?.directory,
         })
 
         // Sessions that the previous run left behind are announced once per

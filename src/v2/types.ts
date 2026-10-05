@@ -108,6 +108,19 @@ export interface SkillDraft {
 export interface PluginContextV2 {
   readonly options?: OpencodePtyOptions & Record<string, unknown>
   /**
+   * Where the host thinks the project is.
+   *
+   * Needed to publish the server's origin under a key a TUI can look up: the
+   * address alone is not enough, because a machine can have several servers and
+   * a reader has to know which one belongs to the session it is rendering.
+   * Typed from `@opencode/plugin` so the path is the real one. Optional because
+   * a host predating the field still runs, and then the origin is published
+   * without a project key - findable by probing, not by lookup.
+   */
+  readonly location?: {
+    readonly directory: string
+  }
+  /**
    * Host application info (name/version/channel). Used in restart notices so a
    * reader knows which opencode build the sessions were lost to.
    */
