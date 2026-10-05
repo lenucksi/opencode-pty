@@ -192,6 +192,10 @@ function deps(state: PanelState, over: Partial<ActionDeps> = {}): ActionDeps {
     debug: (event) => {
       recorded.events.push(event)
     },
+    // The real wiring reads these off the same resolved theme the sidebar view uses, so
+    // the fixture hands over the same six values rather than a second palette that could
+    // drift from it.
+    tones: () => tones,
     ...over,
   }
 }

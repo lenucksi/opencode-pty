@@ -34,8 +34,15 @@ import { failedFinished, failureCount } from './panel-state.ts'
 /** The per-row remove control. Leading space so it does not crowd the label. */
 export const REMOVE_GLYPH = ' ✕'
 
-/** The colour slots this panel uses, named rather than typed. */
-interface Tones {
+/**
+ * The colour slots this plugin draws with, named rather than typed.
+ *
+ * Exported because three surfaces need them - the sidebar, its dialog and the session
+ * panel - and three copies of a palette is three places for a rename to miss. Typed as
+ * `unknown` because the host's resolved theme is a chain of optional lookups and the
+ * panel reads six slots, not the whole type.
+ */
+export interface Tones {
   readonly base: unknown
   readonly muted: unknown
   readonly success: unknown

@@ -67,6 +67,25 @@ beside the built-in sidebar items rather than replacing them.
 - `@babel/core`, pulled in by `@opentui/solid`'s Babel plugin, is overridden past
   advisory GHSA-4. Nothing here runs Babel; only `jsx-runtime` is used.
 
+- **A `session.panel` for the PTYs of the conversation you are in.** A PTY session belongs to
+  the OpenCode session that spawned it - the web UI groups its list by `parentSessionId` for
+  the same reason - so the panel claims `session.panel`, the host's own place for an extra
+  view of a session, where Review and Files already live. Open it from the command palette
+  or `/pty-sessions`; no keybind is configured, because any guess could collide with the
+  host's own and the command has an id for the user's keymap config.
+  It lists this conversation's processes, one on screen, read on the same poll as the
+  sidebar - the panel's rows are a subset of that list, so a second fetch would be a second
+  answer to a question already answered.
+
+  **It is read-only, and that is the SDK's ceiling rather than a choice.** `context.keymap`
+  offers exactly `layer()`, `dispatch()` and `shortcuts()`, so a plugin can bind named
+  commands and nothing else; there is no access to raw key events, and the host's own
+  terminal pane gets one through an internal TUI context a plugin does not receive. So
+  `pty_write` from free typing, scrolling the output and resizing are unreachable from a TUI
+  plugin on this version. What the panel adds over the dialog is that it is not modal, that
+  it is wider, and that it shows the processes of the conversation you are reading.
+- The theme's six colour slots are read in one place instead of four. Three surfaces draw
+  with them, and three copies of a palette is three places for a rename to miss.
 - **The panel's output dialog reads that screen instead of the plain buffer.** It asked
   `/api/sessions/:id/buffer/plain`, which is `Bun.stripANSI(raw)`: the colour codes go and
   the cursor movement goes with them, so a full-screen program's output arrived unpainted

@@ -9,7 +9,7 @@ import {
   noteDialogTick,
   type PanelState,
 } from './panel-state.ts'
-import { dialogRows, dialogSize, outputDialogView } from './render.ts'
+import { dialogRows, dialogSize, outputDialogView, type Tones } from './render.ts'
 import { cleanupSession, findProjectOrigin, readScreen } from './server.ts'
 
 /**
@@ -35,6 +35,14 @@ export interface ActionDeps {
   readonly notify: (message: string, variant: ToastVariant) => void
   readonly directory: () => string | undefined
   readonly debug: (event: string, detail?: unknown) => void
+  /**
+   * The theme slots to draw with.
+   *
+   * Passed in rather than read from `context.theme` here, because the sidebar and the
+   * session panel need the same six, and three copies of a palette is three places for a
+   * rename to miss.
+   */
+  readonly tones: () => Tones
 }
 
 export interface Actions {
@@ -213,14 +221,7 @@ export function createOpenOutput(deps: ActionDeps) {
     deps.context.ui.dialog.show(
       () =>
         outputDialogView({
-          tones: {
-            base: deps.context.theme.text.base,
-            muted: deps.context.theme.text.muted,
-            success: deps.context.theme.text.feedback.success.base,
-            error: deps.context.theme.text.feedback.error.base,
-            border: deps.context.theme.border.base,
-            raised: deps.context.theme.background.raised.base,
-          },
+          tones: deps.tones(),
           session,
           live: live(),
           now: deps.state.dialog?.now ?? Date.now(),

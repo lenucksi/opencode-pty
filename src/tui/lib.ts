@@ -26,6 +26,16 @@ export interface PanelSession {
   readonly command?: string
   readonly args?: readonly string[]
   readonly workdir?: string
+  /**
+   * The OpenCode session that started this one, when it was started by a tool call.
+   *
+   * This is what ties a PTY session to the conversation that commissioned it: the web
+   * UI groups its list by it, and the session panel shows exactly the group belonging to
+   * the session you are in. Absent for a session started by hand, which is then not
+   * shown in any session's panel - correct, because nobody in that conversation asked
+   * for it.
+   */
+  readonly parentSessionId?: string
   /** ISO: when the process started. */
   readonly createdAt?: string
   /**

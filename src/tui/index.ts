@@ -16,6 +16,7 @@ import {
   type PanelState,
 } from './panel-state.ts'
 import { sidebarFooterView, sidebarView, type PanelView } from './render.ts'
+import { createSessionPanelHost } from './session-panel-host.ts'
 import { findProjectOrigin, isHealthy, listSessions } from './server.ts'
 import { runtimeDir } from '../shared/runtime.ts'
 
@@ -128,6 +129,21 @@ export default Plugin.define({
     const directory = (): string | undefined => context.location?.directory
 
     /**
+     * The theme slots this plugin draws with, named rather than typed.
+     *
+     * One place, because the sidebar, its dialog and the session panel all need them,
+     * and three copies of a palette is three places for a rename to miss.
+     */
+    const tones = () => ({
+      base: context.theme.text.base,
+      muted: context.theme.text.muted,
+      success: context.theme.text.feedback.success.base,
+      error: context.theme.text.feedback.error.base,
+      border: context.theme.border.base,
+      raised: context.theme.background.raised.base,
+    })
+
+    /**
      * Start the server by running this plugin's own command in a throwaway session,
      * then read the origin it published.
      *
@@ -215,6 +231,7 @@ export default Plugin.define({
       refreshing = true
       try {
         await runRefresh(mayStart)
+        await sessionPanelHost.sync()
       } catch (error) {
         setPanel((draft) => noteUnreachable(draft, error))
         debug('refresh.failed', { error: String(error) })
@@ -232,6 +249,15 @@ export default Plugin.define({
       }
     }
 
+    const sessionPanelHost = createSessionPanelHost({
+      context,
+      panel,
+      tones,
+      debug,
+      refresh,
+      origin: () => panel.origin,
+    })
+
     const actions = createActions({
       context,
       state: panel,
@@ -240,6 +266,7 @@ export default Plugin.define({
       notify,
       directory,
       debug,
+      tones,
     })
 
     const onToggle = (): void => {
@@ -287,14 +314,7 @@ export default Plugin.define({
     }
 
     const view = (): PanelView => ({
-      tones: {
-        base: context.theme.text.base,
-        muted: context.theme.text.muted,
-        success: context.theme.text.feedback.success.base,
-        error: context.theme.text.feedback.error.base,
-        border: context.theme.border.base,
-        raised: context.theme.background.raised.base,
-      },
+      tones: tones(),
       collapsed: prefs.collapsed,
       status: panel.status,
       sessions: panel.sessions,
@@ -321,6 +341,8 @@ export default Plugin.define({
       append: 'sidebar.footer',
       render: () => sidebarFooterView(view()),
     })
+
+    sessionPanelHost.register()
 
     debug('setup')
 

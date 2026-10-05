@@ -12,6 +12,7 @@ import tuiPanel from '../src/tui/index.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import { PTYServer } from '../src/web/server/server.ts'
+import { removeOrigin, writeOrigin } from '../src/shared/runtime.ts'
 
 /**
  * The panel, end to end, without a terminal.
@@ -68,11 +69,45 @@ interface RenderedFooter {
   input: { readonly sessionID: string }
 }
 
+/** The session-panel claim, which arrives with the full `PanelInput`. */
+interface RenderedSessionPanel {
+  claim: Extract<SlotClaim, { readonly append: 'session.panel' }>
+  input: SessionPanelInput
+}
+
+/**
+ * The parts of `PanelInput` the plugin reads, as concrete values.
+ *
+ * The real `PanelInput` carries six functions and a presentation; a fixture that
+ * fabricated only the fields under test would let a claim that reads the wrong one pass,
+ * so the shape is spelled out and `as` is used once, here, with that reason.
+ */
+interface SessionPanelInput {
+  readonly name: string
+  readonly sessionID: string
+  readonly width: number
+  readonly presentation: 'panel' | 'fullscreen'
+  readonly focused: boolean
+  readonly focus: () => void
+  readonly close: () => void
+  readonly toggleFullscreen: () => void
+}
+
 /** Everything the fixture observed the plugin doing. */
 interface Observed {
   claims: RenderedClaim[]
   /** The footer claim, so the archive line can be rendered and clicked. */
   footers: RenderedFooter[]
+  /** The session-panel claim, so the panel can be rendered. */
+  sessionPanels: RenderedSessionPanel[]
+  /** Names passed to `ui.panel.open`, in order. */
+  opened: string[]
+  /** Keymap layers the plugin registered, so a command can be invoked. */
+  layers: { commands?: readonly { id?: string; run?: () => void }[] }[]
+  /**
+   * What `ui.panel.current()` reports. A holder, because a test flips it after setup.
+   */
+  activePanel: { name: string; sessionID: string } | undefined
   toasts: Toast[]
   dialogs: { close?: () => void }[]
   confirms: { title: string; message: string }[]
@@ -164,6 +199,24 @@ function makeContext(observed: Observed): TuiContext {
       if ('append' in claim && claim.append === 'sidebar.footer') {
         observed.footers.push({ claim, input: { sessionID: 'session-1' } })
       }
+      if ('append' in claim && claim.append === 'session.panel') {
+        observed.sessionPanels.push({
+          claim,
+          input: {
+            name: 'opencode-pty',
+            // The same id `spawnSession` passes to the spawn tool, so a session the
+            // tests really create belongs to this panel. A fixture pairing that cannot
+            // happen would make the grouping untestable.
+            sessionID: 'test-parent-session',
+            width: 80,
+            presentation: 'panel',
+            focused: true,
+            focus: () => {},
+            close: () => {},
+            toggleFullscreen: () => {},
+          },
+        })
+      }
       return () => {}
     },
     toast: {
@@ -183,7 +236,15 @@ function makeContext(observed: Observed): TuiContext {
       },
     },
     router: { register: () => () => {}, navigate: () => {}, current: () => ({ type: 'home' }) },
-    panel: { open: () => false, close: () => {}, current: () => undefined },
+    panel: {
+      open: (name: string) => {
+        observed.opened.push(name)
+        observed.activePanel = { name, sessionID: 'test-parent-session' }
+        return true
+      },
+      close: () => {},
+      current: () => observed.activePanel,
+    },
     tabs: {
       enabled: () => false,
       list: () => [],
@@ -210,7 +271,9 @@ function makeContext(observed: Observed): TuiContext {
     attention: { notify: async () => ({ ok: true, notification: false, sound: false }) },
     markdown: { registerCodeBlockRenderer: () => () => {} },
     keymap: {
-      layer: () => {},
+      layer: (factory: () => { commands?: readonly { id?: string; run?: () => void }[] }) => {
+        observed.layers.push(factory())
+      },
       dispatch: () => {},
       shortcuts: () => [],
       commands: () => [],
@@ -229,6 +292,10 @@ function observed(onCommand?: () => Promise<void>): Observed {
   return {
     claims: [],
     footers: [],
+    sessionPanels: [],
+    opened: [],
+    layers: [],
+    activePanel: undefined,
     toasts: [],
     dialogs: [],
     confirms: [],
@@ -294,6 +361,18 @@ async function renderFooter(observed: Observed): Promise<TestRendererSetup> {
 /** The footer's character frame, for assertions about what a reader sees. */
 async function footerFrame(observed: Observed): Promise<string> {
   return (await renderFooter(observed)).captureCharFrame()
+}
+
+/** Render the session-panel claim headlessly, with the same mouse harness. */
+async function renderSessionPanel(observed: Observed): Promise<TestRendererSetup> {
+  const claimed = observed.sessionPanels[0]
+  if (!claimed) throw new Error('the plugin claimed no session panel')
+  const setup = await testRender(() => claimed.claim.render(claimed.input), {
+    width: 80,
+    height: 24,
+  })
+  await setup.renderOnce()
+  return setup
 }
 
 /**
@@ -582,6 +661,299 @@ describe('the PTY sidebar panel', () => {
     expect(prefs?.showFinished).toBe(true)
     expect(seen.sessionCalls).not.toContain('create')
   })
+
+  // The session panel is the host's own place for an extra view of a session, and a PTY
+  // session belongs to the conversation that started it. Without the claim there is
+  // nowhere to put that view.
+  test('claims the session panel and registers a command that opens it', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    expect(seen.sessionPanels[0]?.claim).toHaveProperty('append', 'session.panel')
+
+    const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+    const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel')
+    if (!command?.run) throw new Error('the plugin registered no command for the panel')
+
+    command.run()
+    // The name the host reports back from `ui.panel.current()` has to be the one the
+    // command opened, because that string is what the poll matches on. A mismatch would
+    // leave the panel open and permanently empty, with nothing failing.
+    expect(seen.opened).toEqual(['opencode-pty'])
+    expect(seen.activePanel?.name).toBe('opencode-pty')
+  })
+
+  // Expanding the sidebar is the only trigger that may start a server, and opening this
+  // panel asks for the same thing, so it is the same trigger. Otherwise the panel would
+  // be empty on a host where nothing else ever asked for one - and the empty state says
+  // "this conversation started no PTY session", which would be a lie.
+  test('opening the panel starts the server, like expanding the sidebar does', async () => {
+    const holder: { server: PTYServer | null } = { server: null }
+    const seen = observed(async () => {
+      holder.server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    })
+    try {
+      await tuiPanel.setup(makeContext(seen))
+      const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+      const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel')
+      if (!command?.run) throw new Error('the plugin registered no command for the panel')
+
+      command.run()
+      await waitFor(() => (seen.sessionCalls.includes('command') ? true : undefined))
+
+      expect(seen.sessionCalls).toContain('create')
+      // And the scratch session is cleaned up again, exactly as the sidebar's is.
+      await waitFor(() => (seen.sessionCalls.includes('remove') ? true : undefined))
+      expect(seen.sessionCalls).toContain('remove')
+    } finally {
+      holder.server?.[Symbol.dispose]()
+    }
+  })
+
+  // The grouping end to end: a session created through the real spawn tool carries the
+  // parent id, and the panel shows it. A fixture that fabricated the parent would prove
+  // only that the filter can compare two strings.
+  test('the panel shows the sessions this conversation started', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('mine', 'sh', ['-c', 'sleep 30'])
+      const seen = observed()
+      await tuiPanel.setup(makeContext(seen))
+      await waitForRow(seen, 'mine', 'running')
+
+      const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+      const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel')
+      if (!command?.run) throw new Error('the plugin registered no command for the panel')
+      command.run()
+
+      const rows = await waitFor(() => {
+        const stored = seen.stores.get('opencode-pty.session-panel') as
+          | { sessions?: { title?: string }[] }
+          | undefined
+        const listed = stored?.sessions ?? []
+        return listed.some((row) => row.title === 'mine') ? listed : undefined
+      })
+      expect(rows?.map((row) => row.title)).toContain('mine')
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
+  // The reason the panel exists: the screen of a process this conversation started,
+  // readable without a modal in the way. Driven through the real screen route, so this
+  // covers the poll, the grouping and the read in one go - the panel showing nothing is
+  // exactly what every one of those three failing looks like.
+  test('reads the screen of the selected session while the panel is open', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('talker', 'sh', ['-c', 'printf "hello from the pty"; sleep 30'])
+      const seen = observed()
+      await tuiPanel.setup(makeContext(seen))
+      await waitForRow(seen, 'talker', 'running')
+
+      const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+      const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel')
+      if (!command?.run) throw new Error('the plugin registered no command for the panel')
+      command.run()
+
+      // Longer than the 2.5s poll, because the screen is read on the tick rather than on
+      // the click - a modal-free panel may as well arrive with its content.
+      const screen = await waitFor(() => {
+        const stored = seen.stores.get('opencode-pty.session-panel') as
+          | { screen?: string }
+          | undefined
+        const text = stored?.screen ?? ''
+        return text.includes('hello from the pty') ? text : undefined
+      }, 8000)
+      expect(screen).toContain('hello from the pty')
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
+  // `ui.panel.current()` reports the panel the HOST has open, so a name check is what
+  // stops this plugin reading a screen because somebody else's panel is on screen. The
+  // SDK documents the accessor as "this plugin's active panel", so the case is defensive
+  // - and a defensive check that nothing exercises is a check that will be dropped by the
+  // next reader who does not know that. So it is exercised here.
+  test('reads nothing while a panel of another name is open', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('talker', 'sh', ['-c', 'printf "not yours"; sleep 30'])
+      const seen = observed()
+      await tuiPanel.setup(makeContext(seen))
+      await waitForRow(seen, 'talker', 'running')
+
+      // The server is up and the session exists; only the panel's identity differs.
+      seen.activePanel = { name: 'some-other-plugin', sessionID: 'test-parent-session' }
+      await Bun.sleep(3000)
+
+      const stored = seen.stores.get('opencode-pty.session-panel') as
+        | { sessionID?: string | null; screen?: string }
+        | undefined
+      expect(stored?.sessionID).toBeNull()
+      expect(stored?.screen).not.toContain('not yours')
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
+  // The claim being REGISTERED is not the claim working: a render callback that throws, or
+  // reads the wrong field, is invisible until something renders it. So the panel is
+  // rendered here, through the slot the host would call.
+  test('the panel claim renders, and a click in it selects a row', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('one', 'sh', ['-c', 'sleep 30'])
+      await spawnSession('two', 'sh', ['-c', 'sleep 30'])
+      const seen = observed()
+      await tuiPanel.setup(makeContext(seen))
+      await waitForRow(seen, 'two', 'running')
+
+      const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+      const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel')
+      if (!command?.run) throw new Error('the plugin registered no command for the panel')
+      command.run()
+      await waitFor(() => {
+        const stored = seen.stores.get('opencode-pty.session-panel') as
+          | { sessions?: unknown[] }
+          | undefined
+        return (stored?.sessions?.length ?? 0) >= 2 ? true : undefined
+      })
+
+      const setup = await renderSessionPanel(seen)
+      const frame = setup.captureCharFrame()
+      expect(frame).toContain('PTY')
+      expect(frame).toContain('2 sessions')
+      expect(frame).toContain('two')
+
+      // Row 0 is the header, so row 1 is the first session. The click has to reach the
+      // panel's own handler and not just stop at the element - a claim that renders and
+      // ignores every click is still broken.
+      await setup.mockMouse.click(4, 1)
+      await setup.renderOnce()
+      const stored = seen.stores.get('opencode-pty.session-panel') as
+        | { selected?: string | null }
+        | undefined
+      expect(stored?.selected).not.toBeNull()
+
+      // Deliberately NOT asserted here: that the claim hands the view the sidebar's fresh
+      // list rather than its own snapshot. Passing the stale one fails nothing a reader
+      // would notice - the two differ by at most one poll interval, and the only effect is
+      // a run timer that keeps counting for up to 2.5s after a process exits. The rule it
+      // serves is unit-tested in `selectedLive`; pinning the one line that passes it would
+      // need a timing test whose failure is a quarter of a second of drift.
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
+  // A screen that cannot be read must say so where the reader is looking. Left silent,
+  // the panel would keep showing the PREVIOUS session's output, which reads as the panel
+  // tracking the wrong process rather than as a failed request.
+  //
+  // The server answers the list and fails the screen, because that is the only way to
+  // reach this deterministically: a server that is gone entirely takes the LIST with it,
+  // the panel ends up with no sessions at all, and the read is never attempted - which is
+  // correct behaviour and a different property (covered below).
+  test('a screen that cannot be read says so in the panel', async () => {
+    const requests: string[] = []
+    let originFile: string | null = null
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch(request) {
+        const path = new URL(request.url).pathname
+        requests.push(path)
+        if (path === '/api/sessions') {
+          return Response.json([
+            {
+              id: 'pty_broken',
+              title: 'talker',
+              status: 'running',
+              parentSessionId: 'test-parent-session',
+              createdAt: new Date().toISOString(),
+            },
+          ])
+        }
+        if (path === '/health') return Response.json({ status: 'healthy', sessions: {} })
+        // The screen route failing, which is what a VT that cannot be replayed does.
+        return Response.json({ error: 'render failed' }, { status: 500 })
+      },
+    })
+    try {
+      const port = server.port
+      if (typeof port !== 'number') throw new Error('the stub server bound no port')
+
+      // Published the way the real server publishes itself, so the plugin finds the stub
+      // through its own discovery rather than through a hook no production path has.
+      // The returned path is what `removeOrigin` takes - the record is a file, and
+      // removing it by content would need a second way to address it.
+      originFile = writeOrigin({ directory: project, hostname: '127.0.0.1', port })
+      if (originFile === null) throw new Error('could not publish the stub origin')
+
+      const seen = observed()
+      // The panel counts as open from the first tick, so the failure is reached without
+      // going through the command.
+      seen.activePanel = { name: 'opencode-pty', sessionID: 'test-parent-session' }
+      await tuiPanel.setup(makeContext(seen))
+
+      const message = await waitFor(() => {
+        const stored = seen.stores.get('opencode-pty.session-panel') as
+          | { screen?: string }
+          | undefined
+        const text = stored?.screen ?? ''
+        return text.includes('could not read the screen') ? text : undefined
+      }, 8000)
+      expect(message).toContain('500')
+      // The request really was made, so this is the screen route failing and not the
+      // panel deciding on its own that it cannot read.
+      expect(requests.some((path) => path.includes('/screen'))).toBe(true)
+    } finally {
+      server.stop(true)
+      // The origin record outlives the process that wrote it; left behind, the next test
+      // in this file would find a port nothing is listening on.
+      removeOrigin(originFile)
+    }
+  }, 20000)
+
+  // The other half of the same question: when the server is gone the panel must not keep
+  // a stale screen on display. Showing the last output of a process whose server no longer
+  // answers reads as a live view of something that is not there.
+  test('a server that is gone leaves no stale screen behind', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('talker', 'sh', ['-c', 'printf "first output"; sleep 30'])
+      const seen = observed()
+      await tuiPanel.setup(makeContext(seen))
+      await waitForRow(seen, 'talker', 'running')
+
+      const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+      const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel')
+      if (!command?.run) throw new Error('the plugin registered no command for the panel')
+      command.run()
+      await waitFor(() => {
+        const stored = seen.stores.get('opencode-pty.session-panel') as
+          | { screen?: string }
+          | undefined
+        return (stored?.screen ?? '').includes('first output') ? true : undefined
+      }, 8000)
+
+      server[Symbol.dispose]()
+      await waitFor(() => {
+        const stored = seen.stores.get('opencode-pty.session-panel') as
+          | { screen?: string; sessions?: unknown[] }
+          | undefined
+        return (stored?.sessions?.length ?? 0) === 0 ? true : undefined
+      }, 8000)
+
+      const stored = seen.stores.get('opencode-pty.session-panel') as
+        | { screen?: string }
+        | undefined
+      expect(stored?.screen).not.toContain('first output')
+    } finally {
+      server[Symbol.dispose]()
+    }
+  }, 20000)
 
   test('starts the server when the panel is expanded, and cleans the scratch session up', async () => {
     // A holder rather than a `let`: the assignment happens inside the fixture's
