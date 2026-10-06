@@ -116,4 +116,43 @@ describe('the TUI dependencies', () => {
     // version, or the override outlives its reason.
     expect(manifest.overrides?.['@babel/core']).toBe('7.29.7')
   })
+
+  // Same shape as the override above, reached the same way: a transitive dependency
+  // carries an advisory, the code that carries it is unreachable from a terminal plugin,
+  // and the choice is between an override and narrowing the check that found it.
+  //
+  // `seroval@1.5.6` has a critical advisory (GHSA-mv8w…, thenable assimilation) plus a high
+  // one, and it reached the lockfile through `solid-js@1.9.15`, which pins `~1.5.4` for both
+  // `seroval` and `seroval-plugins`. Only `solid-js/web/dist/server.js` imports it - Solid's
+  // SSR build, and nothing in a terminal plugin renders HTML. `bun audit` failed on it and
+  // so did Aislop's own `security/vulnerable-dependency` rule.
+  //
+  // Narrowing the audit to `--production` would have quieted `bun audit` and done nothing
+  // about Aislop, which has no such scope - one suppression and one silenced rule, for an
+  // advisory still installed. The override fixes both, and it is inside the contract rather
+  // than past it: `seroval-plugins` declares `seroval` as a PEER of `^1.0`, so 1.6.8 is a
+  // version its own package asks a consumer for.
+  it('overrides seroval past the advisory solid-js pins into it', () => {
+    // Expiry, like the override above: solid-js is at 1.9.15 with no release carrying a
+    // patched seroval, and `~1.5.4` will not reach 1.6.x on its own. When solid-js moves to
+    // a version that asks for a fixed seroval, this goes with it.
+    expect(manifest.overrides?.['seroval']).toBe('1.6.8')
+  })
+
+  // The premise the override is comfortable in: the vulnerable code is a build-time and
+  // SSR-only path, and `solid-js` is not something a consumer installs. Were it promoted to
+  // `dependencies`, a terminal plugin would be shipping Solid's server renderer - code that
+  // then really is reachable in a browser SSR context someone might build on top of it.
+  //
+  // Note this is no longer what keeps the audit quiet - the override does that. It is the
+  // second line, and the one that says why the first is safe.
+  it('keeps solid-js out of the dependencies a consumer installs', () => {
+    const shipped = Object.keys(manifest.dependencies ?? {})
+    expect({
+      solidJsShipped: shipped.includes('solid-js'),
+      // The whole package: a published artifact is `files`, so a dependency missing here
+      // is a dependency no consumer resolves.
+      publishedFiles: manifest.files,
+    }).toEqual({ solidJsShipped: false, publishedFiles: ['dist', 'patches'] })
+  })
 })

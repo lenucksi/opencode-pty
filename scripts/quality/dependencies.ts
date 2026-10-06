@@ -76,7 +76,12 @@ export async function minimumReleaseAgeDays(): Promise<number> {
 export async function excuseRecentReleases(
   rows: string[],
   ageDays: number,
-  publishedAt: (name: string, row: string) => Promise<number | null> = registryPublishTime,
+  // The VERSION, not the row, on purpose. Handing the row over meant a caller had to
+  // re-parse it to find out which version was being asked about, so no test could observe
+  // that choice without duplicating the parsing - and the first version of this fix shipped
+  // with a green suite that way, while the wiring read the wrong column. With the version
+  // passed explicitly, "which version is this asking about" is directly assertable.
+  publishedAt: (name: string, version: string) => Promise<number | null> = registryPublishTime,
   now: number = Date.now()
 ): Promise<string[]> {
   if (ageDays <= 0 || rows.length === 0) return rows
@@ -94,7 +99,9 @@ export async function excuseRecentReleases(
   // Concurrently, and with a bounded lookup in `registryPublishTime`: done one
   // after another with an unbounded fetch, a slow registry took this step past its
   // three-minute budget and the gate failed on its own freshness check.
-  const ages = await Promise.all(findings.map((row) => publishedAt(outdatedRowName(row), row)))
+  const ages = await Promise.all(
+    findings.map((row) => publishedAt(outdatedRowName(row), outdatedRowTarget(row)))
+  )
   return findings.filter((_, index) => {
     const published = ages[index] ?? null
     // Unknown age counts as old enough: the gate must not pass because the registry
@@ -131,15 +138,45 @@ export function outdatedRowName(row: string): string {
   return cell.replace(/\s*\((?:dev|optional|peer)\)\s*$/, '').trim()
 }
 
-/** The version an outdated row would move to, or empty when it names none. */
-export function outdatedRowVersion(row: string): string {
-  const cell = row.split('|')[3]?.trim() ?? ''
-  return cell === 'Latest' || cell.length === 0 ? '' : cell
+/**
+ * The version an outdated row would actually move to, or empty when it names none.
+ *
+ * `bun outdated` prints three version columns - Current, Update, Latest - and which one a
+ * bump lands on depends on how the dependency is declared. Reading only `Update` gets an
+ * exactly-pinned dependency wrong: for `@opencode/theme` pinned at `2.0.23`, Update is also
+ * 2.0.23, because there is nothing a `bun update` could install within an exact pin, while
+ * Latest is 2.0.24, which is what a manifest edit would take.
+ *
+ * That is not cosmetic. The age lookup treats an unnamed version as "old enough", and the
+ * gate excuses a release younger than `minimumReleaseAge`. So `Update` alone made the gate
+ * unable to wait out a bump for an exactly-pinned dependency AT ALL, and it demanded that
+ * same-day bump instead - which is precisely the failure `minimumReleaseAge` exists to
+ * prevent, and the one AGENTS.md records as "a gate stricter than the policy it enforces
+ * will fail on every publish".
+ *
+ * The symptom was one package giving two answers in the same run: the `@opencode/theme`
+ * `(dev)` row looked up 2.0.23 and failed the gate, the `(peer)` row looked up 2.0.24 and
+ * waited it out.
+ */
+export function outdatedRowTarget(row: string): string {
+  const cells = row.split('|')
+  const current = cells[2]?.trim() ?? ''
+  const update = cells[3]?.trim() ?? ''
+  const latest = cells[4]?.trim() ?? ''
+  // A range the current version already satisfies can move within itself.
+  if (update.length > 0 && update !== 'Latest' && update !== current) return update
+  // An exact pin, or a range that has already moved out: the manifest has to change, so
+  // the newest release is the candidate.
+  // A row whose newest release is the current one names no candidate at all. Such a row
+  // does not appear in `bun outdated`, but answering '8.3.0' for it would name a version
+  // to wait for that is by definition the one already installed.
+  if (latest.length > 0 && latest !== 'Latest' && latest !== current) return latest
+  return ''
 }
 
-/** When the version named in an outdated row was published, or null if unknown. */
-async function registryPublishTime(name: string, row: string): Promise<number | null> {
-  const wanted = outdatedRowVersion(row)
+/** When `version` of `name` was published, or null if unknown. */
+async function registryPublishTime(name: string, version: string): Promise<number | null> {
+  const wanted = version
   if (!wanted) return null
   try {
     // Bounded, because this runs inside a quality gate with its own budget: an
@@ -169,6 +206,12 @@ export async function runBunToolchainCheck(): Promise<void> {
 }
 
 export async function runDependencyCheck(timeoutMs = 0): Promise<void> {
+  // Unscoped, and it stays that way. A `file:` install copies, a devDependency is audited
+  // like any other, and the temptation when a build-time advisory appears is to narrow the
+  // check until it is quiet. The alternative taken here was an `overrides` entry for
+  // `seroval`, which fixes the advisory for `bun audit` and for Aislop's own
+  // `security/vulnerable-dependency` rule at once - and `seroval-plugins` declares
+  // `seroval` as a peer of `^1.0`, so 1.6.8 is inside the range its own package asks for.
   await runInherited('bun', ['audit'], { timeoutMs })
   const result = await captureCommand('bun', ['outdated'], { timeoutMs })
   const reported = parseOutdatedDependencies(result.stdout)

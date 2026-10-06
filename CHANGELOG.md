@@ -95,6 +95,31 @@ beside the built-in sidebar items rather than replacing them.
   sidebar - the panel's rows are a subset of that list, so a second fetch would be a second
   answer to a question already answered.
 
+- **The freshness check asks the registry about the version a bump would take.** `bun outdated`
+  prints Current, Update and Latest, and the age lookup read only Update. For an exactly-pinned
+  dependency Update is the CURRENT version - there is nothing `bun update` can install inside
+  an exact pin - so the lookup returned an age of months and the gate could never wait such a
+  release out. It demanded a same-day bump instead, which is the outcome `minimumReleaseAge`
+  exists to prevent, and the failure AGENTS.md records as "a gate stricter than the policy it
+  enforces will fail on every publish". One package gave two answers in the same run: the
+  `@opencode/theme` `(dev)` row looked up 2.0.23 and failed, the `(peer)` row looked up 2.0.24
+  and waited it out. The target is now Update when it differs from Current, Latest otherwise.
+  `publishedAt` receives that version instead of the row, so which version is asked about is
+  assertable rather than something a test has to re-derive by parsing the table itself.
+- **`seroval` is overridden past a critical advisory that `solid-js` pins into the lockfile.**
+  `seroval@1.5.6` carries GHSA-mv8w… (thenable assimilation, critical) plus a high one, and
+  `solid-js@1.9.15` pins `~1.5.4` for both `seroval` and `seroval-plugins`. Only
+  `solid-js/web/dist/server.js` imports it - Solid's SSR build, and nothing in a terminal
+  plugin renders HTML - so both `bun audit` and Aislop's own
+  `security/vulnerable-dependency` rule were failing on code this package cannot reach.
+  Narrowing `bun audit` to `--production` was the first attempt and the wrong one: it would
+  have quieted one tool while leaving Aislop's rule unsatisfied, for an advisory still
+  installed. The override fixes both, and it sits inside the contract rather than past it -
+  `seroval-plugins` declares `seroval` as a peer of `^1.0`, so 1.6.8 is a version its own
+  package asks a consumer for. `bun audit` now reports no vulnerabilities across 430
+  packages. Same shape and same expiry as the existing `@babel/core` override:
+  `test/tui-package.test.ts` pins both values, and the override goes when `solid-js` ships a
+  fixed pin.
 - **The session panel has a way out. It did not have one, and a reader reported the
   consequence.** OpenCode has no key for closing a plugin panel: all four `panels.close()`
   call sites in the TUI are side effects of something else - changing session, selecting a

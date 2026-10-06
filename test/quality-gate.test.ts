@@ -12,7 +12,7 @@ import {
   isOutdatedRowNoise,
   minimumReleaseAgeDays,
   outdatedRowName,
-  outdatedRowVersion,
+  outdatedRowTarget,
   parseOutdatedDependencies,
   validateBunToolchain,
 } from '../scripts/quality/dependencies.ts'
@@ -69,6 +69,55 @@ describe('local quality gate helpers', () => {
       const fresh = async (): Promise<number> => NOW - 3 * 60 * 60 * 1000
       const kept = await excuseRecentReleases([row('vite', '9.0.0')], 1, fresh, NOW)
       expect(kept).toEqual([])
+    })
+
+    // The case the whole change exists for, and the one a suite of pure-function tests
+    // cannot reach: WHICH version does the gate ask the registry about?
+    //
+    // An exactly-pinned dependency prints the current version in its Update column,
+    // because nothing a `bun update` could install falls inside an exact pin. Asking about
+    // that returns an age of months, so the gate could never wait the release out and
+    // demanded a same-day bump - the one outcome `minimumReleaseAge` exists to prevent. The
+    // candidate is the newest release, which is what the manifest edit would take.
+    test('asks about the release a bump would take, not the one already installed', async () => {
+      const asked: Array<[string, string]> = []
+      const pinned = '| @opencode/theme (dev) | 2.0.23 | 2.0.23 | 2.0.24 |'
+      await excuseRecentReleases(
+        [pinned],
+        1,
+        async (name, version) => {
+          asked.push([name, version])
+          return NOW - 60 * 60 * 1000
+        },
+        NOW
+      )
+      expect(asked).toEqual([['@opencode/theme', '2.0.24']])
+    })
+
+    // The other direction, so the fix is not "always ask for the newest": a range the
+    // current version still satisfies moves within itself, and that is the smaller bump.
+    test('asks about the in-range update when the range can still move', async () => {
+      const asked: string[] = []
+      await excuseRecentReleases(
+        ['| vite | 8.3.2 | 8.3.3 | 9.0.0 |'],
+        1,
+        async (_name, version) => {
+          asked.push(version)
+          return NOW
+        },
+        NOW
+      )
+      expect(asked).toEqual(['8.3.3'])
+    })
+
+    // And the decision itself, not only the question: a one-hour-old candidate inside a
+    // one-day window is waited out, so the gate passes instead of demanding it today.
+    test('waits out a pinned dependency whose newest release is inside the window', async () => {
+      // Absent from the result IS the wait: `excuseRecentReleases` returns what is old
+      // enough to act on, so a candidate younger than the window is filtered out of it.
+      const pinned = '| @opencode/theme (dev) | 2.0.23 | 2.0.23 | 2.0.24 |'
+      const hourOld = async (): Promise<number> => NOW - 60 * 60 * 1000
+      expect(await excuseRecentReleases([pinned], 1, hourOld, NOW)).toEqual([])
     })
 
     test('still reports a release that has settled', async () => {
@@ -150,13 +199,38 @@ describe('local quality gate helpers', () => {
       expect(isOutdatedRowNoise('| package-json | 1.0.0 | 1.0.1 | 1.0.1 |')).toBe(false)
     })
 
-    test('reads the version the row would move to', () => {
-      expect(outdatedRowVersion('| vite | 8.3.0 | 8.3.1 | 8.4.0 |')).toBe('8.3.1')
+    test('reads the version a range would move to', () => {
+      expect(outdatedRowTarget('| vite | 8.3.0 | 8.3.1 | 8.4.0 |')).toBe('8.3.1')
     })
 
-    test('has no version when the update column names nothing usable', () => {
-      expect(outdatedRowVersion('| vite | 8.3.0 | Latest | 8.4.0 |')).toBe('')
-      expect(outdatedRowVersion('| vite | | | |')).toBe('')
+    // An exact pin cannot move within itself, so the candidate is the newest release - which
+    // is the manifest edit a bump actually requires. Reading the Update column here returned
+    // the CURRENT version, whose age is always far past `minimumReleaseAge`, and the gate
+    // could then never wait out a release for a pinned dependency: it demanded it the same
+    // day. The `(dev)` row for @opencode/theme failed while the `(peer)` row of the same
+    // package waited it out.
+    test('reads the newest release for an exact pin, which cannot move within itself', () => {
+      expect(outdatedRowTarget('| @opencode/theme (dev) | 2.0.23 | 2.0.23 | 2.0.24 |')).toBe(
+        '2.0.24'
+      )
+    })
+
+    // Same package, same newest release, two rows: they must agree, or the gate answers
+    // the same question two ways in one run.
+    test('gives one answer for the same package in both of its rows', () => {
+      const pinned = outdatedRowTarget('| @opencode/theme (dev) | 2.0.23 | 2.0.23 | 2.0.24 |')
+      const peer = outdatedRowTarget('| @opencode/theme (peer) | 2.0.23 | 2.0.24 | 2.0.24 |')
+      expect(pinned).toBe(peer)
+    })
+
+    // Out of range: `Update` says only "Latest", and the manifest has to change.
+    test('falls back to the newest release when the range has moved past it', () => {
+      expect(outdatedRowTarget('| vite | 8.3.0 | Latest | 8.4.0 |')).toBe('8.4.0')
+    })
+
+    test('has no version when no column names anything usable', () => {
+      expect(outdatedRowTarget('| vite | | | |')).toBe('')
+      expect(outdatedRowTarget('| vite | 8.3.0 | 8.3.0 | 8.3.0 |')).toBe('')
     })
   })
 
