@@ -105,12 +105,15 @@ export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanel
   // be a plain function that receives it rather than a closure over the store.
   const select = (id: string): void => setState((draft) => noteSessionSelected(draft, id))
 
+  // What the claim learned from its input, for the commands that need it.
+  const panel: PanelActions = {}
+
   const register = (): void => {
-    claimSessionPanel(context, deps, state, select, sync)
+    claimSessionPanel(context, deps, state, select, sync, panel)
     registerSessionPanelCommand(context, deps)
   }
 
-  const registerClose = (): void => registerSessionPanelCloseCommand(context)
+  const registerClose = (): void => registerSessionPanelCommands(context, panel)
 
   return { sync, register, registerClose }
 }
@@ -125,12 +128,17 @@ function claimSessionPanel(
   deps: SessionPanelHostDeps,
   state: SessionPanelState,
   select: (id: string) => void,
-  sync: () => Promise<void>
+  sync: () => Promise<void>,
+  panel: PanelActions
 ): void {
   context.ui.slot({
     append: 'session.panel',
-    render: (input) =>
-      sessionPanelView({
+    render: (input) => {
+      // Recorded on every render rather than once: the host builds this input itself and
+      // hands over a fresh one whenever the panel is re-opened, so a reference kept from the
+      // first render would belong to the previous panel and toggle that one.
+      panel.toggleFullscreen = input.toggleFullscreen
+      return sessionPanelView({
         tones: deps.tones(),
         // The slot input is the authority on which session this is. A render must not
         // write state, so the view is handed a copy carrying the id and the poll does the
@@ -144,7 +152,8 @@ function claimSessionPanel(
           select(id)
           void sync()
         },
-      }),
+      })
+    },
   })
 }
 
@@ -184,30 +193,44 @@ function registerSessionPanelCommand(context: Plugin.Context, deps: SessionPanel
 }
 
 /**
- * The command that closes the panel again.
+ * What the panel claim learned from its input, for the commands that need it.
  *
- * The host has NO binding for closing a plugin panel. All four `panels.close()` call sites
- * are side effects of something else - changing session, selecting a terminal, opening the
- * sidebar - so a plugin that opens a panel owes its reader a way out of it. Without this,
- * `/pty-sessions` opened a panel with no exit: the thing one presses to leave it went
- * nowhere, and the only remaining move was killing the terminal. Measured, not inferred -
- * and the first version of this panel shipped exactly that trap.
- *
- * Three exits, because each covers a case the others do not:
- *
- * - the palette entry is guaranteed: it is a host overlay, which no plugin can shadow, so
- *   it works even while this panel holds focus and the composer is unreachable;
- * - `bind` is the shortcut for the mouse-free case, on a key measured free in
- *   packages/tui/src/config/keybind.ts. This is the one deliberate departure from the
- *   opening command above, which binds nothing: there, a binding would only duplicate two
- *   routes that already work, and a wrong guess collides with a host command. Here the
- *   reader has nowhere else to go. The command's id lets the user move or drop it;
- * - the `✕ close` control in the panel header, for the same reason by mouse.
- *
- * `enabled` keeps the key from lying: a binding that does nothing the rest of the time
- * teaches the reader to distrust the one time it matters.
+ * Mutable and owned by the host, because the only source is the slot's render: a render must
+ * not write state, so it records the function it was given and the poll does the bookkeeping.
  */
-function registerSessionPanelCloseCommand(context: Plugin.Context): void {
+export interface PanelActions {
+  /** The claim's `toggleFullscreen`, once it has rendered. Absent before the first render. */
+  toggleFullscreen?: () => void
+}
+
+/**
+ * The commands a reader has while the panel is open: leave it, enlarge it, or leave for the
+ * session list. Those three and nothing else.
+ *
+ * The ceiling is measured, not chosen. The keymap hangs off the RENDERER
+ * (`createDefaultOpenTuiKeymap(renderer)`, packages/tui/src/context/keymap.tsx:66), and the
+ * host handles "a focused editor owns the input" by enabling a layer
+ * (`registerManagedTextareaLayer`) rather than by letting a renderable swallow the key - so a
+ * focused panel does not eat keys, and a bound command does reach us. What is scarce is the
+ * KEYS: 167 binds are taken in packages/tui/src/config/keybind.ts. `escape` is
+ * `session.interrupt`, and `q` is `diff.close`, whose command carries no `enabled` predicate
+ * and so is reachable at any time. Both were the obvious choices for "leave this", and both
+ * would have been wrong.
+ *
+ * So `ctrl+y` closes and `f3` enlarges, each measured free, and each also has a palette entry
+ * - the route that cannot be taken away, because the palette is a host overlay no plugin can
+ * shadow, so it answers even while the panel holds focus. The ids let the user move either
+ * key. `enabled` keeps a key from lying: a binding that does nothing the rest of the time
+ * teaches the reader to distrust the one time it matters.
+ *
+ * Switching sessions needs no key of ours. The host has `session.list` on `<leader>l` and
+ * closes this panel as a side effect of leaving the session, so a key here would only shadow a
+ * binding that already exists and works. The command exists for the same reason the close
+ * command does: the reader is in the panel, and the routes out should be listed where they
+ * can be found.
+ */
+function registerSessionPanelCommands(context: Plugin.Context, panel: PanelActions): void {
+  const open = (): boolean => context.ui.panel.current() !== undefined
   context.keymap.layer(() => ({
     mode: 'global',
     commands: [
@@ -218,8 +241,39 @@ function registerSessionPanelCloseCommand(context: Plugin.Context): void {
         group: 'opencode-pty',
         palette: true,
         bind: 'ctrl+y',
-        enabled: () => context.ui.panel.current() !== undefined,
+        enabled: open,
         run: () => context.ui.panel.close(),
+      },
+      {
+        id: 'opencode-pty.session-panel.fullscreen',
+        title: 'Enlarge the PTY panel',
+        description: 'Give the PTY panel the whole window, or give the conversation its half back.',
+        group: 'opencode-pty',
+        palette: true,
+        bind: 'f3',
+        enabled: open,
+        // `ui.panel` is only `open`, `close` and `current` - `toggleFullscreen` exists on
+        // `PanelInput`, which arrives inside the slot's render and nowhere else. So the claim
+        // leaves the function it was handed in `panel`, and the key drives that.
+        run: () => panel.toggleFullscreen?.(),
+      },
+      {
+        // No key, deliberately: the host's `session.list` is the way to switch conversation,
+        // and a binding here would shadow it for no gain.
+        id: 'opencode-pty.session-panel.sessions',
+        title: 'Leave the PTY panel for the session list',
+        // The panel belongs to one conversation, so leaving it for the session list means
+        // leaving it altogether - and closing first is required, because the host closes a
+        // panel only when the route changes to a DIFFERENT SESSION (app.tsx:596). Navigating
+        // home is not that, and would leave the panel open on top of the list.
+        description: 'Close the PTY panel and open the session list.',
+        group: 'opencode-pty',
+        palette: true,
+        enabled: open,
+        run: () => {
+          context.ui.panel.close()
+          context.ui.router.navigate({ type: 'home' })
+        },
       },
     ],
   }))

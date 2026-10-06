@@ -102,6 +102,10 @@ interface Observed {
   sessionPanels: RenderedSessionPanel[]
   /** Names passed to `ui.panel.open`, in order. */
   opened: string[]
+  /** Routes navigated to, as `type` values, in order. */
+  navigated: string[]
+  /** How often the panel's own `toggleFullscreen` was called. */
+  fullscreenToggles: number
   /**
    * Every close of a session panel, from either route.
    *
@@ -231,7 +235,9 @@ function makeContext(observed: Observed): TuiContext {
             close: () => {
               observed.panelCloses += 1
             },
-            toggleFullscreen: () => {},
+            toggleFullscreen: () => {
+              observed.fullscreenToggles += 1
+            },
           },
         })
       }
@@ -253,7 +259,13 @@ function makeContext(observed: Observed): TuiContext {
         return false
       },
     },
-    router: { register: () => () => {}, navigate: () => {}, current: () => ({ type: 'home' }) },
+    router: {
+      register: () => () => {},
+      navigate: (destination: { type: string }) => {
+        observed.navigated.push(destination.type)
+      },
+      current: () => ({ type: 'home' }),
+    },
     panel: {
       open: (name: string) => {
         observed.opened.push(name)
@@ -315,6 +327,8 @@ function observed(onCommand?: () => Promise<void>): Observed {
     footers: [],
     sessionPanels: [],
     opened: [],
+    navigated: [],
+    fullscreenToggles: 0,
     panelCloses: 0,
     layers: [],
     activePanel: undefined,
@@ -767,6 +781,97 @@ describe('the PTY sidebar panel', () => {
     expect(command.enabled()).toBe(true)
   })
 
+  // The panel's own keys, and the ceiling that shapes them.
+  //
+  // The keymap hangs off the RENDERER (`createDefaultOpenTuiKeymap(renderer)`,
+  // packages/tui/src/context/keymap.tsx:66) and the host expresses "a focused editor owns
+  // the input" by enabling a layer (`registerManagedTextareaLayer`) rather than by letting a
+  // renderable swallow the key. So a focused panel does not eat keys, and a bound command
+  // reaches us - which is what makes a key per action possible at all. What is scarce is the
+  // keys: 167 binds are taken, and both obvious choices for "leave this" are among them.
+  // `escape` is `session.interrupt`; `q` is `diff.close`, whose command carries no `enabled`
+  // predicate, so it is reachable at any time.
+
+  test('the three panel commands are all in the palette', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+    for (const id of [
+      'opencode-pty.session-panel.close',
+      'opencode-pty.session-panel.fullscreen',
+      'opencode-pty.session-panel.sessions',
+    ]) {
+      const command = commands.find((entry) => entry.id === id)
+      expect(`${id}: ${command?.palette}`).toBe(`${id}: true`)
+    }
+  })
+
+  // Every panel key is dark outside the panel. A binding that does nothing the rest of the
+  // time teaches the reader to distrust the one time it matters, so `enabled` is the contract
+  // rather than a nicety.
+  test('every panel key is only live while a panel is open', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+    for (const id of [
+      'opencode-pty.session-panel.close',
+      'opencode-pty.session-panel.fullscreen',
+      'opencode-pty.session-panel.sessions',
+    ]) {
+      const command = commands.find((entry) => entry.id === id)
+      if (!command?.enabled) throw new Error(`${id} has no enabled predicate`)
+      expect(`${id}: ${command.enabled()}`).toBe(`${id}: false`)
+      seen.activePanel = { name: 'opencode-pty', sessionID: 'test-parent-session' }
+      expect(`${id} open: ${command.enabled()}`).toBe(`${id} open: true`)
+      seen.activePanel = undefined
+    }
+  })
+
+  // Leaving for the session list has to close the panel first. The host closes a panel only
+  // when the route changes to a DIFFERENT SESSION (app.tsx:596); navigating home is not that,
+  // so without the explicit close the panel would sit open on top of the list.
+  test('leaving for the session list closes the panel first', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+    const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel.sessions')
+    if (!command?.run) throw new Error('the session-list command cannot be run')
+    seen.activePanel = { name: 'opencode-pty', sessionID: 'test-parent-session' }
+    command.run()
+    expect({ closes: seen.panelCloses, navigated: seen.navigated }).toEqual({
+      closes: 1,
+      navigated: ['home'],
+    })
+  })
+
+  // No key here on purpose. The host's `session.list` is on `<leader>l` and closes this panel
+  // as a side effect, so a binding would only shadow a binding that already works.
+  test('the session-list command takes no key, leaving that to the host', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+    const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel.sessions')
+    expect(command?.bind).toBeUndefined()
+  })
+
+  // Two keys, and both were measured free in packages/tui/src/config/keybind.ts. Asserted
+  // here so the record is in this repository rather than only in a comment: a key that later
+  // becomes taken is then a failing test to look at, not a collision discovered by pressing
+  // the wrong thing.
+  test('binds exactly two keys, on the two that are free', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+    const bound = commands
+      .filter((entry) => entry.bind !== undefined)
+      .map((entry) => `${entry.id}=${entry.bind as string}`)
+      .sort()
+    expect(bound).toEqual([
+      'opencode-pty.session-panel.close=ctrl+y',
+      'opencode-pty.session-panel.fullscreen=f3',
+    ])
+  })
+
   // Expanding the sidebar is the only trigger that may start a server, and opening this
   // panel asks for the same thing, so it is the same trigger. Otherwise the panel would
   // be empty on a host where nothing else ever asked for one - and the empty state says
@@ -920,6 +1025,22 @@ describe('the PTY sidebar panel', () => {
         | { selected?: string | null }
         | undefined
       expect(stored?.selected).not.toBeNull()
+
+      // The fullscreen key, checked HERE rather than in a test of its own, for a harness
+      // reason rather than a stylistic one: `toggleFullscreen` exists only on `PanelInput`,
+      // so proving the key drives it needs a rendered claim - and a second `testRender` in
+      // this file corrupts the next one's character frame. Both renders write to one shared
+      // terminal buffer, `TestRendererSetup` has no teardown that detaches from it, and
+      // `renderer.destroy()` does not either: the symptom was a header and a row on the same
+      // line, and an assertion on 'PTY' failing on text that was no longer contiguous. One
+      // render per test it is.
+      const fullscreen = commands.find(
+        (entry) => entry.id === 'opencode-pty.session-panel.fullscreen'
+      )
+      if (!fullscreen?.run) throw new Error('the plugin registered no fullscreen command')
+      const before = seen.fullscreenToggles
+      fullscreen.run()
+      expect({ toggledBy: seen.fullscreenToggles - before }).toEqual({ toggledBy: 1 })
 
       // Deliberately NOT asserted here: that the claim hands the view the sidebar's fresh
       // list rather than its own snapshot. Passing the stale one fails nothing a reader

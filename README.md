@@ -277,15 +277,24 @@ routes that do close it (switching session, picking a terminal, opening the side
 different actions that happen to close it as a side effect. So this panel owes you a way
 out of it and offers three:
 
-| Route      | How                                                    |
-| ---------- | ------------------------------------------------------ |
-| Palette    | *Close the PTY panel*                                  |
-| Key        | `ctrl+y`, while the panel is open                      |
-| Pointer    | `✕ close` in the panel header                          |
+| Route     | What it does                     | Key          |
+| --------- | -------------------------------- | ------------ |
+| Palette   | Close the PTY panel              | —            |
+| Palette   | Enlarge the PTY panel            | —            |
+| Palette   | Leave for the session list       | —            |
+| Key       | Close the PTY panel              | `ctrl+y`     |
+| Key       | Enlarge the PTY panel            | `f3`         |
+| Pointer   | Close the PTY panel              | `✕ close`    |
 
-The command's id is `opencode-pty.session-panel.close`, so the key can be moved or
-dropped in your keymap config. Without this panel having an exit of its own, opening it
-left no way back except killing the terminal.
+The command ids are `opencode-pty.session-panel.close`, `.fullscreen` and `.sessions`, so
+every key can be moved or dropped in your keymap config. The two keys are on `ctrl+y` and
+`f3` because the obvious ones are taken by OpenCode: `escape` is *Interrupt current
+session* and `q` is *Close diff viewer*. Switching sessions needs no key of ours —
+OpenCode has it on `<leader>l`, and it closes this panel as a side effect.
+
+Without this panel having an exit of its own, opening it left no way back except
+killing the terminal. `f3` does nothing below 80 columns: OpenCode forces the panel
+full-screen there, so there is no half to swap back to.
 
 The panel is **read-only**: it shows what the processes have printed and offers the
 remove control, but it does not accept typing. A plugin gets named commands from

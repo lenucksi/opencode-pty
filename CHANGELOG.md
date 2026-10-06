@@ -120,6 +120,17 @@ beside the built-in sidebar items rather than replacing them.
   packages. Same shape and same expiry as the existing `@babel/core` override:
   `test/tui-package.test.ts` pins both values, and the override goes when `solid-js` ships a
   fixed pin.
+- **The panel's keys are exactly three, and two of them are keys the host left free.**
+  `ctrl+y` closes the panel and `f3` enlarges it; both also appear in the palette, which is
+  the route that cannot be taken away. Switching sessions deliberately has no key: OpenCode
+  has `session.list` on `<leader>l` and closes this panel as a side effect of leaving, so a
+  key here would only shadow a binding that already works. The obvious choices for "leave
+  this" were both taken - `escape` is `session.interrupt`, and `q` is `diff.close`, whose
+  command carries no `enabled` predicate and is therefore reachable at any time. Measured, of
+  the 167 binds in the host's keybind config.
+  `toggleFullscreen` exists only on `PanelInput`, which arrives inside the slot's render and
+  nowhere else - `ui.panel` is just `open`, `close` and `current` - so the claim records the
+  function it was handed and the key drives that.
 - **The session panel has a way out. It did not have one, and a reader reported the
   consequence.** OpenCode has no key for closing a plugin panel: all four `panels.close()`
   call sites in the TUI are side effects of something else - changing session, selecting a
