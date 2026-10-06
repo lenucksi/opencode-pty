@@ -8,6 +8,7 @@ import type { Plugin } from '@opencode/plugin/tui'
 
 import { createActions, type ActionDeps, type Actions } from '../src/tui/actions.ts'
 import type { PanelSession } from '../src/tui/lib.ts'
+import { readScreen } from '../src/tui/server.ts'
 import { initialPanelState, type PanelState } from '../src/tui/panel-state.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
@@ -25,6 +26,8 @@ interface Recorded {
   toasts: { message: string; variant?: string }[]
   confirms: { title: string; message: string }[]
   dialogs: { closed: boolean; size?: string }[]
+  /** The prompt titles asked for, and what the reader typed back. */
+  prompts: { title: string; typed?: string }[]
   refreshes: { mayStart?: boolean; force?: boolean }[]
   events: string[]
 }
@@ -51,7 +54,7 @@ beforeEach(() => {
   project = realpathSync(mkdtempSync(join(tmpdir(), 'pty-tui-actions-project-')))
   previousRuntimeDir = process.env.PTY_RUNTIME_DIR
   process.env.PTY_RUNTIME_DIR = runtimeDir
-  recorded = { toasts: [], confirms: [], dialogs: [], refreshes: [], events: [] }
+  recorded = { toasts: [], confirms: [], dialogs: [], prompts: [], refreshes: [], events: [] }
 })
 
 afterEach(() => {
@@ -138,6 +141,12 @@ function fixture(): Plugin.Context {
       confirm: async (options: { title: string; message: string }) => {
         recorded.confirms.push(options)
         return false
+      },
+      // Declined by default, like confirm, so "asked and abandoned" is the default path and
+      // a case that sends has to say so. `typed` is what the host's own field would return.
+      prompt: async (options: { title: string }) => {
+        recorded.prompts.push({ title: options.title })
+        return undefined
       },
     },
     router: { register: () => () => {}, navigate: () => {}, current: () => ({ type: 'home' }) },
@@ -411,6 +420,159 @@ describe('opening the output dialog', () => {
     const state = liveState({ origin: origin(), sessions: [] })
     await createActions(deps(state)).openOutput(session({ id: 'pty_does_not_exist' }))
     expect(state.dialog?.output).toContain('failed to read buffer')
+  })
+})
+
+describe('sending input to a session', () => {
+  /**
+   * A context whose prompt answers with `typed`, the way the host's own field would.
+   *
+   * Built before `deps` because `ActionDeps.context` is readonly - the fixture goes in
+   * through the override argument rather than by assignment.
+   */
+  function answering(typed: string | undefined): Plugin.Context {
+    const context = fixture()
+    context.ui.dialog.prompt = async (options: { title: string }) => {
+      recorded.prompts.push({ title: options.title, typed })
+      return typed
+    }
+    return context
+  }
+
+  /**
+   * Lines that hold nothing but a line number.
+   *
+   * The screen capture trims each line, so "an empty numbered line" arrives as `     2`
+   * with no trailing spaces - which is why an assertion on `'2  '` passed on exactly the
+   * code it was meant to catch. Matching a number alone survives the trim, and is what the
+   * doubled-newline and blank-line cases actually produce.
+   */
+  const numberOnlyLines = (screen: string): string[] =>
+    screen.split('\n').filter((line) => /^\s*\d+\s*$/.test(line))
+
+  /** Wait until `check` yields a value, or give up. Keeps the tests sleep-free. */
+  async function until(check: () => Promise<boolean>, ms = 4000): Promise<boolean> {
+    const deadline = Date.now() + ms
+    while (Date.now() < deadline) {
+      if (await check()) return true
+      await Bun.sleep(25)
+    }
+    return false
+  }
+
+  // The whole point, proven against a real process: what the reader types arrives as if
+  // typed. `cat` echoes it, so the assertion reads the echo off the program's own screen
+  // rather than trusting that a POST was made - a route that accepted the request without
+  // writing it to the PTY would pass every other version of this test.
+  test('what the reader types reaches the process', async () => {
+    await startServer()
+    const id = await spawnSession('waiting', 'cat')
+    const d = deps(liveState({ origin: origin() }), { context: answering('q') })
+
+    await createActions(d).sendInput(session({ id, title: 'waiting', status: 'running' }))
+
+    expect(await until(async () => (await readScreen(origin(), id)).includes('q'))).toBe(true)
+  })
+
+  // A reader who types `q` means the key, not a prompt line, so the newline is added here.
+  test('appends the newline a key press would have carried', async () => {
+    await startServer()
+    const id = await spawnSession('lines', 'cat', ['-n'])
+    const d = deps(liveState({ origin: origin() }), { context: answering('one\ntwo') })
+
+    await createActions(d).sendInput(session({ id, status: 'running' }))
+
+    // `cat -n` numbers every line, which only happens if BOTH newlines arrived - so the
+    // appended one and the typed one are both proven, not just the first. It pads the
+    // number to six columns and separates it with TWO SPACES, measured, not a tab.
+    expect(await until(async () => (await readScreen(origin(), id)).includes('2  two'))).toBe(true)
+    const screen = await readScreen(origin(), id)
+    expect(screen).toContain('1  one')
+    expect(screen).toContain('2  two')
+  })
+
+  // A line that already carries its own newline is sent as it stands, so a deliberate empty
+  // Enter stays possible. Appending again would send a blank line the reader did not ask for.
+  test('does not double a newline the reader already typed', async () => {
+    await startServer()
+    const id = await spawnSession('once', 'cat', ['-n'])
+    const d = deps(liveState({ origin: origin() }), { context: answering('only\n') })
+
+    await createActions(d).sendInput(session({ id, status: 'running' }))
+
+    expect(await until(async () => (await readScreen(origin(), id)).includes('1  only'))).toBe(true)
+    await Bun.sleep(200)
+    // `cat -n` numbers every line it received, so a doubled newline would have produced a
+    // second line holding nothing but its number.
+    expect(numberOnlyLines(await readScreen(origin(), id))).toEqual([])
+  })
+
+  // Declining is the common case - Escape in the host's field - and it must not write.
+  test('writes nothing when the reader declines', async () => {
+    await startServer()
+    const id = await spawnSession('ignored', 'cat', ['-n'])
+    const d = deps(liveState({ origin: origin() }), { context: answering(undefined) })
+
+    await createActions(d).sendInput(session({ id, status: 'running' }))
+
+    expect(recorded.prompts).toHaveLength(1)
+    await Bun.sleep(200)
+    expect(numberOnlyLines(await readScreen(origin(), id))).toEqual([])
+  })
+
+  // A confirmation of something that did not happen is worse than silence: the reader
+  // presses Escape, is told it was sent, and then wonders why the program ignored them.
+  test('claims nothing was sent when the reader declines', async () => {
+    await startServer()
+    const id = await spawnSession('declined', 'cat', ['-n'])
+    const d = deps(liveState({ origin: origin() }), { context: answering(undefined) })
+    await createActions(d).sendInput(session({ id, title: 'declined', status: 'running' }))
+    expect(recorded.toasts).toEqual([])
+  })
+
+  test('confirms a line that really was sent', async () => {
+    await startServer()
+    const id = await spawnSession('sent', 'cat')
+    const d = deps(liveState({ origin: origin() }), { context: answering('q') })
+    await createActions(d).sendInput(session({ id, title: 'sent', status: 'running' }))
+    expect(recorded.toasts.map((t) => t.message)).toEqual(['Sent to sent'])
+  })
+
+  // Nothing to write to. Asking first would open a field that cannot work, and the server
+  // would answer 400 for every attempt.
+  test('refuses a session that has ended, without asking', async () => {
+    const d = deps(liveState({ origin: origin() }), { context: answering('q') })
+    await createActions(d).sendInput(session({ id: 'pty_1', status: 'exited', exitCode: 0 }))
+    expect(recorded.prompts).toEqual([])
+    expect(recorded.toasts.map((t) => t.message)).toEqual(['That session has ended'])
+  })
+
+  test('asks nothing when the server is gone', async () => {
+    const d = deps(liveState({ origin: null }), { context: answering('q') })
+    await createActions(d).sendInput(session({ id: 'pty_1', status: 'running' }))
+    expect(recorded.prompts).toEqual([])
+    expect(recorded.toasts.map((t) => t.message)).toEqual(['PTY server unavailable'])
+  })
+
+  // The prompt names the session, because "send what?" has no other answer on screen.
+  test('names the session in the prompt', async () => {
+    await startServer()
+    const id = await spawnSession('the watcher', 'cat')
+    const d = deps(liveState({ origin: origin() }), { context: answering(undefined) })
+    await createActions(d).sendInput(session({ id, title: 'the watcher', status: 'running' }))
+    expect(recorded.prompts[0]?.title).toBe('Send to the watcher')
+  })
+
+  // A whitespace-only line is not a key press and not a command; sending it would put a
+  // blank line into a program that may well act on it.
+  test('does not send a blank line', async () => {
+    await startServer()
+    const id = await spawnSession('blank', 'cat', ['-n'])
+    const d = deps(liveState({ origin: origin() }), { context: answering('   ') })
+    await createActions(d).sendInput(session({ id, status: 'running' }))
+    await Bun.sleep(200)
+    // A blank line sent to `cat -n` comes back as a line holding only the number 1.
+    expect(numberOnlyLines(await readScreen(origin(), id))).toEqual([])
   })
 })
 

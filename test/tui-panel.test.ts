@@ -1,3 +1,4 @@
+import type { PanelSession } from '../src/tui/lib.ts'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -379,6 +380,18 @@ async function sidebarFrame(observed: Observed): Promise<string> {
 async function clickHeader(observed: Observed): Promise<void> {
   const setup = await renderSidebar(observed)
   await setup.mockMouse.click(4, 0)
+  await setup.renderOnce()
+}
+
+/**
+ * Click a row of the sidebar, by its screen row.
+ *
+ * Through opentui's own dispatch, like the header, so this is a test of the wiring. Row 0 is
+ * the header, so the first session is row 1.
+ */
+async function clickSidebarRow(observed: Observed, row: number): Promise<void> {
+  const setup = await renderSidebar(observed)
+  await setup.mockMouse.click(4, row)
   await setup.renderOnce()
 }
 
@@ -800,6 +813,7 @@ describe('the PTY sidebar panel', () => {
       'opencode-pty.session-panel.close',
       'opencode-pty.session-panel.fullscreen',
       'opencode-pty.session-panel.sessions',
+      'opencode-pty.session-panel.send',
     ]) {
       const command = commands.find((entry) => entry.id === id)
       expect(`${id}: ${command?.palette}`).toBe(`${id}: true`)
@@ -858,7 +872,7 @@ describe('the PTY sidebar panel', () => {
   // here so the record is in this repository rather than only in a comment: a key that later
   // becomes taken is then a failing test to look at, not a collision discovered by pressing
   // the wrong thing.
-  test('binds exactly two keys, on the two that are free', async () => {
+  test('binds exactly three keys, on the three that are free', async () => {
     const seen = observed()
     await tuiPanel.setup(makeContext(seen))
     const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
@@ -869,7 +883,70 @@ describe('the PTY sidebar panel', () => {
     expect(bound).toEqual([
       'opencode-pty.session-panel.close=ctrl+y',
       'opencode-pty.session-panel.fullscreen=f3',
+      'opencode-pty.session-panel.send=f4',
     ])
+  })
+
+  // The send key needs a SELECTED and RUNNING session. Without a selection it would open a
+  // field naming nothing, and without a process behind it the server refuses the write - so
+  // both conditions live in `enabled` rather than being checked afterwards.
+  test('the send key needs a selected, running session', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const commands = seen.layers.flatMap((layer) => layer.commands ?? [])
+    const command = commands.find((entry) => entry.id === 'opencode-pty.session-panel.send')
+    if (!command?.enabled) throw new Error('the send command has no enabled predicate')
+    // The host reads its OWN state, which is this store - so the case drives it there rather
+    // than through a side channel, and an `enabled` that read anything else would show up.
+    if (!seen.stores.has('opencode-pty.session-panel')) {
+      seen.stores.set('opencode-pty.session-panel', {})
+    }
+    const store = seen.stores.get('opencode-pty.session-panel') as Record<string, unknown>
+    const pty = (over: Partial<PanelSession>): PanelSession => ({
+      id: 'pty_1',
+      parentSessionId: 'test-parent-session',
+      ...over,
+    })
+
+    // No panel open.
+    expect(command.enabled()).toBe(false)
+    // Panel open, nothing selected.
+    seen.activePanel = { name: 'opencode-pty', sessionID: 'test-parent-session' }
+    expect(command.enabled()).toBe(false)
+    // Selected, but the process has ended.
+    store.sessions = [pty({ status: 'exited', exitCode: 0 })]
+    store.selected = 'pty_1'
+    expect(command.enabled()).toBe(false)
+    // And with a live one.
+    store.sessions = [pty({ status: 'running' })]
+    expect(command.enabled()).toBe(true)
+  })
+
+  // One gesture from the sidebar to the output. The click used to open the output dialog; it
+  // opens the panel now, with THAT row selected - a click on a row that opened the panel on
+  // some other row's output would read as the click having done nothing.
+  test('a click on a sidebar row opens the panel with that row selected', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('clicked', 'sh', ['-c', 'sleep 30'])
+      const seen = observed()
+      await tuiPanel.setup(makeContext(seen))
+      // The section is collapsed by default, so there is no row 1 to click until the header
+      // has been opened. Expanding is also the trigger that fetches the list.
+      await clickHeader(seen)
+      await waitForRow(seen, 'clicked', 'running')
+
+      // Row 0 is the header, row 1 the first session.
+      await clickSidebarRow(seen, 1)
+
+      expect(seen.opened).toEqual(['opencode-pty'])
+      const store = seen.stores.get('opencode-pty.session-panel') as
+        | { selected?: string | null }
+        | undefined
+      expect(store?.selected).not.toBeNull()
+    } finally {
+      server[Symbol.dispose]()
+    }
   })
 
   // Expanding the sidebar is the only trigger that may start a server, and opening this

@@ -1,5 +1,6 @@
 import type { Plugin } from '@opencode/plugin/tui'
 
+import { isFinished, type PanelSession } from './lib.ts'
 import type { PanelState } from './panel-state.ts'
 import type { Tones } from './render.ts'
 import { readScreen } from './server.ts'
@@ -41,6 +42,8 @@ export interface SessionPanelHostDeps {
   /** The sidebar's refresh. Opening the panel asks for the sessions, like expanding it. */
   readonly refresh: (mayStart?: boolean, force?: boolean) => Promise<void>
   readonly origin: () => string | null
+  /** Ask for a line and write it to the process behind a row. */
+  readonly sendInput: (session: PanelSession) => Promise<void>
 }
 
 export interface SessionPanelHost {
@@ -50,6 +53,15 @@ export interface SessionPanelHost {
   readonly register: () => void
   /** Registers the command that closes it again. */
   readonly registerClose: () => void
+  /**
+   * Open the panel with a given session already on screen.
+   *
+   * Selecting first and opening second is what makes a click in the SIDEBAR mean the same
+   * thing as `/pty-sessions` with a row chosen - one gesture, and the process the reader
+   * clicked is the one they get. Opening first would show the panel on whatever was selected
+   * before, which reads as the click having done nothing.
+   */
+  readonly openWith: (sessionID: string) => void
 }
 
 export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanelHost {
@@ -113,9 +125,17 @@ export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanel
     registerSessionPanelCommand(context, deps)
   }
 
-  const registerClose = (): void => registerSessionPanelCommands(context, panel)
+  const registerClose = (): void => registerSessionPanelCommands(context, panel, deps, state)
 
-  return { sync, register, registerClose }
+  const openWith = (id: string): void => {
+    select(id)
+    context.ui.panel.open(SESSION_PANEL_NAME)
+    // The screen is read on the poll, so the panel opens showing the SELECTED row rather than
+    // the previous one's output until the next tick.
+    void sync()
+  }
+
+  return { sync, register, registerClose, openWith }
 }
 
 /**
@@ -148,6 +168,7 @@ function claimSessionPanel(
         focused: input.focused,
         fullscreen: input.presentation === 'fullscreen',
         onClose: input.close,
+        onSend: deps.sendInput,
         onSelect: (id) => {
           select(id)
           void sync()
@@ -229,7 +250,12 @@ export interface PanelActions {
  * command does: the reader is in the panel, and the routes out should be listed where they
  * can be found.
  */
-function registerSessionPanelCommands(context: Plugin.Context, panel: PanelActions): void {
+function registerSessionPanelCommands(
+  context: Plugin.Context,
+  panel: PanelActions,
+  deps: SessionPanelHostDeps,
+  state: SessionPanelState
+): void {
   const open = (): boolean => context.ui.panel.current() !== undefined
   context.keymap.layer(() => ({
     mode: 'global',
@@ -256,6 +282,29 @@ function registerSessionPanelCommands(context: Plugin.Context, panel: PanelActio
         // `PanelInput`, which arrives inside the slot's render and nowhere else. So the claim
         // leaves the function it was handed in `panel`, and the key drives that.
         run: () => panel.toggleFullscreen?.(),
+      },
+      {
+        // The one key that makes the view usable rather than a screenshot. `f4` is measured
+        // free; `escape` and `q` are not available, and a program that reads `q` therefore
+        // has to be reached through the prompt this opens.
+        id: 'opencode-pty.session-panel.send',
+        title: 'Send a line to the selected PTY',
+        description: 'Type one line for the program on screen, delivered as if typed.',
+        group: 'opencode-pty',
+        palette: true,
+        bind: 'f4',
+        // Only with something selected AND still running: the key would otherwise open a
+        // field whose answer the server refuses.
+        enabled: () => {
+          const chosen = selectedSession(state)
+          return open() && chosen !== null && !isFinished(chosen)
+        },
+        run: () => {
+          const chosen = selectedSession(state)
+          if (chosen === null) return false
+          void deps.sendInput(chosen).catch(() => {})
+          return false
+        },
       },
       {
         // No key, deliberately: the host's `session.list` is the way to switch conversation,

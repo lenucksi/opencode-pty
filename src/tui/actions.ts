@@ -10,7 +10,7 @@ import {
   type PanelState,
 } from './panel-state.ts'
 import { dialogRows, dialogSize, outputDialogView, type Tones } from './render.ts'
-import { cleanupSession, findProjectOrigin, readScreen } from './server.ts'
+import { cleanupSession, findProjectOrigin, readScreen, writeInput } from './server.ts'
 
 /**
  * What a person can do to a session from the panel, and what each one costs.
@@ -50,6 +50,8 @@ export interface Actions {
   confirmRemove(session: PanelSession): void
   clearFinished(): Promise<void>
   openOutput(session: PanelSession): Promise<void>
+  /** Ask for a line and write it to the process, with a newline appended. */
+  sendInput(session: PanelSession): Promise<void>
   /** The header's clear handler, which must stop the click reaching the toggle. */
   onClear(event: MouseEvent): void
 }
@@ -99,6 +101,67 @@ async function against<Value>(
     draft.origin = origin
   })
   return action(origin)
+}
+
+/**
+ * Ask the reader for a line and hand it to the process.
+ *
+ * A COMMAND LINE, and not key forwarding, because key forwarding is not available: a plugin
+ * gets named commands from `context.keymap` and no raw key events, so typing would mean
+ * binding every printable key separately - and `q`, the key every full-screen program uses to
+ * quit, is already bound by the host's `diff.close`, whose command carries no `enabled`
+ * predicate and is therefore reachable at any time. `ui.dialog.prompt` is the one input the
+ * SDK genuinely offers: the host renders the field, handles editing and history, and returns
+ * the string. That reaches everything a program reads as text - `q`, `k`, `1`, `/pattern`,
+ * `H` - which is the whole reason the view is usable rather than a screenshot.
+ *
+ * The newline is appended here rather than asked for, because a reader who types `q` means
+ * the key and not a prompt. A line that already ends in one is sent as it stands, so a
+ * deliberate empty Enter is still possible.
+ */
+export function createSendInput(deps: ActionDeps) {
+  return async (session: PanelSession): Promise<void> => {
+    // Nothing to write to: the process is gone, and the server would answer 400 for every
+    // attempt. Checked before anything else, so no input field opens for it.
+    if (isFinished(session)) {
+      deps.notify('That session has ended', 'warning')
+      return
+    }
+    const label = session.title || session.id
+
+    // The origin is resolved BEFORE the prompt opens, and that ordering is the fix for a
+    // real flaw: asking first meant a reader with no server to talk to was prompted for a
+    // line that could not be delivered anywhere. A test caught it - it asserted "no prompt
+    // without a server" and watched the prompt appear anyway.
+    // `sent` and not `outcome.ran`: `ran` only says the ORIGIN was found. Reporting success
+    // from it claimed "Sent to ..." after the reader pressed Escape in the field, which is a
+    // confirmation of something that did not happen - and a confirmation is exactly what a
+    // reader trusts when the program then ignores the key they typed.
+    let sent = false
+    try {
+      const outcome = await withOrigin(deps, async (origin) => {
+        const typed = await deps.context.ui.dialog.prompt({
+          title: `Send to ${label}`,
+          description: 'One line. It reaches the program as if typed, plus Enter.',
+          placeholder: 'q',
+        })
+        if (typed === undefined) return
+        if (typed.trim().length === 0) return
+
+        const data = typed.endsWith('\n') ? typed : `${typed}\n`
+        await writeInput(origin, session.id, data)
+        sent = true
+        deps.debug('input.sent', { id: session.id, chars: data.length })
+      })
+      // `ran === false` already toasted "PTY server unavailable"; nothing was sent either way.
+      if (!outcome.ran) return
+    } catch (error) {
+      deps.notify(`Not sent: ${error instanceof Error ? error.message : String(error)}`, 'error')
+      return
+    }
+
+    if (sent) deps.notify(`Sent to ${label}`, 'info')
+  }
 }
 
 /**
@@ -279,6 +342,7 @@ export function createActions(deps: ActionDeps): Actions {
     confirmRemove: createConfirmRemove(deps, removeSession),
     clearFinished: createClearFinished(deps),
     openOutput: createOpenOutput(deps),
+    sendInput: createSendInput(deps),
     onClear: (event: MouseEvent): void => {
       // Without stopping propagation the click would also collapse the panel,
       // hiding the very list it is cleaning.

@@ -249,15 +249,6 @@ export default Plugin.define({
       }
     }
 
-    const sessionPanelHost = createSessionPanelHost({
-      context,
-      panel,
-      tones,
-      debug,
-      refresh,
-      origin: () => panel.origin,
-    })
-
     const actions = createActions({
       context,
       state: panel,
@@ -267,6 +258,19 @@ export default Plugin.define({
       directory,
       debug,
       tones,
+    })
+
+    const sessionPanelHost = createSessionPanelHost({
+      context,
+      panel,
+      tones,
+      debug,
+      refresh,
+      origin: () => panel.origin,
+      // AFTER createActions, deliberately: the send control needs the action that opens the
+      // prompt, and the action needs nothing from the host. The other way round this was a
+      // reference to something not yet created.
+      sendInput: actions.sendInput,
     })
 
     const onToggle = (): void => {
@@ -299,18 +303,16 @@ export default Plugin.define({
       debug('archive.toggle', { showFinished: next })
     }
 
+    /**
+     * A click on a row opens the panel with THAT row on screen.
+     *
+     * The click used to open the output dialog, deferred by a tick because a dialog opened on
+     * mouse-DOWN saw the trailing click land outside its brand-new modal and dismiss itself.
+     * There is no modal here: the panel is a region that stays put, so the deferral goes with
+     * it, and one gesture now gets a reader from the sidebar to the output.
+     */
     const onOpen = (session: PanelSession): void => {
-      // Mouse UP, deferred one tick. Opening on DOWN meant the dialog's
-      // click-outside dismissal saw the trailing click land outside the brand-new
-      // modal and closed it within the same gesture.
-      setTimeout(() => {
-        void actions.openOutput(session).catch((error: unknown) => {
-          // A click that silently does nothing is indistinguishable from a broken
-          // panel, so say so out loud rather than only to the log.
-          debug('row.open.failed', { id: session.id, error: String(error) })
-          notify(`Could not open ${session.title || session.id}: ${String(error)}`, 'error')
-        })
-      }, 0)
+      sessionPanelHost.openWith(session.id)
     }
 
     const view = (): PanelView => ({

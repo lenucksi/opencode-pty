@@ -92,6 +92,22 @@ export async function readScreen(origin: string, id: string): Promise<string> {
 }
 
 /**
+ * Write bytes to a running session, exactly as the program behind it receives them.
+ *
+ * The same route the web UI's terminal uses (`onSendInput` in app.tsx). NO translation
+ * happens here: what the caller sends is what the process reads, so a caller that means a
+ * key has to send that key's bytes rather than its name.
+ */
+export async function writeInput(origin: string, id: string, data: string): Promise<void> {
+  const res = await fetchWithTimeout(`${origin}/api/sessions/${id}/input`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ data }),
+  })
+  if (!res.ok) throw new Error(`the server refused the request (${res.status})`)
+}
+
+/**
  * Drop a session from the server's store, killing it first when it is still
  * running.
  *

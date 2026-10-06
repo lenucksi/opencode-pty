@@ -222,6 +222,7 @@ describe('sessionPanelView', () => {
     focused: false,
     fullscreen: false,
     onClose: () => {},
+    onSend: () => {},
     onSelect: () => {},
     ...over,
   })
@@ -229,6 +230,8 @@ describe('sessionPanelView', () => {
   /** The rendered panel's height, named because a case below asserts against a row of it. */
   const PANEL_ROWS = 20
   const PANEL_COLS = 60
+  /** The footer's height, so the "fills the panel" case knows where the frame ends. */
+  const FOOTER_ROWS = 1
 
   async function setup(element: () => unknown): Promise<TestRendererSetup> {
     const created = await testRender(element as () => never, {
@@ -384,9 +387,75 @@ describe('sessionPanelView', () => {
     noteSessionScreen(state, 'line one', 1)
     const lines = (await frame(() => sessionPanelView(view({ state })))).split('\n')
     const bottom = lines.findIndex((line) => line.startsWith('└'))
-    // Row 19 of PANEL_ROWS, not merely the last non-empty one: a screen box with a fixed
-    // height also ends its frame somewhere and leaves blank rows under it, so "the frame is
-    // the last thing drawn" would pass on exactly the code that is wrong here.
-    expect(bottom).toBe(PANEL_ROWS - 1)
+    // The last row of the SCREEN area, which is one above the footer's. Naming the footer
+    // height is the point: a screen box with a fixed height also ends its frame somewhere
+    // and leaves blank rows under it, so "the frame is the last thing drawn" would pass on
+    // exactly the code that is wrong here.
+    expect(bottom).toBe(PANEL_ROWS - FOOTER_ROWS - 1)
+  })
+
+  // The footer and the send control. Both exist because a screen with no numbers on it
+  // cannot answer "is this stale?", and a view that only shows output cannot be used.
+  test('the footer names the session, its size and its counters', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'pty_9', cols: 120, rows: 40, lineCount: 812 })], ME)
+    noteSessionSelected(state, 'pty_9')
+    noteSessionScreen(state, 'one\ntwo\nthree', 1)
+    const text = await frame(() =>
+      sessionPanelView(
+        view({ state, live: [session({ id: 'pty_9', cols: 120, rows: 40, lineCount: 812 })] })
+      )
+    )
+    expect(text).toContain('pty_9')
+    // The size a full-screen program was actually given: `top` at 120x40 wrapped into 80
+    // columns is a different program, not a rendering fault.
+    expect(text).toContain('120x40')
+    expect(text).toContain('lines 812')
+    expect(text).toContain('screen 3 rows')
+  })
+
+  // Nothing selected means nothing to report; a footer full of placeholders would be noise.
+  test('the footer is empty while nothing is selected', async () => {
+    const text = await frame(() => sessionPanelView(view()))
+    expect(text).toContain('this conversation started no PTY session')
+    expect(text).not.toContain('screen 0 rows')
+  })
+
+  test('offers a send control for a process that can still be written to', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'pty_9' })], ME)
+    noteSessionSelected(state, 'pty_9')
+    const text = await frame(() =>
+      sessionPanelView(view({ state, live: [session({ id: 'pty_9' })] }))
+    )
+    expect(text).toContain('⌨ send')
+  })
+
+  // A control that opens an input field the server will refuse is worse than none.
+  test('hides the send control for a finished session', async () => {
+    const ended = session({ id: 'pty_9', status: 'exited', exitCode: 0 })
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [ended], ME)
+    noteSessionSelected(state, 'pty_9')
+    const text = await frame(() => sessionPanelView(view({ state, live: [ended] })))
+    expect(text).not.toContain('⌨ send')
+  })
+
+  // Dispatched through opentui, so this fails if the control is unreachable. The column comes
+  // from the rendered header, where `✕ send` sits left of `✕ close`.
+  test('the send control hands the selected session to the action', async () => {
+    const live = session({ id: 'pty_9' })
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [live], ME)
+    noteSessionSelected(state, 'pty_9')
+    const sent: string[] = []
+    const element = () =>
+      sessionPanelView(view({ state, live: [live], onSend: (target) => sent.push(target.id) }))
+    const rendered = await setup(element)
+    const column = rendered.captureCharFrame().split('\n')[0]?.indexOf('⌨') ?? -1
+    if (column < 0) throw new Error('the panel header draws no send control to click')
+    await rendered.mockMouse.click(column, 0)
+    await rendered.renderOnce()
+    expect(sent).toEqual(['pty_9'])
   })
 })

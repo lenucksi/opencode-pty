@@ -115,6 +115,20 @@ function rowFor(view: PanelView, session: PanelSession) {
   return jsx('box', {
     flexDirection: 'row',
     width: '100%',
+    // The row is clickable, and had NEVER been: only the remove glyph carried a handler, so
+    // `onOpen` was unreachable from a row and the output could only be opened from the palette.
+    // A reader reported it as "clicking a running session should open the panel too", which
+    // was exactly right - the handler simply did not exist.
+    //
+    // UP, like the glyph beside it, for the same reason inverted: a click delivers both, so
+    // acting on the DOWN as well would fire the open and then whatever the UP reaches.
+    onMouseUp: (event: MouseEvent) => {
+      event.stopPropagation()
+      view.onOpen(session)
+    },
+    // DOWN only to stop it, never to act. Without this the panel's own header toggle - an
+    // ancestor of the list - would collapse the section on the press half of every click.
+    onMouseDown: (event: MouseEvent) => event.stopPropagation(),
     children: [bullet, label, remove],
   })
 }

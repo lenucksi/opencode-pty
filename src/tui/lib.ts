@@ -38,6 +38,15 @@ export interface PanelSession {
    * for it.
    */
   readonly parentSessionId?: string
+  /**
+   * The terminal size the process was given, in columns and rows.
+   *
+   * Carried because a full-screen program is a different thing at 120x40 than at 80x24, and
+   * a view that shows its output without saying how wide it is cannot explain a wrapped
+   * layout. The server reports both on every session, so this costs two fields.
+   */
+  readonly cols?: number
+  readonly rows?: number
   /** ISO: when the process started. */
   readonly createdAt?: string
   /**

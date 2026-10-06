@@ -296,10 +296,39 @@ Without this panel having an exit of its own, opening it left no way back except
 killing the terminal. `f3` does nothing below 80 columns: OpenCode forces the panel
 full-screen there, so there is no half to swap back to.
 
-The panel is **read-only**: it shows what the processes have printed and offers the
-remove control, but it does not accept typing. A plugin gets named commands from
-`context.keymap` and no raw key events, so `pty_write` from free typing is not reachable
-from a plugin on this version.
+Clicking a running session in the sidebar opens this panel with that session on screen.
+The footer names it and counts it — id, status, terminal size, output lines, and how many
+rows of the rendered screen are on view. Size matters: a program given 120x40 and shown in
+80 columns is wrapping, not failing.
+
+### Driving the program on screen
+
+**Sending input works; free typing does not, and the difference is the SDK.**
+
+A plugin gets named commands from `context.keymap` and no raw key events, so typing would
+mean binding every printable key separately. `q` — the key every full-screen program uses to
+quit — is bound by OpenCode's own *Close diff viewer*, whose command has no `enabled`
+predicate and is therefore live at all times. There is no key left that a program would
+recognise.
+
+What the SDK does offer is `ui.dialog.prompt`: OpenCode renders a real text field, handles
+editing, and returns the line. So the panel has a **command line** instead of a keystroke
+forwarder:
+
+| Route    | What it does                    | Key          |
+| -------- | ------------------------------- | ------------ |
+| Palette  | Send a line to the selected PTY | —            |
+| Key      | Send a line to the selected PTY | `f4`         |
+| Pointer  | `⌨ send` in the panel header    | —            |
+
+Type `q`, `k`, `1`, `/pattern` or `H` and it arrives as if typed, with a newline. The control
+appears only for a process that is still running, and the line is refused before you are asked
+for it if there is no server to send it to. The command id is
+`opencode-pty.session-panel.send`, so the key can be moved.
+
+This is a command line, not a terminal: a program that wants arrow keys, function keys or
+raw control characters will not get them. `top` is fully usable this way — `q`, `k`, `1`, `c`
+all work — and `htop` needs its own key handling, which this SDK does not expose.
 
 ## Web UI
 

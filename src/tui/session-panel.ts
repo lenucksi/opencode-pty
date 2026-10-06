@@ -4,6 +4,7 @@ import { jsx } from '@opentui/solid/jsx-runtime'
 
 import {
   formatDuration,
+  isFinished,
   rowLabel,
   rowTone,
   ROW_BULLET,
@@ -193,6 +194,8 @@ export interface SessionPanelView {
    * reader a way out of it. Ours has three: this control, a palette entry and a keybind.
    */
   readonly onClose: () => void
+  /** Ask for a line and hand it to the selected process. */
+  readonly onSend: (session: PanelSession) => void
   readonly onSelect: (id: string) => void
 }
 
@@ -261,6 +264,16 @@ function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
       }),
       jsx('text', {
         fg: view.tones.muted,
+        // Only for a process that can still be written to: a control opening an input field
+        // whose answer the server refuses is worse than no control at all.
+        children: (): string => (chosen !== null && !isFinished(chosen) ? '⌨ send' : ''),
+        onMouseDown: (event: MouseEvent) => {
+          event.stopPropagation()
+          if (chosen !== null && !isFinished(chosen)) view.onSend(chosen)
+        },
+      }),
+      jsx('text', {
+        fg: view.tones.muted,
         // ONE handler, and on mouse-down only: a click delivers a mouse-down AND a
         // mouse-up, so a toggle on each fires twice.
         onMouseDown: (event: MouseEvent) => {
@@ -281,6 +294,33 @@ function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
         },
       }),
     ],
+  })
+}
+
+/**
+ * The footer: what is on screen, and how much of it.
+ *
+ * The same two lines the web UI draws - identifiers above, counters below - because a screen
+ * with no numbers on it cannot answer "is this stale?" or "is that the process I think?".
+ * Size and line count are the ones that matter for a full-screen program: `top` at 120x40
+ * wrapped into 80 columns is not a rendering fault but a different program running.
+ */
+function statusBar(view: SessionPanelView, chosen: PanelSession | null): unknown {
+  return jsx('text', {
+    width: '100%',
+    fg: view.tones.muted,
+    children: (): string => {
+      if (chosen === null) return ''
+      const size =
+        chosen.cols === undefined || chosen.rows === undefined
+          ? ''
+          : `  ${chosen.cols}x${chosen.rows}`
+      const rows = view.state.screen === '' ? 0 : view.state.screen.split('\n').length
+      return [
+        `${chosen.id}  ${chosen.status ?? '?'}${size}`,
+        `lines ${chosen.lineCount ?? '?'}  screen ${rows} rows`,
+      ].join('  ·  ')
+    },
   })
 }
 
@@ -343,12 +383,15 @@ export function sessionPanelView(view: SessionPanelView) {
     },
   })
 
+  // The footer LAST, and `flexShrink: 0`: the framed screen above it grows to fill, so a bar
+  // inside the frame would be pushed off the bottom by its own content.
+  const footer = jsx('box', { height: 1, flexShrink: 0, children: statusBar(view, chosen) })
   const screen = framedScreen(view)
   return jsx('box', {
     flexDirection: 'column',
     width: '100%',
     flexGrow: 1,
     minHeight: 0,
-    children: screen === undefined ? [header, list] : [header, list, screen],
+    children: screen === undefined ? [header, list, footer] : [header, list, screen, footer],
   })
 }

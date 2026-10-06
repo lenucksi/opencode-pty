@@ -120,6 +120,28 @@ beside the built-in sidebar items rather than replacing them.
   packages. Same shape and same expiry as the existing `@babel/core` override:
   `test/tui-package.test.ts` pins both values, and the override goes when `solid-js` ships a
   fixed pin.
+- **Clicking a row in the sidebar opens the panel — the row had no click handler at all.**
+  Reported as "clicking a running session should open the panel too", and the reason it did
+  not is worth recording: `PanelView.onOpen` existed, was wired to a row, and no row ever
+  called it. Only the remove glyph carried a mouse handler, so `onOpen` was unreachable from
+  a row and the output could be opened from the palette and nowhere else. A prop that nothing
+  renders is not a wired prop. The row now opens on mouse-UP, with the mouse-DOWN stopped so
+  the press half cannot reach the section's own collapse toggle.
+- **The panel can drive the process on screen, through a command line rather than keys.** A
+  plugin gets named commands and no raw key events, so forwarding keystrokes would mean
+  binding every printable key - and `q`, the quit key of every full-screen program, belongs
+  to OpenCode's `diff.close`, whose command carries no `enabled` predicate and is therefore
+  live at all times. `ui.dialog.prompt` is the input the SDK genuinely offers, so `⌨ send` in
+  the header and `f4` open it, and the line is written to `/api/sessions/:id/input` with a
+  newline. `top` is fully usable this way. It is a command line, not a terminal: arrow keys
+  and raw control characters remain out of reach, and `htop` needs key handling this SDK does
+  not expose. The origin is resolved BEFORE the prompt opens - a test caught the earlier order,
+  which asked a reader with no server to talk to for input that could not be delivered.
+- **The panel has a footer, mirroring the web UI's identifiers-above-counters-below.** Id,
+  status, terminal size, output lines and the rendered screen's row count. Size and line count
+  are the ones that matter for a full-screen program: `top` given 120x40 and shown in 80
+  columns is wrapping, not a rendering fault. It is the framed screen's SIBLING, not a child,
+  because the screen grows to fill and a bar inside it would be pushed off the bottom.
 - **The panel's keys are exactly three, and two of them are keys the host left free.**
   `ctrl+y` closes the panel and `f3` enlarges it; both also appear in the palette, which is
   the route that cannot be taken away. Switching sessions deliberately has no key: OpenCode
