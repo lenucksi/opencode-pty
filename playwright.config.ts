@@ -1,5 +1,17 @@
 import { defineConfig, devices } from '@playwright/test'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+
+// Before any spec is loaded, and that ordering is the whole point: `test/utils.ts` (which
+// every spec reaches through `fixtures.ts`) imports the PTY manager, so the WORKER process
+// itself constructs a SessionStore at import time. Without this, `defaultRoot()` falls back
+// to the developer's real archive and the worker's own bookkeeping - `clearAllSessions()`
+// on every ManagedTestServer dispose - removes entries from it. Measured: the real
+// ~/.local/state/.../sessions/index.json was being modified by test runs, and each removal
+// logged "caller asked for something that had already been removed".
+// The spawned server-under-test already gets its own isolated directory in fixtures.ts; this
+// is the worker's directory, which nothing covered.
+process.env.OPENCODE_PTY_STATE_DIR ??= join(tmpdir(), 'opencode-pty-e2e-worker')
 
 /**
  * @see https://playwright.dev/docs/test-configuration

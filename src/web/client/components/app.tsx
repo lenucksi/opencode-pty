@@ -1,5 +1,9 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PTYSessionInfo, WSMessageServerRawData } from 'opencode-pty/web/shared/types'
+import type {
+  PTYSessionInfo,
+  ServerInfoResponse,
+  WSMessageServerRawData,
+} from 'opencode-pty/web/shared/types'
 import { sessionDetailLine, sessionTooltip, sortSessionsByTime } from '../../shared/session-meta.ts'
 
 import { useWebSocket } from '../hooks/use-web-socket.ts'
@@ -164,6 +168,10 @@ export function App() {
   // it is talking to is whatever is listening, and a stale bundle next to a fresh
   // server would report a commit that is not running.
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null)
+  // From the SAME response that carries the build identity, not a second request:
+  // /api/server already publishes the archive's retention, so a reader can see what the caps
+  // actually are instead of hunting them out of the plugin config.
+  const [persist, setPersist] = useState<ServerInfoResponse['persist'] | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -267,7 +275,9 @@ export function App() {
     void api
       .server()
       .then((info) => {
-        if (!cancelled) setBuildInfo(info.build)
+        if (cancelled) return
+        setBuildInfo(info.build)
+        setPersist(info.persist)
       })
       .catch(() => {
         // A failed lookup leaves the row on "Checking…". Erroring loudly in a
@@ -462,6 +472,7 @@ export function App() {
         showDebugBar={prefs.showDebugBar}
         onShowDebugBarChange={setShowDebugBar}
         buildInfo={buildInfo}
+        persist={persist}
       />
       <DocsModal
         open={docsOpen}

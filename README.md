@@ -70,6 +70,35 @@ OpenCode V2 uses the new plugin API. You can load `opencode-pty/v2` and optional
 | `port` | `number` | `0` (ephemeral) | Fixed port for the PTY Web UI observer server |
 | `hostname` | `string` | `"::1"` | Hostname to bind the PTY Web UI server to |
 | `autostart` | `boolean` | `false` | Automatically start the Web UI server on startup |
+| `retention` | object | see below | How long archived sessions are kept, and how many |
+
+### Archive retention
+
+`retention` governs the on-disk archive that keeps a finished session's output readable.
+
+```json
+{
+  "retention": { "maxSessions": 500, "maxAgeDays": 30 }
+}
+```
+
+| Field | Default | What it does |
+| --- | --- | --- |
+| `maxSessions` | `200` | Newest sessions kept; older ones are pruned. |
+| `maxAgeDays` | `14` | Sessions older than this are pruned. |
+| `maxBytesPerSession` | `5242880` | Per-session log cap; beyond it the log rotates once. |
+
+Anything omitted keeps its default. A session is pruned by whichever rule bites first, and a
+session that is still running or being stopped is never pruned - the other two rules would
+remove its directory while output is still being written to it.
+
+Lowering a cap takes effect at once rather than at the next start: the archive is re-pruned
+and sessions are removed immediately. They are moved to a `.trash` directory rather than
+deleted, so they stay restorable until the next start, the same window a normal removal gets.
+
+The values in force are shown in the Web UI under **Settings → Archive**. They are read from
+the server that enforces them, so a configured override is visible without editing a config
+file.
 
 OpenCode will automatically install the plugin on next run.
 

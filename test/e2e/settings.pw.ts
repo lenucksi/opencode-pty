@@ -42,6 +42,32 @@ async function readStoredPrefs(
   }, UI_PREFS_KEY)
 }
 
+// The archive policy, read off the server rather than from a string in the page. The point
+// of the section is that a reader can see the caps that are actually in force; a hardcoded
+// "200 / 14 days" would stop the moment someone configures an override, and nothing on
+// screen would say so.
+const retentionSection = (page: Page) => page.getByTestId('settings-retention')
+
+const withRetention = async (
+  page: Page
+): Promise<{
+  maxSessions: number
+  maxAgeDays: number
+  maxBytesPerSession: number
+}> => {
+  const section = retentionSection(page)
+  await expect(section).toBeVisible()
+  const text = await section.innerText()
+  const sessions = /keep at most (\d+) sessions/.exec(text)
+  const days = /keep sessions for (\d+) days/.exec(text)
+  const kilo = /rotate a session's log past (\d+) KB/.exec(text)
+  return {
+    maxSessions: Number(sessions?.[1]),
+    maxAgeDays: Number(days?.[1]),
+    maxBytesPerSession: Number(kilo?.[1]) * 1024,
+  }
+}
+
 const settingsButton = (page: Page) => page.getByRole('button', { name: 'Settings', exact: true })
 const dialog = (page: Page) => page.getByRole('dialog')
 
@@ -135,5 +161,33 @@ extendedTest.describe('settings modal', () => {
     await page.mouse.click(5, 5)
 
     await expect(dialog(page)).not.toBeVisible()
+  })
+
+  // The server already published the policy; nothing read it. A reader had no way to learn
+  // the caps that govern how long their own logs survive without finding the plugin config,
+  // which is the same gap that cost a session twice over in another conversation.
+  extendedTest(
+    'shows the archive policy the server reports, not a hardcoded copy',
+    async ({ page, api }) => {
+      const info = await api.server()
+      await settingsButton(page).click()
+      await expect(dialog(page)).toBeVisible()
+
+      expect(await withRetention(page)).toEqual({
+        maxSessions: info.persist.retention.maxSessions,
+        maxAgeDays: info.persist.retention.maxAgeDays,
+        maxBytesPerSession: info.persist.retention.maxBytesPerSession,
+      })
+    }
+  )
+
+  // The caps are plugin options, not viewer preferences, and the section says so. Without
+  // this line a reader looks for an input field that does not exist and concludes the
+  // setting is broken rather than elsewhere.
+  extendedTest('says where the caps are set', async ({ page }) => {
+    await settingsButton(page).click()
+    await expect(dialog(page)).toBeVisible()
+    await expect(retentionSection(page)).toContainText('retention')
+    await expect(retentionSection(page)).toContainText('removes sessions immediately')
   })
 })

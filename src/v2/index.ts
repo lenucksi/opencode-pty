@@ -115,6 +115,18 @@ export const Plugin: PluginV2 = define({
       })
     }
 
+    // Retention configured through options, applied before anything is announced: the
+    // restart message is built from `getRetention()`, so setting the policy after it would
+    // advertise a limit the store is not yet applying. The re-prune inside `updateRetention`
+    // is what makes a lowered cap take effect at once - the store's own `prune()` runs only
+    // in its constructor, which is long before these options exist.
+    const prunedRetention = manager.getSessionStore().updateRetention(ctx.options?.retention ?? {})
+    if (prunedRetention.length > 0) {
+      logPtyEvent('info', `retention removed ${prunedRetention.length} archived session(s)`, {
+        ids: prunedRetention,
+      })
+    }
+
     if (ctx.options?.autostart) {
       try {
         const server = await getOrCreateServer({

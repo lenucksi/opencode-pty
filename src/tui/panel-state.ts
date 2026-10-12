@@ -1,5 +1,5 @@
 import { isFinished, type PanelSession } from './lib.ts'
-import { sortSessionsByTime } from '../web/shared/session-meta.ts'
+import { groupSessionsByParent, sortSessionsByTime } from '../web/shared/session-meta.ts'
 
 /**
  * The panel's state, and every transition it can make.
@@ -181,6 +181,43 @@ export function visibleSessions(
   const running = sessions.filter(isRunning)
   if (!showFinished) return running
   return [...running, ...failedFinished(sessions)]
+}
+
+/** One group of sessions: everything one OpenCode session started. */
+export interface PanelGroup {
+  readonly key: string
+  readonly parentSessionId?: string
+  readonly parentAgent?: string
+  readonly sessions: PanelSession[]
+  /** Whether any session in the group is running, which is what the order keys on. */
+  readonly hasRunning: boolean
+}
+
+/**
+ * The panel's rows, grouped by the OpenCode session that started them.
+ *
+ * The GROUPING is the shared rule (`groupSessionsByParent`, which also supplies the
+ * ungrouped bucket), and the ORDER is one step of our own: groups holding a running
+ * session first. A parent conversation with something alive in it is the thing a glance
+ * is for, and the shared order alone puts groups purely by age.
+ *
+ * The grouping applies to whatever `visibleSessions` selected - so the failed finished
+ * runs land in their parent conversation too, rather than in one flat pile at the bottom.
+ */
+export function groupsForDisplay(sessions: readonly PanelSession[]): PanelGroup[] {
+  const groups: PanelGroup[] = groupSessionsByParent(sessions).map((group) => ({
+    key: group.key,
+    ...(group.parentSessionId === undefined ? {} : { parentSessionId: group.parentSessionId }),
+    ...(group.parentAgent === undefined ? {} : { parentAgent: group.parentAgent }),
+    sessions: group.sessions,
+    hasRunning: group.sessions.some(isRunning),
+  }))
+  // Two stable halves, relative order untouched inside each - so a group that has been
+  // above another one stays above it.
+  return [
+    ...groups.filter((group) => group.hasRunning),
+    ...groups.filter((group) => !group.hasRunning),
+  ]
 }
 
 /** How many sessions, in words. One is not "1 sessions". */

@@ -1,6 +1,7 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
 import { describeBuild, type BuildInfo } from '../../../shared/build-info.ts'
+import type { ServerInfoResponse } from 'opencode-pty/web/shared/types'
 import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { ThemePreference } from '../lib/theme.ts'
 import { MAX_TERMINAL_FONT_SIZE, MIN_TERMINAL_FONT_SIZE } from '../lib/ui-prefs.ts'
@@ -25,6 +26,14 @@ interface SettingsModalProps {
    * still being fetched or if the request failed.
    */
   buildInfo: BuildInfo | null
+  /**
+   * The server's archive policy, or `null` while it is still being fetched.
+   *
+   * Shown, not edited: the caps are enforced on one shared on-disk archive, so they are
+   * plugin options. A field here could only change one browser's idea of them, which is
+   * why there is no field here - see `retention` in `OpencodePtyOptions`.
+   */
+  persist: ServerInfoResponse['persist'] | null
 }
 
 /**
@@ -45,6 +54,7 @@ export function SettingsModal({
   showDebugBar,
   onShowDebugBarChange,
   buildInfo,
+  persist,
 }: SettingsModalProps) {
   const { dialogRef, handleNativeClose } = useDialog({ open, onClose, returnFocusRef, inertTarget })
   // The confirmation belongs next to the button, not in the terminal header: the
@@ -127,6 +137,34 @@ export function SettingsModal({
           </label>
         </section>
 
+        <section className="settings-section">
+          <span className="settings-label">Archive</span>
+          <div className="settings-retention-values" data-testid="settings-retention">
+            {persist === null ? (
+              <span className="settings-retention-value">Checking…</span>
+            ) : (
+              <>
+                <span className="settings-retention-value">
+                  {persist.enabled ? 'Archiving on' : 'Archiving off'}
+                </span>
+                <span className="settings-retention-value">
+                  keep at most {persist.retention.maxSessions} sessions
+                </span>
+                <span className="settings-retention-value">
+                  keep sessions for {persist.retention.maxAgeDays} days
+                </span>
+                <span className="settings-retention-value">
+                  {"rotate a session's log past "}
+                  {Math.round(persist.retention.maxBytesPerSession / 1024)} KB
+                </span>
+                <span className="settings-retention-note">
+                  set through the plugin's <code>retention</code> option; lowering a cap removes
+                  sessions immediately, and they stay restorable until the next start
+                </span>
+              </>
+            )}
+          </div>
+        </section>
         <section className="settings-section settings-section-build">
           <span className="settings-label">Version</span>
           {buildInfo === null ? (

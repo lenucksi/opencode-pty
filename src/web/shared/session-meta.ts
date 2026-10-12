@@ -1,12 +1,24 @@
 import { WEB_API_PARENT_SESSION_ID } from '../../plugin/constants.ts'
 import type { PTYSessionInfo } from './types.ts'
 
-export interface PTYSessionGroup {
+export interface PTYSessionGroup<T = PTYSessionInfo> {
   /** Stable React/group key; the empty key represents legacy ungrouped rows. */
   key: string
   parentSessionId?: string
   parentAgent?: string
-  sessions: PTYSessionInfo[]
+  sessions: T[]
+}
+
+/**
+ * What grouping reads off a session, and nothing else.
+ *
+ * Same reason `TimeOrdered` is a constraint rather than a concrete parameter: the rule
+ * belongs to a LIST, and the sidebar panel carries a trimmed session shape. Every web
+ * caller passes a full `PTYSessionInfo`, so nothing there changes.
+ */
+export interface ParentGrouped extends TimeOrdered {
+  readonly parentSessionId?: string
+  readonly parentAgent?: string
 }
 
 /** Local wall-clock time with seconds; empty for a missing or invalid value. */
@@ -225,8 +237,10 @@ export function sessionSidebarMeta(session: PTYSessionInfo): string {
  * The first child carries the group's newest activity, so Map insertion order is
  * also the desired newest-group-first order.
  */
-export function groupSessionsByParent(sessions: PTYSessionInfo[]): PTYSessionGroup[] {
-  const groups = new Map<string, PTYSessionGroup>()
+export function groupSessionsByParent<T extends ParentGrouped>(
+  sessions: readonly T[]
+): PTYSessionGroup<T>[] {
+  const groups = new Map<string, PTYSessionGroup<T>>()
 
   for (const session of sortSessionsByTime(sessions)) {
     const parentSessionId = session.parentSessionId?.trim() || undefined
@@ -250,10 +264,13 @@ export function groupSessionsByParent(sessions: PTYSessionInfo[]): PTYSessionGro
 }
 
 /** Human-readable group heading, falling back when the parent no longer exists. */
-export function parentSessionGroupTitle(
-  group: PTYSessionGroup,
+export function parentSessionGroupTitle<T>(
+  group: PTYSessionGroup<T>,
   titles: Readonly<Record<string, string>>
 ): string {
+  // Unchanged logic, generic signature: the fallback chain here is the tested contract
+  // (a web-API parent, then ungrouped, then a known title, then the raw id) and rewriting
+  // it while making it generic would have been inventing a second set of answers.
   if (group.parentSessionId === WEB_API_PARENT_SESSION_ID) return 'Web API / manual'
   if (!group.parentSessionId) return 'Ungrouped'
 

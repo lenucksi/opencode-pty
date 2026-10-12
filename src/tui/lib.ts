@@ -47,6 +47,15 @@ export interface PanelSession {
    */
   readonly cols?: number
   readonly rows?: number
+  /**
+   * Which agent started it, when one did.
+   *
+   * Carried for ONE reason: the shared `groupSessionsByParent` reads it to head a group, and
+   * the shared `parentSessionGroupTitle` puts it in parentheses. Both are tested rules, and a
+   * panel that grouped without it would have to format the agent itself - which is the second
+   * answer TASK-19 exists to remove.
+   */
+  readonly parentAgent?: string
   /** ISO: when the process started. */
   readonly createdAt?: string
   /**
@@ -80,6 +89,17 @@ function rowTail(session: PanelSession): string {
   // `killing` and `killed` carry no exit code, so rendering those as `exit ?`
   // reads as a bug. The status word is the honest answer.
   return typeof session.status === 'string' && session.status.length > 0 ? session.status : '?'
+}
+
+/**
+ * Clip a label to `max` columns with an ellipsis, never mid-escape.
+ *
+ * Exported because a group heading needs the same clipping as a row, and a second
+ * implementation of "fit this in the column" is how two labels of the same length end up
+ * different lengths.
+ */
+export function truncateText(value: string, max: number): string {
+  return truncate(value, max)
 }
 
 function truncate(value: string, max: number): string {

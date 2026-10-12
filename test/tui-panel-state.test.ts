@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import type { PanelSession } from '../src/tui/lib.ts'
 import {
   endedBadly,
+  groupsForDisplay,
   failedFinished,
   failureCount,
   FINISHED_FAILURE_LIMIT,
@@ -23,6 +24,7 @@ import {
   statusWhenUnavailable,
   visibleSessions,
 } from '../src/tui/panel-state.ts'
+import { groupSessionsByParent } from '../src/web/shared/session-meta.ts'
 
 /**
  * Every transition the panel can make, tested without a terminal.
@@ -462,5 +464,96 @@ describe('isRunning', () => {
     for (const status of ['exited', 'killed', 'killing', undefined]) {
       expect(isRunning(session({ status }))).toBe(false)
     }
+  })
+})
+describe('groupsForDisplay', () => {
+  const ME = 'session-a'
+  const OTHER = 'session-b'
+  const at = (minutes: number): string =>
+    new Date(Date.parse('2026-01-01T12:00:00Z') + minutes * 60_000).toISOString()
+
+  const running = (id: string, parent: string | undefined, minutes: number) =>
+    session({ id, parentSessionId: parent, status: 'running', createdAt: at(minutes) })
+  const done = (id: string, parent: string | undefined, minutes: number) =>
+    session({ id, parentSessionId: parent, status: 'exited', exitCode: 0, createdAt: at(minutes) })
+
+  // A PTY session belongs to the OpenCode session that spawned it, so the panel groups
+  // them the way the web sidebar does instead of listing one flat pile.
+  test('keeps each parent conversation together', () => {
+    const groups = groupsForDisplay([
+      running('a1', ME, 5),
+      running('a2', ME, 4),
+      running('b1', OTHER, 6),
+    ])
+    const byKey = new Map(groups.map((group) => [group.key, group.sessions.map((s) => s.id)]))
+    expect(byKey.get(ME)).toEqual(['a1', 'a2'])
+    expect(byKey.get(OTHER)).toEqual(['b1'])
+  })
+
+  // A glance is for the thing that is alive. The shared order alone puts groups purely by
+  // age, so a conversation started an hour ago with one live process would sit below one
+  // started a minute ago with nothing running.
+  test('puts a group with a running session first', () => {
+    const groups = groupsForDisplay([done('old-1', ME, 1), running('fresh-1', OTHER, 60)])
+    expect(groups.map((group) => group.key)).toEqual([OTHER, ME])
+  })
+
+  // The partition must not reshuffle anything: whatever the SHARED rule produced keeps its
+  // order inside each half, and only the halves swap. Stated that way because an earlier
+  // version of this case asserted the INPUT order, which the shared sort has already
+  // replaced - so it would have described a bug as the expected result.
+  test('keeps the shared order inside each half and only swaps the halves', () => {
+    const list = [
+      running('live-old', ME, 1),
+      running('live-new', OTHER, 60),
+      done('dead-a', 'session-c', 2),
+      done('dead-b', 'session-d', 90),
+    ]
+    const shared = groupSessionsByParent(list).map((group) => group.key)
+    const live = shared.filter((key) => key === ME || key === OTHER)
+    const dead = shared.filter((key) => key !== ME && key !== OTHER)
+    expect(groupsForDisplay(list).map((group) => group.key)).toEqual([...live, ...dead])
+    // And the halves really are ordered by liveness, not by accident of the input.
+    const actual = groupsForDisplay(list).map((group) => group.key)
+    expect(actual.indexOf(OTHER)).toBeLessThan(actual.indexOf('session-d'))
+    expect(actual.indexOf(ME)).toBeLessThan(actual.indexOf('session-c'))
+  })
+
+  // A session started by hand has no parent, and `groupSessionsByParent` gives it the
+  // empty-key bucket. It must still be reachable - the panel would otherwise silently
+  // hide every session the user started themselves.
+  test('a session with no parent is grouped, not dropped', () => {
+    const groups = groupsForDisplay([session({ id: 'hand-made', parentSessionId: undefined })])
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.key).toBe('')
+    expect(groups[0]?.sessions.map((s) => s.id)).toEqual(['hand-made'])
+    expect(groups[0]?.parentSessionId).toBeUndefined()
+  })
+
+  // A blank parent id is the same case as a missing one: the shared rule trims it, and a
+  // group keyed on an empty string that claims to have a parent would be a lie.
+  test('a blank parent id counts as no parent', () => {
+    const groups = groupsForDisplay([session({ id: 'blank', parentSessionId: '   ' })])
+    expect(groups[0]?.key).toBe('')
+    expect(groups[0]?.parentSessionId).toBeUndefined()
+  })
+
+  // The agent name rides along so the header can show it, and it is the SHARED field:
+  // a second place that formats it would be a second answer.
+  test('carries the agent that started the group', () => {
+    const groups = groupsForDisplay([
+      session({ id: 'x', parentSessionId: ME, parentAgent: 'build' }),
+    ])
+    expect(groups[0]?.parentAgent).toBe('build')
+  })
+
+  test('no sessions means no groups', () => {
+    expect(groupsForDisplay([])).toEqual([])
+  })
+
+  test('leaves the input alone', () => {
+    const list = [running('a', ME, 1), running('b', OTHER, 2)]
+    groupsForDisplay(list)
+    expect(list).toHaveLength(2)
   })
 })

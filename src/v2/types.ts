@@ -1,4 +1,5 @@
 import type { Plugin } from '@opencode/plugin'
+import type { RetentionPolicy } from '../plugin/pty/session-store.ts'
 
 export interface OpencodePtyOptions {
   /**
@@ -18,6 +19,23 @@ export interface OpencodePtyOptions {
    * Default is false (started on-demand when slash command is executed).
    */
   autostart?: boolean
+
+  /**
+   * How long archived sessions are kept, and how many.
+   *
+   * `maxSessions` is a count cap, `maxAgeDays` an age cap, and `maxBytesPerSession` a
+   * per-session log cap beyond which the log rotates once. Both caps are enforced on the
+   * shared on-disk archive, so they belong here rather than in a viewer's preferences: a
+   * per-browser cap could not bind an index every client reads.
+   *
+   * Changing a cap takes effect at once - `updateRetention` re-prunes - and lowering one
+   * removes sessions immediately. They are renamed to `.trash` rather than deleted and stay
+   * restorable until the next start, the same undo window a normal removal gets.
+   *
+   * Anything omitted keeps its default: `{ maxSessions: 200, maxAgeDays: 14,
+   * maxBytesPerSession: 5 * 1024 * 1024 }`.
+   */
+  retention?: Partial<RetentionPolicy>
 }
 
 /**
