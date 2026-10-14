@@ -158,13 +158,25 @@ export class SessionLifecycleManager {
   }
 
   private spawnProcess(session: PTYSession): void {
-    const env = { ...process.env, ...session.env } as Record<string, string>
     const ptyProcess: IPty = spawn(session.command, session.args, {
       name: 'xterm-256color',
       cols: session.cols,
       rows: session.rows,
       cwd: session.workdir,
-      env,
+      // The WHOLE environment, always.
+      //
+      // `session.env` holds only what a caller asked to ADD - the tool schema
+      // says "additional environment variables", and this layer is also reached
+      // from the web UI and the SDK, which pass additions too. bun-pty 0.5.0
+      // replaced its old merge-over-parent behaviour, so a map handed over as-is
+      // is now the child's entire environment: a session spawned with
+      // `{ env: { CI: '1' } }` would get no PATH, no HOME and no TERM, and fail
+      // for a reason that has nothing to do with what the caller asked for.
+      //
+      // So the merge is unconditional rather than "only when env was given".
+      // Merging unconditionally also removes a branch: `env` has one meaning
+      // here, and it is not "whatever the caller happened to pass".
+      env: { ...process.env, ...session.env } as Record<string, string>,
     })
     session.process = ptyProcess
     session.pid = ptyProcess.pid

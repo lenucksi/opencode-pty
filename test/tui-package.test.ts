@@ -1,8 +1,30 @@
 import { describe, expect, it } from 'bun:test'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import manifest from '../package.json' with { type: 'json' }
+
+/**
+ * The SDK we build against, read from the INSTALL rather than written down.
+ *
+ * Its own peer floors are the thing ours must not fall below, and a hand-kept copy of
+ * them is exactly the kind of value that looks right and is not - it drifts the moment
+ * either side moves, and nothing notices until a host satisfies the SDK and fails us.
+ *
+ * Read through the filesystem rather than imported, because `@opencode/plugin` does not
+ * export its `package.json` - an `import ... with { type: 'json' }` against it is a
+ * TS2307, since the exports map has no entry for the file.
+ */
+function readSdkPeers(): Record<string, string> {
+  const file = resolve(import.meta.dir, '../node_modules/@opencode/plugin/package.json')
+  const parsed: unknown = JSON.parse(readFileSync(file, 'utf8'))
+  if (typeof parsed !== 'object' || parsed === null)
+    throw new Error('the SDK manifest is not an object')
+  const peers = (parsed as { peerDependencies?: unknown }).peerDependencies
+  if (typeof peers !== 'object' || peers === null)
+    throw new Error('the SDK declares no peer dependencies')
+  return peers as Record<string, string>
+}
 
 /**
  * The manifest contract for the TUI entrypoint.
@@ -58,24 +80,88 @@ describe('the TUI entrypoint behind the V2 subpath', () => {
 })
 
 describe('the TUI dependencies', () => {
-  // The floors are the SDK's own peer dependencies, copied rather than chosen:
-  // a host that satisfies @opencode/plugin satisfies us. Getting them from the
-  // package that declares them is the only way they cannot drift apart.
+  // The floors are the SDK's own peer dependencies, read from the INSTALLED
+  // @opencode/plugin rather than written down here.
+  //
+  // Written down, they were a copy that could drift: a comment said they were
+  // "the SDK's own, copied rather than chosen", and the two did drift the moment
+  // either side moved. Importing the installed manifest makes the assertion a
+  // statement about the relationship - we ask for at least what the host does -
+  // instead of about a pair of strings that have to be kept in step by hand.
+  //
   // `as const` so the names stay literal types: the imported JSON is typed by its
   // own keys, so indexing it with a widened `string` would be an implicit any.
   const names = ['@opencode/theme', '@opentui/core', '@opentui/solid', 'solid-js'] as const
 
-  const expected: Record<(typeof names)[number], string> = {
-    '@opencode/theme': '>=2.0.23',
-    '@opentui/core': '>=0.5.14',
-    '@opentui/solid': '>=0.5.14',
-    'solid-js': '>=1.9.0',
+  const sdkPeers = readSdkPeers()
+
+  // Takes `string | undefined` on purpose. Under `noUncheckedIndexedAccess` an index
+  // into a record is `string | undefined`, and a package that stopped declaring one of
+  // these is exactly the situation worth failing on - with a message naming it, rather
+  // than a TypeError from inside the parser.
+  //
+  // Compared as a TUPLE, not with `Number()`: `Number('2.0.29')` is NaN, because a
+  // version is not a decimal. A numeric compare on the string parses every version
+  // snippet after the first dot as NaN, which makes `>=` false for every pair and turns
+  // the case into "always fails", first measured exactly like that.
+  const parseFloor = (
+    range: string | undefined,
+    who: string
+  ): readonly [number, number, number] => {
+    const digits = range?.replace(/^>=/, '').match(/\d+\.\d+\.\d+/)?.[0]
+    if (digits === undefined) {
+      throw new Error(`${who} declares no comparable version floor: ${String(range)}`)
+    }
+    const [major, minor, patch] = digits.split('.').map((part) => Number(part))
+    if (major === undefined || minor === undefined || patch === undefined) {
+      throw new Error(`${who} has no three-part version: ${digits}`)
+    }
+    return [major, minor, patch] as const
   }
 
-  it('declares the same floors the SDK declares', () => {
-    for (const name of names) {
-      expect(manifest.peerDependencies[name]).toBe(expected[name])
+  /**
+   * Component-wise `>=` on the parsed tuples.
+   *
+   * Kept as a named function rather than an inline array comparison so the meaning is
+   * in one place, and as the only place: comparing `[2, 0, 29]` to `[2, 0, 29]` with an
+   * array `===` compares object identity, not contents, which is the other way to get
+   * this wrong and both ways end up "always false".
+   */
+  const ge = (
+    ours: readonly [number, number, number],
+    atLeast: readonly [number, number, number]
+  ): boolean => {
+    for (const index of [0, 1, 2]) {
+      const a = ours[index]
+      const b = atLeast[index]
+      if (a === b) continue
+      return (a ?? 0) > (b ?? 0)
     }
+    return true
+  }
+
+  it('asks for at least the floor the SDK asks for', () => {
+    // The invariant, and the only part of it that is a real requirement: a host
+    // that satisfies @opencode/plugin must satisfy us too. Ours may be HIGHER -
+    // we pin opentui to the newest release and rely on a fix only 0.6.x has - but
+    // never lower, or a host could satisfy the SDK and fail us.
+    for (const name of names) {
+      const ours = manifest.peerDependencies[name]
+      expect(ours).toBeDefined()
+      const ok =
+        parseFloor(ours, `our peerDependencies.${name}`) >=
+        parseFloor(sdkPeers[name], `the SDK's peerDependencies.${name}`)
+      expect({ name, ok }).toEqual({ name, ok: true })
+    }
+  })
+
+  it('names the newest opentui it builds against', () => {
+    // Not a drift guard: a statement of the decision. The panel needs a scrollbox
+    // with multi-line text, which renders nothing before 0.6.x - measured against
+    // both, 0.5.14 shows the OLDEST lines and 0.6.6 the newest - so a floor below
+    // 0.6.0 would promise a version that cannot render the panel's console.
+    expect(manifest.peerDependencies['@opentui/solid']).toBe('>=0.6.6')
+    expect(manifest.peerDependencies['@opentui/core']).toBe('>=0.6.6')
   })
 
   it('marks every one of them optional, so installing without a TUI still works', () => {
@@ -97,10 +183,19 @@ describe('the TUI dependencies', () => {
 
   it('pins the development versions to the floors it claims', () => {
     // A floor the dev install does not satisfy would mean the panel is compiled
-    // against something older than it promises to need.
+    // against something older than it promises to need. Asserted as a range rather
+    // than as two exact strings, so taking a newer opentui is a normal bump and not a
+    // test edit - the previous form made every upgrade look like a regression.
     const dev = manifest.devDependencies
-    expect(dev['@opentui/solid']).toBe('0.5.14')
-    expect(dev['@opentui/core']).toBe('0.5.14')
+    for (const name of ['@opentui/core', '@opentui/solid'] as const) {
+      const pinned = dev[name]
+      expect(pinned).toBeDefined()
+      const ok = ge(
+        parseFloor(pinned, `our devDependencies.${name}`),
+        parseFloor(manifest.peerDependencies[name], `our peerDependencies.${name}`)
+      )
+      expect({ name, ok }).toEqual({ name, ok: true })
+    }
   })
 
   it('overrides @babel/core past the advisory that @opentui/solid pins into it', () => {

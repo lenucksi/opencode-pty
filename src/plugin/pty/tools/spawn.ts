@@ -77,6 +77,18 @@ export const ptySpawn = tool({
       await checkWorkdirPermission(args.workdir)
     }
 
+    // `args.env` is documented - in the schema, to the model - as ADDITIONAL
+    // variables, so it goes to the lifecycle layer exactly as it arrived. That
+    // layer merges it over the parent's environment, which is where the merge
+    // lives: it is the only place that knows a session can also be started from
+    // the web UI or the SDK, and duplicating the merge here was how the check
+    // and the spawn ended up disagreeing about the environment a command runs
+    // in. See `spawnProcess` in `session-lifecycle.ts` for why the merge is not
+    // optional.
+    //
+    // The executable check still needs the full environment, because it looks up
+    // the command in PATH.
+    //
     // Before the spawn, while the command is still just a string. A relative
     // path to a file without the execute bit otherwise comes back as a live
     // session whose pty helper has already aborted, so the model gets a Bun
