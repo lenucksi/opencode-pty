@@ -66,6 +66,15 @@ export interface PanelSession {
    * row below shows the status word rather than a duration.
    */
   readonly exitAt?: string
+  /**
+   * ISO: when the server recorded the process gone.
+   *
+   * Same meaning as `exitAt`, carried by records that were written before `exitAt`
+   * existed: after a restart the archive is still read, and its older entries answer
+   * only this. The duration function takes whichever of the two it finds, so a
+   * yesterday's run measures to its end rather than to the panel opening.
+   */
+  readonly endedAt?: string
 }
 
 /** Title column width in the sidebar. */
@@ -305,8 +314,12 @@ export function formatDetail(session: PanelSession): string {
 export function sessionDurationMs(session: PanelSession, now: number): number | null {
   const started = Date.parse(session.createdAt ?? '')
   if (!Number.isFinite(started)) return null
-  const stopped = Date.parse(session.exitAt ?? '')
-  return (Number.isFinite(stopped) ? stopped : now) - started
+  // The end of a stopped process is whichever stamp the record carries - `exitAt` on
+  // newer records, `endedAt` on ones that did not have the field when they were
+  // written. A record whose end the panel cannot read is timed to `now`, which is why
+  // the caller supplies the clock rather than this reading it.
+  const ended = Date.parse(session.exitAt ?? session.endedAt ?? '')
+  return (Number.isFinite(ended) ? ended : now) - started
 }
 
 /**

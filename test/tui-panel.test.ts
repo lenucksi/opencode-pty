@@ -1517,7 +1517,7 @@ describe('the PTY sidebar panel', () => {
       // the session rows. Asserted about ROWS rather than about the title being absent from the
       // frame, because the identity line above the console names the selected session - which is
       // what that line is for, and asserted here so the two cannot drift apart.
-      expect(frame).toContain('(aufklappen)')
+      expect(frame).toContain('(expand)')
       expect(frame.split('\n').some((line) => line.includes('•'))).toBe(false)
       expect(frame).toContain('two  ·  ')
       // And it names the conversation that started it, which is how a reader learns whose process
@@ -1529,7 +1529,7 @@ describe('the PTY sidebar panel', () => {
       const foldY = setup
         .captureCharFrame()
         .split('\n')
-        .findIndex((line) => line.includes('aufklappen'))
+        .findIndex((line) => line.includes('expand'))
       if (foldY < 0) throw new Error('no fold row on the frame')
       await setup.mockMouse.click(4, foldY)
       await setup.renderOnce()

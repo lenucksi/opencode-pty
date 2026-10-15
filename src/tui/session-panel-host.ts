@@ -4,6 +4,7 @@ import { isFinished, type PanelSession } from './lib.ts'
 import type { PanelState } from './panel-state.ts'
 import type { Tones } from './tones.ts'
 import { readScreen } from './server.ts'
+import { startScrollKeeper, type ScrollKeeper } from './scroll-keeper.ts'
 import { sessionPanelView } from './session-panel.ts'
 import {
   initialSessionPanelState,
@@ -72,35 +73,43 @@ export interface SessionPanelHost {
   readonly openWith: (session: PanelSession) => void
 }
 
+/**
+ * Read the selected session's screen, and say so in the panel when that fails.
+ *
+ * Separate from `sync` because it is the half that does I/O: a poll that does nothing
+ * when the panel is closed should not look like the same function as one that waits on
+ * a request, and a runner that mixes the two is the one nobody reads. Writes through the
+ * state store handed in, so a test can watch it land rather than read a log.
+ */
+async function readSelectedScreenInto(
+  setState: (mutate: (draft: SessionPanelState) => void) => void,
+  deps: SessionPanelHostDeps,
+  id: string
+): Promise<void> {
+  const origin = deps.origin()
+  if (origin === null) return
+  const now = Date.now()
+  try {
+    const screen = await readScreen(origin, id)
+    setState((draft) => noteSessionScreen(draft, screen, now))
+  } catch (error) {
+    // Said in the panel rather than only in the log: a screen that silently stayed on
+    // the previous session's output would read as the panel tracking the wrong process.
+    setState((draft) =>
+      noteSessionScreen(draft, `(could not read the screen: ${String(error)})`, now)
+    )
+    deps.debug('panel.screen.failed', { id, error: String(error) })
+  }
+}
+
 export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanelHost {
   const { context } = deps
   const [state, setState] = context.storage.memory<SessionPanelState>(SESSION_PANEL_KEY, {
     initial: initialSessionPanelState(),
   })
 
-  /**
-   * Read the selected session's screen, and say so in the panel when that fails.
-   *
-   * Separate from `sync` because it is the half that does I/O: a poll that does nothing
-   * when the panel is closed should not look like the same function as one that waits on
-   * a request, and a long function that mixes the two is the one nobody reads.
-   */
-  const readSelectedScreen = async (id: string): Promise<void> => {
-    const origin = deps.origin()
-    if (origin === null) return
-    const now = Date.now()
-    try {
-      const screen = await readScreen(origin, id)
-      setState((draft) => noteSessionScreen(draft, screen, now))
-    } catch (error) {
-      // Said in the panel rather than only in the log: a screen that silently stayed on
-      // the previous session's output would read as the panel tracking the wrong process.
-      setState((draft) =>
-        noteSessionScreen(draft, `(could not read the screen: ${String(error)})`, now)
-      )
-      deps.debug('panel.screen.failed', { id, error: String(error) })
-    }
-  }
+  const readSelectedScreen = (id: string): Promise<void> =>
+    readSelectedScreenInto(setState, deps, id)
 
   const sync = async (): Promise<void> => {
     const active = context.ui.panel.current()
@@ -123,7 +132,14 @@ export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanel
   // the store: `deps.select` is the one way this host changes the selection.
   // The one place this host changes the selection, kept as a local so the claim below can
   // be a plain function that receives it rather than a closure over the store.
-  const select = (id: string): void => setState((draft) => noteSessionSelected(draft, id))
+  const keeper: ScrollKeeper = startScrollKeeper()
+
+  const select = (id: string): void => {
+    setState((draft) => noteSessionSelected(draft, id))
+    // Re-arm on a fresh selection: the reader starts at the bottom of a session they
+    // have not read, exactly as they would have started one they never scrolled.
+    keeper.arm()
+  }
 
   // What the claim learned from its input, for the commands that need it.
   const panel: PanelActions = {}
@@ -132,7 +148,7 @@ export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanel
   const resetScope = (): void => setState((draft) => noteScopeChosen(draft, null))
 
   const register = (): void => {
-    claimSessionPanel(context, deps, state, select, sync, panel)
+    claimSessionPanel(context, deps, state, select, sync, panel, keeper)
     registerSessionPanelCommand(context, deps, resetScope)
   }
 
@@ -143,6 +159,10 @@ export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanel
       noteScopeChosen(draft, session.parentSessionId ?? null)
       noteSessionSelected(draft, session.id)
     })
+    // A freshly opened panel shows a session the reader has not read: its bottom row
+    // comes first, so the keeper is armed rather than left where the previous
+    // selection's scroll left it.
+    keeper.arm()
     context.ui.panel.open(SESSION_PANEL_NAME)
     // The screen is read on the poll, so the panel opens showing the SELECTED row rather than
     // the previous one's output until the next tick.
@@ -163,7 +183,8 @@ function claimSessionPanel(
   state: SessionPanelState,
   select: (id: string) => void,
   sync: () => Promise<void>,
-  panel: PanelActions
+  panel: PanelActions,
+  keeper: ScrollKeeper
 ): void {
   context.ui.slot({
     append: 'session.panel',
@@ -195,6 +216,7 @@ function claimSessionPanel(
         // and the host writes it. No `sync()` afterwards - the store change alone
         // re-renders the panel, and a second read of the screen buys nothing.
         onToggleList: () => noteSessionListToggled(state),
+        onConsoleCanvas: (canvas) => keeper.attach(canvas),
       })
     },
   })

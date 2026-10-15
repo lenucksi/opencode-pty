@@ -378,8 +378,8 @@ describe('sessionPanelView', () => {
     // the fold would look dead when it was simply not on row 1 any more - the same reason
     // `clickCloseControl` reads its column from the frame.
     const foldRow = (): { y: number } => {
-      const open = 'aufklappen'
-      const closed = 'zuklappen'
+      const open = 'expand'
+      const closed = 'collapse'
       for (const [y, line] of setup.captureCharFrame().split('\n').entries()) {
         if (line.includes(open) || line.includes(closed)) {
           return { y }
@@ -391,7 +391,7 @@ describe('sessionPanelView', () => {
     // Clicking the fold row turns the state over, and that is what this test can measure:
     // the headless render holds the tree it drew first, so the frame below stays a
     // snapshot of the folded list even after the click lands - which is why a frame
-    // assertion here would always say "aufklappen" and look like a dead fold. What the
+    // assertion here would always say "expand" and look like a dead fold. What the
     // states LOOK like is the next test's claim, on a state rendered as it is.
     await setup.mockMouse.click(2, foldRow().y)
     await setup.renderOnce()
@@ -411,7 +411,7 @@ describe('sessionPanelView', () => {
     )
     const folded = await frame(() => sessionPanelView(view({ state })))
     expect(folded).toContain('▸')
-    expect(folded).toContain('(aufklappen)')
+    expect(folded).toContain('(expand)')
     expect(folded).not.toContain('two')
 
     const open = initialSessionPanelState()

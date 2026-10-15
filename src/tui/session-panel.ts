@@ -12,6 +12,7 @@ import {
   sessionDurationMs,
 } from './lib.ts'
 import type { Tones } from './tones.ts'
+import type { ScrollCanvas } from './scroll-keeper.ts'
 import { type SessionPanelState, selectedLive, visibleRows } from './session-panel-state.ts'
 
 /**
@@ -57,6 +58,13 @@ export interface SessionPanelView {
   readonly onSelect: (id: string) => void
   /** Fold the session list open or closed. The click on its header row. */
   readonly onToggleList: () => void
+  /**
+   * Hand over the console's scrollable, once the frame drew it.
+   *
+   * The keeper outside watches the reader's position against the poll; the view stays
+   * a pure function of inputs and neither owns nor keeps the canvas.
+   */
+  readonly onConsoleCanvas?: (canvas: ScrollCanvas) => void
   /**
    * A conversation's title, for the line that names the process on screen.
    *
@@ -273,6 +281,10 @@ function framedScreen(view: SessionPanelView): unknown {
       minHeight: 0,
       stickyScroll: true,
       stickyStart: 'bottom',
+      // Hand the scrollable to the host once it exists: the keeper outside decides
+      // from the reader's position whether the next poll may drag the view, and the
+      // view itself stays a pure function of what it is told.
+      ref: (value: ScrollCanvas) => view.onConsoleCanvas?.(value),
       children: jsx('text', { children: (): string => view.state.screen }),
     }),
   })
@@ -309,8 +321,8 @@ function listHeader(view: SessionPanelView, count: number, expanded: boolean): u
         flexGrow: 1,
         fg: view.tones.base,
         children: expanded
-          ? `${count} Session${count === 1 ? '' : 'en'}`
-          : `${count} Session${count === 1 ? '' : 'en'}…  (aufklappen)`,
+          ? `${count} session${count === 1 ? '' : 's'}`
+          : `${count} session${count === 1 ? '' : 's'}…  (expand)`,
       }),
     ],
   })
@@ -338,7 +350,7 @@ export function sessionPanelView(view: SessionPanelView) {
                     width: '100%',
                     flexShrink: 0,
                     fg: view.tones.muted,
-                    children: `   … und ${overflow} weitere in der Sidebar`,
+                    children: `   … and ${overflow} more in the sidebar`,
                   }),
                 ]
               : []),

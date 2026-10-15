@@ -173,6 +173,18 @@ describe('sessionDurationMs', () => {
     expect(ms).toBe(150_000)
   })
 
+  // Older archive records carry `endedAt` instead of `exitAt`: the field was added in
+  // the release, and the archive is read after a restart. A record the panel cannot
+  // time would otherwise show the hours since the panel opened, which is the shape the
+  // reader measured (a 19-second build read as 17h).
+  it('measures a stopped session to endedAt when there is no exitAt', () => {
+    const ms = sessionDurationMs(
+      session({ createdAt: start, endedAt: '2026-01-01T10:00:19.000Z' }),
+      Date.parse('2026-01-01T11:00:00.000Z')
+    )
+    expect(ms).toBe(19_000)
+  })
+
   // This is what `exitAt` is for: without it, a stopped session would measure to
   // "now" and a transcript read an hour later would claim to have run an hour.
   it('measures a stopped session to its exit, not to now', () => {

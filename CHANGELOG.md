@@ -239,6 +239,16 @@ beside the built-in sidebar items rather than replacing them.
 
 ### Fixed
 
+- **The console stays where the reader scrolled it, and the texts speak one language.** A reader
+  who scrolled up in a PTY console was dragged back to the bottom by the next poll, because the
+  scrollbox pinned itself unconditionally. The pin is now a decision (`scroll-keeper.ts`): it holds
+  only while the reader is at the bottom, releases while they are away - the view keeps its rows -
+  and resumes when they return. A fresh selection arms it, so a session the reader has not read
+  starts at its bottom like any screen they never scrolled. The host's own transcript is the
+  reference for the same rule. The run timer reads `endedAt` where a record has no `exitAt`, which
+  is what a 19-second build needed to stop claiming it had run 17 hours. And the session panel's
+  German leftovers (`N Sessionen… (aufklappen)`, `… und N weitere in der Sidebar`) are English,
+  like the sidebar next to them already was.
 - **The send dialog survived the gesture that opened it, and grew the keys it was missing.** The
   dialog asked for on the panel header's mouse-down was dead on arrival: a click delivers a
   mouse-down and a mouse-up, and by release time the host's dialog backdrop sat under the pointer,
