@@ -6,6 +6,7 @@ import {
   decodeScreen,
   finishedSessions,
   formatDetail,
+  formatStamp,
   formatDuration,
   headerLabel,
   isFinished,
@@ -13,6 +14,7 @@ import {
   type PanelSession,
   resolveParentTitles,
   rowLabel,
+  sessionIdentity,
   rowTone,
   sessionDurationMs,
   tail,
@@ -408,4 +410,65 @@ describe('resolveParentTitles', () => {
       ses_one: 'Build',
     })
   })
+})
+
+describe('sessionIdentity', () => {
+  const started = '2026-10-14T22:24:00Z'
+
+  it('names the four things that identify a process', () => {
+    const line = sessionIdentity(
+      session({
+        parentSessionId: 'ses_davx5',
+        title: 'Lizenz-Hashes erzeugen',
+        status: 'exited',
+        exitCode: 1,
+        createdAt: started,
+      }),
+      'davx5 build'
+    )
+    expect(line).toContain('Lizenz-Hashes erzeugen')
+    expect(line).toContain(formatStamp(started))
+    // The state comes from the same helper a row uses, so the two cannot disagree.
+    expect(line).toContain('exit 1')
+    expect(line).toContain('started by davx5 build')
+  })
+
+  // The measured case: the parent is a conversation from another project, so the host has no title
+  // for it - and that is NOT the same as a session nobody\u2019s conversation started.
+  it('falls back to the parent id when the host cannot name it', () => {
+    const line = sessionIdentity(session({ parentSessionId: 'ses_elsewhere' }), undefined)
+    expect(line).toContain('started by ses_elsewhere')
+    expect(line).not.toContain('started by hand')
+  })
+
+  it('says so when no conversation started it', () => {
+    const line = sessionIdentity(session({ parentSessionId: undefined }), 'davx5 build')
+    expect(line).toContain('started by hand')
+  })
+
+  // Never just separators: an untitled session is named by its id.
+  it('falls back to the id for a session with no title', () => {
+    const line = sessionIdentity(session({ title: '', status: 'running', lineCount: 7 }), undefined)
+    expect(line).toContain('pty_1')
+    expect(line).toContain('7L')
+  })
+})
+
+describe('formatStamp', () => {
+  it('is empty for a missing or unreadable stamp', () => {
+    expect(formatStamp(undefined)).toBe('')
+    expect(formatStamp('not a date')).toBe('')
+  })
+
+  // Locale-formatted on purpose, so the shape is all that can be asserted - the reader is the one
+  // who has to read it.
+  it('renders a local date and time', () => {
+    const stamp = formatStamp(started_iso())
+    expect(stamp).toContain('2026')
+    expect(stamp.length).toBeGreaterThan(8)
+  })
+
+  function started_iso(): string {
+    return '2026-10-14T22:24:00Z'
+  }
 })

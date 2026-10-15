@@ -4,6 +4,7 @@ import { jsx } from '@opentui/solid/jsx-runtime'
 import {
   formatDuration,
   isFinished,
+  sessionIdentity,
   type PanelSession,
   ROW_BULLET,
   rowLabel,
@@ -56,6 +57,14 @@ export interface SessionPanelView {
   readonly onSelect: (id: string) => void
   /** Fold the session list open or closed. The click on its header row. */
   readonly onToggleList: () => void
+  /**
+   * A conversation's title, for the line that names the process on screen.
+   *
+   * A resolver rather than a string, because the parent can be a conversation this project has
+   * never opened - the sidebar lists PTYs from every project - and then there is no title to be had
+   * and the line has to fall back to the stable id.
+   */
+  readonly parentName: (id: string | undefined) => string | undefined
 }
 
 /** One row, with the selected one marked. */
@@ -158,6 +167,33 @@ function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
         },
       }),
     ],
+  })
+}
+
+/**
+ * The line above the console: which process is on screen.
+ *
+ * ABOVE the console rather than in the footer, because the console is scrolled content and the
+ * identity of what is being scrolled has to be readable without scrolling to it. It is also the
+ * answer a reader needs after clicking a row in the sidebar: the sidebar lists every project's
+ * processes, so `started by ...` is how they learn whose process they landed on.
+ *
+ * Empty when nothing is selected, and then the row is not drawn at all - a blank line above an empty
+ * panel is a row nobody can use.
+ */
+function identityLine(view: SessionPanelView, chosen: PanelSession): unknown {
+  return jsx('box', {
+    height: 1,
+    flexShrink: 0,
+    width: '100%',
+    children: jsx('text', {
+      fg: view.tones.base,
+      // One line, always: the panel is wide but the line is long, and a wrapped identity pushes the
+      // console down by a row for nothing.
+      wrapMode: 'none',
+      flexShrink: 1,
+      children: sessionIdentity(chosen, view.parentName(chosen.parentSessionId)),
+    }),
   })
 }
 
@@ -322,6 +358,13 @@ export function sessionPanelView(view: SessionPanelView) {
     width: '100%',
     flexGrow: 1,
     minHeight: 0,
-    children: screen === undefined ? [header, list, footer] : [header, screen, list, footer],
+    children: [
+      header,
+      // Only with something selected: an empty identity row is a row nobody can use.
+      ...(chosen === null ? [] : [identityLine(view, chosen)]),
+      ...(screen === undefined ? [] : [screen]),
+      list,
+      footer,
+    ],
   })
 }

@@ -8,6 +8,7 @@ import {
   initialSessionPanelState,
   LOADING_SCREEN,
   NO_SELECTION_SCREEN,
+  noteScopeChosen,
   noteSessionListToggled,
   noteSessionPanelInput,
   noteSessionPanelList,
@@ -205,6 +206,43 @@ describe('noteSessionScreen', () => {
     expect(state.now).toBe(1234)
   })
 
+  // The measured failure this scope exists for: the sidebar lists PTYs from EVERY project, so a
+  // row can name a conversation this panel's session is not - and filtering by the panel's own
+  // session then listed NOTHING for it, in every tab. `ses_ed48fd0ce…`, a davx5 session from the day
+  // before, was the parent of seven runs the sidebar showed and no panel could.
+  test('lists the conversation a click named, not the panel\u2019s own session', () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelInput(state, ME)
+    noteScopeChosen(state, OTHER)
+    noteSessionPanelList(
+      state,
+      [
+        session({ id: 'mine', parentSessionId: ME }),
+        session({ id: 'theirs', parentSessionId: OTHER }),
+      ],
+      ME
+    )
+    expect(state.sessions.map((entry) => entry.id)).toEqual(['theirs'])
+  })
+
+  // A palette open means "this conversation", so the scope a click set has to go.
+  test('goes back to its own conversation when the scope is cleared', () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelInput(state, ME)
+    noteScopeChosen(state, OTHER)
+    noteSessionPanelList(state, [session({ id: 'theirs', parentSessionId: OTHER })], ME)
+    noteScopeChosen(state, null)
+    noteSessionPanelList(
+      state,
+      [
+        session({ id: 'mine', parentSessionId: ME }),
+        session({ id: 'theirs', parentSessionId: OTHER }),
+      ],
+      ME
+    )
+    expect(state.sessions.map((entry) => entry.id)).toEqual(['mine'])
+  })
+
   // A read that lands after the reader moved on must not overwrite what they are now
   // looking at.
   test('is ignored when nothing is selected', () => {
@@ -225,6 +263,9 @@ describe('sessionPanelView', () => {
     onSend: () => {},
     onSelect: () => {},
     onToggleList: () => {},
+    // No host lookup in a frame case: a session with a parent then says `started by <id>`, which is
+    // the fallback the line is built to fall back to.
+    parentName: () => undefined,
     ...over,
   })
 

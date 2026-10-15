@@ -24,6 +24,17 @@ export interface SessionPanelState {
    * this on.
    */
   sessionID: string | null
+  /**
+   * Whose PTYs the list shows, or null to mean "the session this panel was opened in".
+   *
+   * A scope exists because the sidebar lists PTYs from EVERY project while a panel belongs to one
+   * session: a row clicked for a process whose conversation lives in another project could never be
+   * listed anywhere - measured on the author's machine, seven `Lizenz-Hashes erzeugen` runs whose
+   * parent was a davx5 session from the day before, shown by the sidebar and by no panel at all.
+   * Clicking such a row sets this to the row's parent, which needs no session to exist: it is the
+   * key the PTY was recorded under.
+   */
+  scope: string | null
   /** This session's PTY sessions, in display order. */
   sessions: PanelSession[]
   /** Which one is on screen, or null when the list is empty. */
@@ -46,6 +57,7 @@ export interface SessionPanelState {
 export function initialSessionPanelState(): SessionPanelState {
   return {
     sessionID: null,
+    scope: null,
     sessions: [],
     selected: null,
     screen: '',
@@ -69,6 +81,17 @@ export const LOADING_SCREEN = 'loading…'
  * and the web UI, which hold them all.
  */
 export const SESSION_ROW_LIMIT = 10
+
+/**
+ * Show the processes of the conversation this id names, or of the panel's own session when null.
+ *
+ * Set by a click on a sidebar row, which carries the conversation that started the process - the
+ * only thing that can be listed for a process from another project. A palette open clears it, so
+ * the panel goes back to meaning "this conversation".
+ */
+export function noteScopeChosen(state: SessionPanelState, scope: string | null): void {
+  state.scope = scope
+}
 
 /**
  * The rows the expanded list draws, capped, plus how many did not fit.
@@ -132,7 +155,7 @@ export function noteSessionPanelList(
   sessions: readonly PanelSession[],
   sessionID: string
 ): void {
-  const mine = sessionsForSession(sessions, sessionID)
+  const mine = sessionsForSession(sessions, state.scope ?? sessionID)
   state.sessions = mine
   const stillThere = mine.some((session) => session.id === state.selected)
   if (stillThere) return

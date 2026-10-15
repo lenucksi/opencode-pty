@@ -137,6 +137,54 @@ export function resolveParentTitles(
 }
 
 /**
+ * A local date and time, for a session's identity line.
+ *
+ * `formatClock` prints a time, which is right for a run that started minutes ago and useless for one
+ * that started yesterday - and these outlive the day they started in, so the line has to say which
+ * day. Locale-formatted, like `formatClock` next door, because the reader is the one who has to read
+ * it.
+ */
+export function formatStamp(iso: string | undefined): string {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString([], {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+}
+
+/**
+ * Who a session is: its title, when it started, how it ended, and what started it.
+ *
+ * The four things that answer "which process am I looking at", for the line above the console. The
+ * state comes from `rowTail`, so the line and the row cannot disagree about whether a run is
+ * `exit 2` or still counting lines. `parent` is resolved by the caller, which is the only one
+ * holding the host's session lookup - and a session started by hand says so rather than leaving the
+ * field blank, because "nobody's conversation started this" is the answer for one.
+ */
+export function sessionIdentity(session: PanelSession, parentName: string | undefined): string {
+  // The parent is decided by the SESSION, not by the lookup: a conversation from another project has
+  // no title to resolve here, and that is not the same as a session nobody's conversation started.
+  const parent =
+    session.parentSessionId === undefined
+      ? 'started by hand'
+      : `started by ${parentName !== undefined && parentName.length > 0 ? parentName : session.parentSessionId}`
+  return [
+    session.title && session.title.length > 0 ? session.title : session.id,
+    formatStamp(session.createdAt),
+    rowTail(session),
+    parent,
+  ]
+    .filter((part) => part.length > 0)
+    .join('  ·  ')
+}
+
+/**
  * A row's text WITHOUT its bullet, so the caller can colour the bullet
  * separately - the built-in sidebar items style the glyph and leave the label
  * in the normal text colour.

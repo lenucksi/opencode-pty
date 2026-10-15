@@ -352,10 +352,13 @@ Without this panel having an exit of its own, opening it left no way back except
 killing the terminal. `f3` does nothing below 80 columns: OpenCode forces the panel
 full-screen there, so there is no half to swap back to.
 
-Clicking a running session in the sidebar opens this panel with that session on screen.
-The footer names it and counts it — id, status, terminal size, output lines, and how many
-rows of the rendered screen are on view. Size matters: a program given 120x40 and shown in
-80 columns is wrapping, not failing.
+Clicking a session in the sidebar opens this panel on it — including one whose conversation lives in
+another project, which the sidebar lists but no panel used to show: the click scopes the panel to the
+conversation that started the process, and the parent id needs no live session to do that. The line
+above the console names what is on screen (title, date, state, and the conversation that started it),
+and the footer counts it — id, status, terminal size, output lines, and how many rows of the rendered
+screen are on view. Size matters: a program given 120x40 and shown in 80 columns is wrapping, not
+failing.
 
 ### Driving the program on screen
 

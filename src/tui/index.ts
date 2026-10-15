@@ -279,7 +279,7 @@ export default Plugin.define({
      * it, and one gesture now gets a reader from the sidebar to the output.
      */
     const onOpen = (session: PanelSession): void => {
-      sessionPanelHost.openWith(session.id)
+      sessionPanelHost.openWith(session)
     }
 
     /**

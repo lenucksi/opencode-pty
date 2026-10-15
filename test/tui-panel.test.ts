@@ -571,11 +571,17 @@ async function clickFooter(observed: Observed): Promise<void> {
  * session, and a fixture that fabricated one would not notice if the shape the
  * server serves had drifted from the shape the panel reads.
  */
-async function spawnSession(title: string, command = 'true', args: string[] = []): Promise<string> {
+async function spawnSession(
+  title: string,
+  command = 'true',
+  args: string[] = [],
+  /** The conversation to record as the one that started it; the panel's own by default. */
+  parentSessionId = 'test-parent-session'
+): Promise<string> {
   const started = await ptySpawn.execute(
     { command, args, title, description: 'tui panel test' },
     {
-      sessionID: 'test-parent-session',
+      sessionID: parentSessionId,
       messageID: 'msg-1',
       agent: 'test-agent',
       abort: new AbortController().signal,
@@ -1329,6 +1335,42 @@ describe('the PTY sidebar panel', () => {
     }
   })
 
+  // The click that used to show NOTHING, measured: seven `Lizenz-Hashes erzeugen` runs whose parent
+  // was a davx5 conversation from the day before, listed by the sidebar and by no panel - because
+  // the panel filtered by ITS session, and that conversation is another project's. The row carries
+  // the conversation that started the process, and that is what the panel now lists.
+  test('a click on a foreign row shows the processes of the conversation that started it', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('elsewhere', 'sh', ['-c', 'exit 1'], 'ses_another-project')
+      const seen = observed()
+      // The conversation the process came from may not even be one this project has open, so the
+      // host cannot name it - which is the case the identity line has to survive.
+      seen.sessionTitles['ses_another-project'] = 'davx5 build'
+      await tuiPanel.setup(makeContext(seen))
+      // Expanded, and with the archive open: a finished run is only a row when it carries news.
+      const prefs = prefsOf(seen)
+      prefs.collapsed = false
+      prefs.showFinished = true
+      await waitForRow(seen, 'elsewhere', 'exited')
+
+      await clickSidebarRow(seen, 'elsewhere')
+
+      const store = seen.stores.get('opencode-pty.session-panel') as
+        | { scope?: string | null; sessions?: { title?: string }[] }
+        | undefined
+      const listed = await waitFor(() =>
+        (store?.sessions?.length ?? 0) > 0 ? store?.sessions : undefined
+      )
+      // The clicked conversation's processes - not the empty list this panel's own session would
+      // produce.
+      expect(store?.scope).toBe('ses_another-project')
+      expect(listed?.map((entry) => entry.title)).toEqual(['elsewhere'])
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
   // Expanding the sidebar is the only trigger that may start a server, and opening this
   // panel asks for the same thing, so it is the same trigger. Otherwise the panel would
   // be empty on a host where nothing else ever asked for one - and the empty state says
@@ -1472,11 +1514,15 @@ describe('the PTY sidebar panel', () => {
       expect(frame).toContain('PTY')
       expect(frame).toContain('2 sessions')
       // The list is FOLDED by default, and that is what a frame shows: the fold row, not
-      // the session rows. Asserting `two` on a folded frame would fail on the design the
-      // panel chose because its rows used to cost the console a third of the panel, so the
-      // rows are only on a frame rendered with the fold open.
+      // the session rows. Asserted about ROWS rather than about the title being absent from the
+      // frame, because the identity line above the console names the selected session - which is
+      // what that line is for, and asserted here so the two cannot drift apart.
       expect(frame).toContain('(aufklappen)')
-      expect(frame).not.toContain('two')
+      expect(frame.split('\n').some((line) => line.includes('•'))).toBe(false)
+      expect(frame).toContain('two  ·  ')
+      // And it names the conversation that started it, which is how a reader learns whose process
+      // they are looking at.
+      expect(frame).toContain('started by test-parent-session')
 
       // The click goes to the fold's row, which it actually drew rather than a row
       // position from a list that was on screen before the fold existed.

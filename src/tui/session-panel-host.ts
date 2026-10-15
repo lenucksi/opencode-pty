@@ -8,6 +8,7 @@ import { sessionPanelView } from './session-panel.ts'
 import {
   initialSessionPanelState,
   noteSessionListToggled,
+  noteScopeChosen,
   noteSessionPanelInput,
   noteSessionPanelList,
   noteSessionScreen,
@@ -62,7 +63,13 @@ export interface SessionPanelHost {
    * clicked is the one they get. Opening first would show the panel on whatever was selected
    * before, which reads as the click having done nothing.
    */
-  readonly openWith: (sessionID: string) => void
+  /**
+   * Open the panel on this session, showing the conversation that started it.
+   *
+   * The whole session rather than its id: the sidebar row knows which conversation commissioned
+   * the process, and for one from another project that is the only list it can appear in.
+   */
+  readonly openWith: (session: PanelSession) => void
 }
 
 export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanelHost {
@@ -121,15 +128,21 @@ export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanel
   // What the claim learned from its input, for the commands that need it.
   const panel: PanelActions = {}
 
+  /** Dropping a scope a click set, so the panel means this conversation again. */
+  const resetScope = (): void => setState((draft) => noteScopeChosen(draft, null))
+
   const register = (): void => {
     claimSessionPanel(context, deps, state, select, sync, panel)
-    registerSessionPanelCommand(context, deps)
+    registerSessionPanelCommand(context, deps, resetScope)
   }
 
   const registerClose = (): void => registerSessionPanelCommands(context, panel, deps, state)
 
-  const openWith = (id: string): void => {
-    select(id)
+  const openWith = (session: PanelSession): void => {
+    setState((draft) => {
+      noteScopeChosen(draft, session.parentSessionId ?? null)
+      noteSessionSelected(draft, session.id)
+    })
     context.ui.panel.open(SESSION_PANEL_NAME)
     // The screen is read on the poll, so the panel opens showing the SELECTED row rather than
     // the previous one's output until the next tick.
@@ -169,6 +182,9 @@ function claimSessionPanel(
         focused: input.focused,
         fullscreen: input.presentation === 'fullscreen',
         onClose: input.close,
+        // The parent may be a conversation this project never opened, so the lookup answers
+        // nothing and the line falls back to the id.
+        parentName: (id) => (id === undefined ? undefined : context.data.session.get(id)?.title),
         onSend: deps.sendInput,
         onSelect: (id) => {
           select(id)
@@ -192,7 +208,12 @@ function claimSessionPanel(
  * id, so it can be bound in the user's keymap config, and until then the palette entry and
  * the slash command reach it.
  */
-function registerSessionPanelCommand(context: Plugin.Context, deps: SessionPanelHostDeps): void {
+function registerSessionPanelCommand(
+  context: Plugin.Context,
+  deps: SessionPanelHostDeps,
+  /** Drops a scope a click set: opening from the palette means THIS conversation. */
+  resetScope: () => void
+): void {
   context.keymap.layer(() => ({
     // `global`, so the command answers outside the prompt too - the panel is not a prompt
     // feature and its reader may well be somewhere else.
@@ -208,6 +229,7 @@ function registerSessionPanelCommand(context: Plugin.Context, deps: SessionPanel
         // may already have claimed in the same completion list.
         slash: { name: 'pty-sessions' },
         run: () => {
+          resetScope()
           context.ui.panel.open(SESSION_PANEL_NAME)
           // Opening is a request to see the sessions, exactly like expanding the sidebar,
           // so it is a trigger that may start the server. Without it the panel would be

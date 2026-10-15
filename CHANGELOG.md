@@ -239,6 +239,22 @@ beside the built-in sidebar items rather than replacing them.
 
 ### Fixed
 
+- **A row clicked in the sidebar now shows that process, even when its conversation is another
+  project's.** The sidebar lists PTYs from every project, while a panel belongs to ONE session and
+  listed only that session's processes - so a row whose conversation this project has never opened
+  showed nothing, in every tab. Measured: seven `Lizenz-Hashes erzeugen` runs whose parent was a
+  davx5 conversation from the day before, listed by the sidebar and by no panel at all. A click now
+  scopes the panel to the conversation the row names - the parent id needs no session to exist, it is
+  the key the PTY was recorded under - and the line above the console says which process is on
+  screen: title, date, state, and the conversation that started it, falling back to the parent id
+  when the host cannot name it. Opening the panel from the palette clears that scope, so it means
+  this conversation again.
+- **Sidebar rows and group headings wrapped in a narrow sidebar, splitting a group in two.** At ~36
+  columns chevron (2) + title (22) + meta (18) came to 42, and a text wraps by default: the heading
+  drew over two lines. The title is now the element that shrinks and never wraps, the state and the
+  controls are fixed, and the state is its own element rather than the tail of one string - a row cut
+  from its end lost `123456L` to `1` below 30 columns. (Committed one commit before this entry was
+  written; the code and its tests are in `bd2095e`.)
 - **The sidebar asks the server half where it is listening, instead of deriving it.** The origin
   record is filed under the location the server was STARTED for, and one long-lived
   `opencode serve --service` makes that unknowable: it hosts the plugin for every project the
