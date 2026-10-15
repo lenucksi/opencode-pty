@@ -9,8 +9,10 @@ import {
   noteDialogTick,
   type PanelState,
 } from './panel-state.ts'
-import { dialogRows, dialogSize, outputDialogView, type Tones } from './render.ts'
-import { cleanupSession, findProjectOrigin, readScreen, writeInput } from './server.ts'
+import { dialogRows, dialogSize, outputDialogView } from './output-dialog.ts'
+import type { Tones } from './tones.ts'
+import { cleanupSession, readScreen, writeInput } from './server.ts'
+import { toLinePayload, type SendChoice, type SendDialogRequest } from './send-dialog.ts'
 
 /**
  * What a person can do to a session from the panel, and what each one costs.
@@ -33,7 +35,14 @@ export interface ActionDeps {
   /** Re-list. `force` for a refresh the user is waiting on. */
   readonly refresh: (mayStart?: boolean, force?: boolean) => Promise<void>
   readonly notify: (message: string, variant: ToastVariant) => void
-  readonly directory: () => string | undefined
+  /**
+   * The origin this app's server published, under whichever key it was filed.
+   *
+   * A lookup rather than a directory: the server is filed under the location it was STARTED
+   * for, and this panel runs inside a session that can be elsewhere - see
+   * `findAnyProjectOrigin`.
+   */
+  readonly findOrigin: () => Promise<string | null>
   readonly debug: (event: string, detail?: unknown) => void
   /**
    * The theme slots to draw with.
@@ -43,6 +52,13 @@ export interface ActionDeps {
    * rename to miss.
    */
   readonly tones: () => Tones
+  /**
+   * The reader's answer to a send dialog: what they typed, which key they clicked, or
+   * nothing. The dialog is the plugin's own (`openSendDialog`), so the choice arrives
+   * at a seam the action reads rather than as a string the host shaped - which is why
+   * the queries who cannot reach a dialog (tests, a future batch mode) can answer here.
+   */
+  readonly sendDialog: (request: SendDialogRequest) => Promise<SendChoice | undefined>
 }
 
 export interface Actions {
@@ -84,7 +100,7 @@ export async function withOrigin<Value>(
 ): Promise<Outcome<Value>> {
   const known = deps.state.origin
   if (known !== null) return { ran: true, result: await against(deps, known, action) }
-  const found = await findProjectOrigin(deps.directory())
+  const found = await deps.findOrigin()
   if (found === null) {
     if (!quiet) deps.notify('PTY server unavailable', 'warning')
     return { ran: false, result: undefined }
@@ -140,15 +156,22 @@ export function createSendInput(deps: ActionDeps) {
     let sent = false
     try {
       const outcome = await withOrigin(deps, async (origin) => {
-        const typed = await deps.context.ui.dialog.prompt({
+        // The plugin's own dialog rather than `ui.dialog.prompt`: the reader asked for
+        // keys a line cannot be (ctrl-c, enter) inside the same surface, with a close
+        // they can click. The dialog settles first and closes after, so a dismissal and
+        // a submission cannot interleave - see `openSendDialog`.
+        const choice = await deps.sendDialog({
+          tones: deps.tones(),
           title: `Send to ${label}`,
-          description: 'One line. It reaches the program as if typed, plus Enter.',
-          placeholder: 'q',
+          description: 'One line reaches the program as if typed, plus Enter; keys send at once.',
         })
-        if (typed === undefined) return
-        if (typed.trim().length === 0) return
+        if (choice === undefined) return
+        // A whitespace-only line is not a key press and not a command: the dialog refuses
+        // one, and this guard holds SHOULD something open the seam with one anyway -
+        // sending it would put a blank line into a program that may act on it.
+        if (choice.kind === 'line' && choice.line.trim().length === 0) return
 
-        const data = typed.endsWith('\n') ? typed : `${typed}\n`
+        const data = choice.kind === 'line' ? toLinePayload(choice.line) : choice.bytes
         await writeInput(origin, session.id, data)
         sent = true
         deps.debug('input.sent', { id: session.id, chars: data.length })
@@ -260,7 +283,7 @@ export function createClearFinished(deps: ActionDeps) {
  */
 export function createOpenOutput(deps: ActionDeps) {
   return async (session: PanelSession): Promise<void> => {
-    const origin = deps.state.origin ?? (await findProjectOrigin(deps.directory()))
+    const origin = deps.state.origin ?? (await deps.findOrigin())
     if (origin === null) {
       deps.notify('PTY server unavailable', 'warning')
       return

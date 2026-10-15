@@ -8,6 +8,7 @@ import {
   initialSessionPanelState,
   LOADING_SCREEN,
   NO_SELECTION_SCREEN,
+  noteScopeChosen,
   noteSessionListToggled,
   noteSessionPanelInput,
   noteSessionPanelList,
@@ -205,6 +206,79 @@ describe('noteSessionScreen', () => {
     expect(state.now).toBe(1234)
   })
 
+  // The measured failure this scope exists for: the sidebar lists PTYs from EVERY project, so a
+  // row can name a conversation this panel's session is not - and filtering by the panel's own
+  // session then listed NOTHING for it, in every tab. `ses_ed48fd0ce…`, a davx5 session from the day
+  // before, was the parent of seven runs the sidebar showed and no panel could.
+  test('lists the conversation a click named, not the panel\u2019s own session', () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelInput(state, ME)
+    noteScopeChosen(state, OTHER)
+    noteSessionPanelList(
+      state,
+      [
+        session({ id: 'mine', parentSessionId: ME }),
+        session({ id: 'theirs', parentSessionId: OTHER }),
+      ],
+      ME
+    )
+    expect(state.sessions.map((entry) => entry.id)).toEqual(['theirs'])
+  })
+
+  // THE poll twitch, as a state rule: every tick calls this with a fresh list the SERVER
+  // built, and handing the same CONTENT a new array object makes whatever watches the
+  // store treat every row as changed - which is the reader's measured twitch. Identical
+  // content keeps its identity; only a changed row is re-handed.
+  test('keeps the rows’ identity when the list is the same content twice', () => {
+    const state = initialSessionPanelState()
+    const row = () => session({ id: 'a', title: 'one', lineCount: 3 })
+    noteSessionPanelInput(state, ME)
+    noteSessionPanelList(state, [row()], ME)
+    const first = state.sessions
+    noteSessionPanelList(state, [row()], ME)
+    expect(state.sessions).toBe(first)
+  })
+
+  // The converse of the merge: rows that changed ARE replaced, so a watcher of that one
+  // row still learns (of the change) and the rest keep theirs.
+  test('replaces only the row that changed', () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelInput(state, ME)
+    noteSessionPanelList(
+      state,
+      [session({ id: 'a', title: 'one' }), session({ id: 'b', title: 'two' })],
+      ME
+    )
+    const before = state.sessions
+    noteSessionPanelList(
+      state,
+      [session({ id: 'a', title: 'one' }), session({ id: 'b', title: 'two again' })],
+      ME
+    )
+    const after = state.sessions
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).not.toBe(before[1])
+    expect(after[1]?.title).toBe('two again')
+  })
+
+  // A palette open means "this conversation", so the scope a click set has to go.
+  test('goes back to its own conversation when the scope is cleared', () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelInput(state, ME)
+    noteScopeChosen(state, OTHER)
+    noteSessionPanelList(state, [session({ id: 'theirs', parentSessionId: OTHER })], ME)
+    noteScopeChosen(state, null)
+    noteSessionPanelList(
+      state,
+      [
+        session({ id: 'mine', parentSessionId: ME }),
+        session({ id: 'theirs', parentSessionId: OTHER }),
+      ],
+      ME
+    )
+    expect(state.sessions.map((entry) => entry.id)).toEqual(['mine'])
+  })
+
   // A read that lands after the reader moved on must not overwrite what they are now
   // looking at.
   test('is ignored when nothing is selected', () => {
@@ -218,13 +292,16 @@ describe('sessionPanelView', () => {
   const view = (over: Partial<Parameters<typeof sessionPanelView>[0]> = {}): SessionPanelView => ({
     tones,
     state: initialSessionPanelState(),
-    live: [],
+    live: () => [],
     focused: false,
     fullscreen: false,
     onClose: () => {},
     onSend: () => {},
     onSelect: () => {},
     onToggleList: () => {},
+    // No host lookup in a frame case: a session with a parent then says `started by <id>`, which is
+    // the fallback the line is built to fall back to.
+    parentName: () => undefined,
     ...over,
   })
 
@@ -288,6 +365,7 @@ describe('sessionPanelView', () => {
 
   // The selection is marked in the text as well as by colour: a reader who cannot tell
   // the tones apart still has to see which row is on screen.
+
   test('marks the selected row in the text', async () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(
@@ -336,8 +414,8 @@ describe('sessionPanelView', () => {
     // the fold would look dead when it was simply not on row 1 any more - the same reason
     // `clickCloseControl` reads its column from the frame.
     const foldRow = (): { y: number } => {
-      const open = 'aufklappen'
-      const closed = 'zuklappen'
+      const open = 'expand'
+      const closed = 'collapse'
       for (const [y, line] of setup.captureCharFrame().split('\n').entries()) {
         if (line.includes(open) || line.includes(closed)) {
           return { y }
@@ -349,7 +427,7 @@ describe('sessionPanelView', () => {
     // Clicking the fold row turns the state over, and that is what this test can measure:
     // the headless render holds the tree it drew first, so the frame below stays a
     // snapshot of the folded list even after the click lands - which is why a frame
-    // assertion here would always say "aufklappen" and look like a dead fold. What the
+    // assertion here would always say "expand" and look like a dead fold. What the
     // states LOOK like is the next test's claim, on a state rendered as it is.
     await setup.mockMouse.click(2, foldRow().y)
     await setup.renderOnce()
@@ -369,7 +447,7 @@ describe('sessionPanelView', () => {
     )
     const folded = await frame(() => sessionPanelView(view({ state })))
     expect(folded).toContain('▸')
-    expect(folded).toContain('(aufklappen)')
+    expect(folded).toContain('(expand)')
     expect(folded).not.toContain('two')
 
     const open = initialSessionPanelState()
@@ -516,7 +594,10 @@ describe('sessionPanelView', () => {
     noteSessionSelected(state, 'a')
     noteSessionScreen(state, 'line one', 1)
     const lines = (await frame(() => sessionPanelView(view({ state })))).split('\n')
-    const bottom = lines.findIndex((line) => line.startsWith('└'))
+    // `includes` instead of `startsWith`: the panel carries two columns of air on the
+    // left (the inset that keeps the glyphs off the overlay's edge), so the frame's own
+    // corner glyph sits inside the row, not at its head.
+    const bottom = lines.findIndex((line) => line.includes('└'))
     // LAST is the list's folded header row, then the footer. Naming the three heights is
     // the point: a screen box with a fixed height also ends its frame somewhere and leaves
     // blank rows under it, so "the frame is the last thing drawn" would pass on exactly
@@ -533,7 +614,7 @@ describe('sessionPanelView', () => {
     noteSessionScreen(state, 'one\ntwo\nthree', 1)
     const text = await frame(() =>
       sessionPanelView(
-        view({ state, live: [session({ id: 'pty_9', cols: 120, rows: 40, lineCount: 812 })] })
+        view({ state, live: () => [session({ id: 'pty_9', cols: 120, rows: 40, lineCount: 812 })] })
       )
     )
     expect(text).toContain('pty_9')
@@ -556,7 +637,7 @@ describe('sessionPanelView', () => {
     noteSessionPanelList(state, [session({ id: 'pty_9' })], ME)
     noteSessionSelected(state, 'pty_9')
     const text = await frame(() =>
-      sessionPanelView(view({ state, live: [session({ id: 'pty_9' })] }))
+      sessionPanelView(view({ state, live: () => [session({ id: 'pty_9' })] }))
     )
     expect(text).toContain('⌨ send')
   })
@@ -567,7 +648,7 @@ describe('sessionPanelView', () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(state, [ended], ME)
     noteSessionSelected(state, 'pty_9')
-    const text = await frame(() => sessionPanelView(view({ state, live: [ended] })))
+    const text = await frame(() => sessionPanelView(view({ state, live: () => [ended] })))
     expect(text).not.toContain('⌨ send')
   })
 
@@ -580,11 +661,20 @@ describe('sessionPanelView', () => {
     noteSessionSelected(state, 'pty_9')
     const sent: string[] = []
     const element = () =>
-      sessionPanelView(view({ state, live: [live], onSend: (target) => sent.push(target.id) }))
+      sessionPanelView(
+        view({ state, live: () => [live], onSend: (target) => sent.push(target.id) })
+      )
     const rendered = await setup(element)
     const column = rendered.captureCharFrame().split('\n')[0]?.indexOf('⌨') ?? -1
     if (column < 0) throw new Error('the panel header draws no send control to click')
-    await rendered.mockMouse.click(column, 0)
+    // The ORDER is what keeps the dialog alive in production: asked for on the down,
+    // the dialog dies on that same gesture's up - the backdrop under the pointer
+    // receives the release and closes. So the up, not the down, may be what requests
+    // the input, and this asserts the order rather than only reachability.
+    await rendered.mockMouse.pressDown(column, 0)
+    await rendered.renderOnce()
+    expect(sent).toEqual([])
+    await rendered.mockMouse.release(column, 0)
     await rendered.renderOnce()
     expect(sent).toEqual(['pty_9'])
   })

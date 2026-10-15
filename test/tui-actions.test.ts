@@ -9,7 +9,7 @@ import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import { type ActionDeps, type Actions, createActions } from '../src/tui/actions.ts'
 import type { PanelSession } from '../src/tui/lib.ts'
 import { initialPanelState, type PanelState } from '../src/tui/panel-state.ts'
-import { readScreen } from '../src/tui/server.ts'
+import { findProjectOrigin, readScreen } from '../src/tui/server.ts'
 import { PTYServer } from '../src/web/server/server.ts'
 
 /**
@@ -195,7 +195,11 @@ function deps(state: PanelState, over: Partial<ActionDeps> = {}): ActionDeps {
     notify: (message, variant) => {
       recorded.toasts.push({ message, variant })
     },
-    directory: () => project,
+    // The wiring resolves the origin by trying the session's location and the app's default
+    // (see `findAnyProjectOrigin`). The fixture starts its server for `project`, so it looks
+    // that one up rather than faking an address - a wrong URL here would make every test in
+    // this file pass against nothing.
+    findOrigin: () => findProjectOrigin(project),
     debug: (event) => {
       recorded.events.push(event)
     },
@@ -203,6 +207,8 @@ function deps(state: PanelState, over: Partial<ActionDeps> = {}): ActionDeps {
     // the fixture hands over the same six values rather than a second palette that could
     // drift from it.
     tones: () => tones,
+    // The send dialog is one of the overrides: a test that sends answers the seam.
+    sendDialog: async (): Promise<never> => undefined as never,
     ...over,
   }
 }
@@ -428,13 +434,17 @@ describe('sending input to a session', () => {
    * Built before `deps` because `ActionDeps.context` is readonly - the fixture goes in
    * through the override argument rather than by assignment.
    */
-  function answering(typed: string | undefined): Plugin.Context {
-    const context = fixture()
-    context.ui.dialog.prompt = async (options: { title: string }) => {
-      recorded.prompts.push({ title: options.title, typed })
-      return typed
+  function answering(line: string | undefined): Pick<ActionDeps, 'sendDialog'> {
+    return {
+      // The dialog is the plugin's own, so the answer arrives at the seam the ACTION
+      // reads: what the reader chose, not a string the host shaped from a prompt. A
+      // declined dialog answers undefined, which is the default path here too.
+      sendDialog: async (request) => {
+        recorded.prompts.push({ title: request.title, typed: line })
+        if (line === undefined) return undefined
+        return { kind: 'line', line }
+      },
     }
-    return context
   }
 
   /**
@@ -465,7 +475,7 @@ describe('sending input to a session', () => {
   test('what the reader types reaches the process', async () => {
     await startServer()
     const id = await spawnSession('waiting', 'cat')
-    const d = deps(liveState({ origin: origin() }), { context: answering('q') })
+    const d = deps(liveState({ origin: origin() }), answering('q'))
 
     await createActions(d).sendInput(session({ id, title: 'waiting', status: 'running' }))
 
@@ -476,7 +486,7 @@ describe('sending input to a session', () => {
   test('appends the newline a key press would have carried', async () => {
     await startServer()
     const id = await spawnSession('lines', 'cat', ['-n'])
-    const d = deps(liveState({ origin: origin() }), { context: answering('one\ntwo') })
+    const d = deps(liveState({ origin: origin() }), answering('one\ntwo'))
 
     await createActions(d).sendInput(session({ id, status: 'running' }))
 
@@ -494,7 +504,7 @@ describe('sending input to a session', () => {
   test('does not double a newline the reader already typed', async () => {
     await startServer()
     const id = await spawnSession('once', 'cat', ['-n'])
-    const d = deps(liveState({ origin: origin() }), { context: answering('only\n') })
+    const d = deps(liveState({ origin: origin() }), answering('only\n'))
 
     await createActions(d).sendInput(session({ id, status: 'running' }))
 
@@ -509,7 +519,7 @@ describe('sending input to a session', () => {
   test('writes nothing when the reader declines', async () => {
     await startServer()
     const id = await spawnSession('ignored', 'cat', ['-n'])
-    const d = deps(liveState({ origin: origin() }), { context: answering(undefined) })
+    const d = deps(liveState({ origin: origin() }), answering(undefined))
 
     await createActions(d).sendInput(session({ id, status: 'running' }))
 
@@ -523,7 +533,7 @@ describe('sending input to a session', () => {
   test('claims nothing was sent when the reader declines', async () => {
     await startServer()
     const id = await spawnSession('declined', 'cat', ['-n'])
-    const d = deps(liveState({ origin: origin() }), { context: answering(undefined) })
+    const d = deps(liveState({ origin: origin() }), answering(undefined))
     await createActions(d).sendInput(session({ id, title: 'declined', status: 'running' }))
     expect(recorded.toasts).toEqual([])
   })
@@ -531,7 +541,7 @@ describe('sending input to a session', () => {
   test('confirms a line that really was sent', async () => {
     await startServer()
     const id = await spawnSession('sent', 'cat')
-    const d = deps(liveState({ origin: origin() }), { context: answering('q') })
+    const d = deps(liveState({ origin: origin() }), answering('q'))
     await createActions(d).sendInput(session({ id, title: 'sent', status: 'running' }))
     expect(recorded.toasts.map((t) => t.message)).toEqual(['Sent to sent'])
   })
@@ -539,14 +549,14 @@ describe('sending input to a session', () => {
   // Nothing to write to. Asking first would open a field that cannot work, and the server
   // would answer 400 for every attempt.
   test('refuses a session that has ended, without asking', async () => {
-    const d = deps(liveState({ origin: origin() }), { context: answering('q') })
+    const d = deps(liveState({ origin: origin() }), answering('q'))
     await createActions(d).sendInput(session({ id: 'pty_1', status: 'exited', exitCode: 0 }))
     expect(recorded.prompts).toEqual([])
     expect(recorded.toasts.map((t) => t.message)).toEqual(['That session has ended'])
   })
 
   test('asks nothing when the server is gone', async () => {
-    const d = deps(liveState({ origin: null }), { context: answering('q') })
+    const d = deps(liveState({ origin: null }), answering('q'))
     await createActions(d).sendInput(session({ id: 'pty_1', status: 'running' }))
     expect(recorded.prompts).toEqual([])
     expect(recorded.toasts.map((t) => t.message)).toEqual(['PTY server unavailable'])
@@ -556,7 +566,7 @@ describe('sending input to a session', () => {
   test('names the session in the prompt', async () => {
     await startServer()
     const id = await spawnSession('the watcher', 'cat')
-    const d = deps(liveState({ origin: origin() }), { context: answering(undefined) })
+    const d = deps(liveState({ origin: origin() }), answering(undefined))
     await createActions(d).sendInput(session({ id, title: 'the watcher', status: 'running' }))
     expect(recorded.prompts[0]?.title).toBe('Send to the watcher')
   })
@@ -566,7 +576,7 @@ describe('sending input to a session', () => {
   test('does not send a blank line', async () => {
     await startServer()
     const id = await spawnSession('blank', 'cat', ['-n'])
-    const d = deps(liveState({ origin: origin() }), { context: answering('   ') })
+    const d = deps(liveState({ origin: origin() }), answering('   '))
     await createActions(d).sendInput(session({ id, status: 'running' }))
     await Bun.sleep(200)
     // A blank line sent to `cat -n` comes back as a line holding only the number 1.

@@ -1,6 +1,7 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { countSessions } from '../web/shared/session-search.ts'
 import { createActions } from './actions.ts'
+import { openSendDialog } from './send-dialog.ts'
 import { debug } from './debug.ts'
 import { registerFilterCommand } from './filter-command.ts'
 import { type PanelSession, resolveParentTitles } from './lib.ts'
@@ -18,9 +19,17 @@ import {
   visibleSessions,
 } from './panel-state.ts'
 import { type PanelView, sidebarFooterView, sidebarView } from './render.ts'
-import { findProjectOrigin, isHealthy, listSessions } from './server.ts'
+import { isHealthy, listSessions } from './server.ts'
+import { createOriginFinder, projectKeys } from './origin.ts'
 import { createSessionPanelHost } from './session-panel-host.ts'
-import { initialSidebarPrefs, SIDEBAR_PREFS_KEY, setFilter, toggleGroup } from './sidebar-prefs.ts'
+import {
+  fillMissingPrefs,
+  initialSidebarPrefs,
+  SIDEBAR_PREFS_KEY,
+  setFilter,
+  toggleGroup,
+} from './sidebar-prefs.ts'
+import { PtyServerRpc } from '../v2/rpc.ts'
 
 /**
  * The PTY sidebar: this project's PTY sessions, listed where the built-in sidebar
@@ -58,10 +67,6 @@ import { initialSidebarPrefs, SIDEBAR_PREFS_KEY, setFilter, toggleGroup } from '
  */
 
 const POLL_MS = 2500
-const BOOTSTRAP_TITLE = 'opencode-pty sidebar bootstrap'
-const BOOTSTRAP_ATTEMPTS = 20
-const BOOTSTRAP_INTERVAL_MS = 300
-
 /**
  * Ephemeral: the list is this process's view of a server that can restart on a new
  * port, and a persisted copy would come back stale on the next start - which looks
@@ -79,6 +84,12 @@ export default Plugin.define({
     const [prefs, setPrefs] = context.storage.store(SIDEBAR_PREFS_KEY, {
       initial: initialSidebarPrefs(),
     })
+    // A store written by an earlier build carries only the keys that existed then, and the host
+    // restores it AS IT WAS rather than merging `initial` into it. Repaired before anything reads
+    // a preference: a missing `filter` is not a missing value but a crash - it reached
+    // `normalizeQuery`, `query.trim()` threw, and the whole `sidebar.content` slot went down on
+    // every render.
+    setPrefs((draft) => fillMissingPrefs(draft))
 
     let disposed = false
     let refreshing = false
@@ -92,8 +103,6 @@ export default Plugin.define({
         /* a toast is best-effort; failing to show one must not fail the action */
       }
     }
-
-    const directory = (): string | undefined => context.location?.directory
 
     /**
      * The theme slots this plugin draws with, named rather than typed.
@@ -111,43 +120,34 @@ export default Plugin.define({
     })
 
     /**
-     * Start the server by running this plugin's own command in a throwaway session,
-     * then read the origin it published.
+     * The app's default location, which is where a server that `autostart` started files its
+     * record.
      *
-     * The session is scratch space: the command posts the URL as a chat message,
-     * and a permanent "sidebar bootstrap" row in the user's session list would be
-     * worse than the transcript noise it avoids.
+     * Best-effort: a host that cannot name its default means one fewer key to try, which must not
+     * take the poll down.
      */
-    const startServer = async (): Promise<string | null> => {
-      let sessionID: string | null = null
-      let failure: unknown = null
+    const defaultLocation = (): string | undefined => {
       try {
-        sessionID = (await context.client.session.create({ title: BOOTSTRAP_TITLE })).id
-        await context.client.session.command({ sessionID, name: 'pty-show-server-url', text: '' })
+        return context.data.location.default().directory
       } catch (error) {
-        failure = error
+        debug('origin.default.failed', { error: String(error) })
+        return undefined
       }
-      if (sessionID !== null) {
-        await context.client.session.remove({ sessionID }).catch((error: unknown) => {
-          debug('start.cleanup.failed', { sessionID, error: String(error) })
-        })
-      }
-      if (failure !== null) {
-        setPanel((draft) => noteStartError(draft, failure))
-        return null
-      }
-      // The server publishes its record after binding, so this is a poll rather than
-      // a single check. Bounded: a server that never comes up must not spin.
-      for (let attempt = 0; attempt < BOOTSTRAP_ATTEMPTS; attempt++) {
-        await Bun.sleep(BOOTSTRAP_INTERVAL_MS)
-        const origin = await findProjectOrigin(directory())
-        if (origin !== null) {
-          debug('start.done', { origin, attempt })
-          return origin
-        }
-      }
-      return null
     }
+
+    /**
+     * Where this app's PTY server is - asked over RPC, then looked up by project, then guessed,
+     * and started only when the user asked for it. `origin.ts` owns the order and the reasons.
+     */
+    const originFinder = createOriginFinder({
+      client: context.client,
+      // The raw call: it throws on a host without RPC and rejects `not_running` when none
+      // listens, and both of those mean "look somewhere else".
+      ask: () => context.client.rpc(PtyServerRpc).origin({}),
+      keys: () => projectKeys(context.location?.directory, defaultLocation()),
+      onStartError: (error) => setPanel((draft) => noteStartError(draft, error)),
+      debug,
+    })
 
     const runRefresh = async (mayStart: boolean): Promise<void> => {
       if (mayStart && panel.startFailures >= MAX_START_FAILURES) {
@@ -165,7 +165,7 @@ export default Plugin.define({
         origin = null
       }
       if (origin === null) {
-        origin = (await findProjectOrigin(directory())) ?? (mayStart ? await startServer() : null)
+        origin = await originFinder.find(mayStart)
       }
       if (origin === null) {
         setPanel((draft) => noteNoServer(draft, mayStart))
@@ -222,9 +222,11 @@ export default Plugin.define({
       update: setPanel,
       refresh,
       notify,
-      directory,
+      // No start right: the actions act on a session that came from a list, so a server exists.
+      findOrigin: () => originFinder.find(false),
       debug,
       tones,
+      sendDialog: (request) => openSendDialog(context, request),
     })
 
     const sessionPanelHost = createSessionPanelHost({
@@ -279,7 +281,7 @@ export default Plugin.define({
      * it, and one gesture now gets a reader from the sidebar to the output.
      */
     const onOpen = (session: PanelSession): void => {
-      sessionPanelHost.openWith(session.id)
+      sessionPanelHost.openWith(session)
     }
 
     /**

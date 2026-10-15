@@ -1,4 +1,4 @@
-import { candidateOrigins, originsForProject } from '../shared/runtime.ts'
+import { candidateOrigins, originsForProject, readOrigins } from '../shared/runtime.ts'
 import { decodeScreen, isPtyHealth, type PanelSession } from './lib.ts'
 
 /**
@@ -60,6 +60,50 @@ export async function findProjectOrigin(directory: string | undefined): Promise<
   return null
 }
 
+/**
+ * The first healthy origin among several project keys, most specific first.
+ *
+ * There is ONE record per server, filed under the location it was started for, while this panel
+ * renders inside a session whose location can be a different directory: the host hands a plugin
+ * the SESSION's location (`packages/tui/src/routes/session/index.tsx` sets it from
+ * `session().location`), and a server that `autostart` started is filed under the app's DEFAULT
+ * location. Move a session with `/cd` and the two part company - which is how a panel ends up
+ * saying "not running" next to a server that answers /health. Trying both keys is the honest
+ * answer; trying only one assumes a session that never moves.
+ */
+export async function findAnyProjectOrigin(
+  directories: readonly (string | undefined)[]
+): Promise<string | null> {
+  for (const directory of directories) {
+    const origin = await findProjectOrigin(directory)
+    if (origin !== null) return origin
+  }
+  return null
+}
+
+/**
+ * The first healthy origin among EVERY record this user has, ignoring the project key.
+ *
+ * A last resort, and it exists because the key cannot always be derived: one long-lived
+ * `opencode serve --service` hosts this plugin for several projects at once, so the record is
+ * filed under the location THAT process was started in - a directory no panel can compute from
+ * its own session. The project keys are tried first, so this only fires when there is nothing to
+ * attribute; and when it does, there is one server and it answers `/health`.
+ *
+ * The trade-off is stated rather than hidden: the records are per-user and 0700, so "every
+ * record" is every server this user started. With two of them, a panel that could not find its
+ * own may show the other one's list - which is still a better answer than "not running" beside a
+ * server that answers, but it is not the same as being right.
+ */
+export async function findAnyHealthyOrigin(): Promise<string | null> {
+  for (const record of readOrigins()) {
+    for (const candidate of candidateOrigins(record)) {
+      if (await isHealthy(candidate)) return candidate
+    }
+  }
+  return null
+}
+
 /** The sessions the server knows about, live and archived. */
 export async function listSessions(origin: string): Promise<PanelSession[]> {
   const res = await fetchWithTimeout(`${origin}/api/sessions`)
@@ -86,7 +130,10 @@ export async function listSessions(origin: string): Promise<PanelSession[]> {
  * the dialog has no width to ask with.
  */
 export async function readScreen(origin: string, id: string): Promise<string> {
-  const res = await fetchWithTimeout(`${origin}/api/sessions/${id}/screen`)
+  // The history the reader means by "scroll all the way up": the server prepends up to
+  // this many scrollback rows before the visible screen. Rounded to the emulator's own
+  // cap by the endpoint.
+  const res = await fetchWithTimeout(`${origin}/api/sessions/${id}/screen${'?scrollback=2000'}`)
   if (!res.ok) throw new Error(`the server answered ${res.status}`)
   return decodeScreen(await res.json())
 }

@@ -6,6 +6,7 @@ import {
   decodeScreen,
   finishedSessions,
   formatDetail,
+  formatStamp,
   formatDuration,
   headerLabel,
   isFinished,
@@ -13,6 +14,7 @@ import {
   type PanelSession,
   resolveParentTitles,
   rowLabel,
+  sessionIdentity,
   rowTone,
   sessionDurationMs,
   tail,
@@ -171,6 +173,18 @@ describe('sessionDurationMs', () => {
     expect(ms).toBe(150_000)
   })
 
+  // Older archive records carry `endedAt` instead of `exitAt`: the field was added in
+  // the release, and the archive is read after a restart. A record the panel cannot
+  // time would otherwise show the hours since the panel opened, which is the shape the
+  // reader measured (a 19-second build read as 17h).
+  it('measures a stopped session to endedAt when there is no exitAt', () => {
+    const ms = sessionDurationMs(
+      session({ createdAt: start, endedAt: '2026-01-01T10:00:19.000Z' }),
+      Date.parse('2026-01-01T11:00:00.000Z')
+    )
+    expect(ms).toBe(19_000)
+  })
+
   // This is what `exitAt` is for: without it, a stopped session would measure to
   // "now" and a transcript read an hour later would claim to have run an hour.
   it('measures a stopped session to its exit, not to now', () => {
@@ -247,12 +261,19 @@ describe('decodeScreen', () => {
   // already removed. Joining the rows is the whole of the decoding - which is the point:
   // there is no ANSI to strip and no cursor position to lose, because the emulator has
   // already applied both.
-  // Trailing blank rows are kept, trailing newline included: the blank bottom of a
-  // screen is part of what the screen shows, and trimming it would make a cleared
-  // terminal look like one that printed something.
-  it('joins the screen rows into displayable text', () => {
-    expect(decodeScreen({ id: 'pty_1', cols: 40, rows: 3, lines: ['top', 'second', ''] })).toBe(
-      'top\nsecond\n'
+  // The old rule kept even the trailing blank rows: the blank bottom of a screen is
+  // shape, and a fresh 81-row screen half-printed produced a console of blanks with a
+  // scrollbar before the screen was full - measured. The consumer trims after.
+  it('joins the screen rows into displayable text, trailing blanks dropped', () => {
+    expect(decodeScreen({ id: 'pty_1', cols: 40, rows: 3, lines: ['top', 'second'] })).toBe(
+      'top\nsecond'
+    )
+  })
+
+  // The inverse still holds: a blank row BETWEEN content belongs to the program.
+  it('keeps an inner blank row', () => {
+    expect(decodeScreen({ id: 'pty_1', cols: 40, rows: 5, lines: ['top', '', 'bottom', ''] })).toBe(
+      'top\n\nbottom'
     )
   })
 
@@ -408,4 +429,65 @@ describe('resolveParentTitles', () => {
       ses_one: 'Build',
     })
   })
+})
+
+describe('sessionIdentity', () => {
+  const started = '2026-10-14T22:24:00Z'
+
+  it('names the four things that identify a process', () => {
+    const line = sessionIdentity(
+      session({
+        parentSessionId: 'ses_davx5',
+        title: 'Lizenz-Hashes erzeugen',
+        status: 'exited',
+        exitCode: 1,
+        createdAt: started,
+      }),
+      'davx5 build'
+    )
+    expect(line).toContain('Lizenz-Hashes erzeugen')
+    expect(line).toContain(formatStamp(started))
+    // The state comes from the same helper a row uses, so the two cannot disagree.
+    expect(line).toContain('exit 1')
+    expect(line).toContain('started by davx5 build')
+  })
+
+  // The measured case: the parent is a conversation from another project, so the host has no title
+  // for it - and that is NOT the same as a session nobody\u2019s conversation started.
+  it('falls back to the parent id when the host cannot name it', () => {
+    const line = sessionIdentity(session({ parentSessionId: 'ses_elsewhere' }), undefined)
+    expect(line).toContain('started by ses_elsewhere')
+    expect(line).not.toContain('started by hand')
+  })
+
+  it('says so when no conversation started it', () => {
+    const line = sessionIdentity(session({ parentSessionId: undefined }), 'davx5 build')
+    expect(line).toContain('started by hand')
+  })
+
+  // Never just separators: an untitled session is named by its id.
+  it('falls back to the id for a session with no title', () => {
+    const line = sessionIdentity(session({ title: '', status: 'running', lineCount: 7 }), undefined)
+    expect(line).toContain('pty_1')
+    expect(line).toContain('7L')
+  })
+})
+
+describe('formatStamp', () => {
+  it('is empty for a missing or unreadable stamp', () => {
+    expect(formatStamp(undefined)).toBe('')
+    expect(formatStamp('not a date')).toBe('')
+  })
+
+  // Locale-formatted on purpose, so the shape is all that can be asserted - the reader is the one
+  // who has to read it.
+  it('renders a local date and time', () => {
+    const stamp = formatStamp(started_iso())
+    expect(stamp).toContain('2026')
+    expect(stamp.length).toBeGreaterThan(8)
+  })
+
+  function started_iso(): string {
+    return '2026-10-14T22:24:00Z'
+  }
 })

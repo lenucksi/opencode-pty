@@ -318,3 +318,71 @@ describe('GET /api/sessions/:id/screen', () => {
     }
   })
 })
+
+/**
+ * The reader's measured gap: the emulator HOLDS scrollback (the web UI scrolled
+ * through it) while `/screen` answered with the visible rows only, so a line printed
+ * a moment ago left the panel's console for good. The history is opt-in: the tool and
+ * the web's own rendering keep the plain screen.
+ */
+describe('GET /api/sessions/:id/screen with scrollback', () => {
+  const spawned: string[] = []
+
+  afterAll(() => {
+    for (const id of spawned) manager.kill(id, true)
+    manager.clearAllSessions()
+  })
+
+  function spawn(raw: string, cols: number, rows: number): string {
+    const info = manager.spawn({
+      command: 'sh',
+      args: ['-c', `printf '%b' '${raw}'; sleep 5`],
+      description: 'screen scrollback probe',
+      parentSessionId: 'screen-scrollback-test',
+      cols,
+      rows,
+    })
+    spawned.push(info.id)
+    return info.id
+  }
+
+  async function waitFor(id: string, needle: string): Promise<void> {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const raw = manager.getRawBuffer(id)?.raw ?? ''
+      if (raw.includes(needle)) return
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    throw new Error(`session ${id} never produced needed output`)
+  }
+
+  it('prepends scrollback rows, oldest first, when asked', async () => {
+    const lines = []
+    for (let i = 1; i <= 40; i++) lines.push(`a${i}`)
+    const id = spawn(lines.map((line) => `${line}\r\n`).join(''), 20, 6)
+    await waitFor(id, 'a40')
+
+    const body = await requestBody(await requestScreen(id, '?scrollback=50'))
+    expect(body.historyRows).toBeGreaterThan(0)
+    expect(body.lines.length).toBe((body.historyRows ?? 0) + 6)
+    expect(body.lines[0]).toBe('a1')
+    // The boundary is exact: everything before `historyRows` is history, from there on
+    // the screen. Assert the boundary BEHAVIOUR (the screen starts with the row after
+    // the newest history line), not a magic line number - the emulator counts its own
+    // scroll cap, and the amout is what the response reports.
+    const boundary = body.historyRows!
+    expect(body.lines[boundary]).not.toBe(body.lines[boundary - 1])
+    expect(body.lines[boundary]!.startsWith('a3')).toBe(true)
+  })
+
+  it('keeps the plain screen when no scrollback is asked', async () => {
+    const id = spawn('b1\r\nb2\r\nb3\r\nb4\r\nb5\r\nb6\r\nb7\r\nb8\r\nb9\r\nb10\r\n', 20, 5)
+    await waitFor(id, 'b10')
+
+    const plain = await requestBody(await requestScreen(id))
+    expect(plain.historyRows).toBeUndefined()
+    // Bounded by the screen height, with at most the cursor's fresh row spare.
+    expect(plain.lines.length).toBeLessThanOrEqual(6)
+    // The newest output is the newest content in the plain shape.
+    expect(plain.lines.filter((line) => line.trim().length > 0).at(-1)).toBe('b10')
+  })
+})

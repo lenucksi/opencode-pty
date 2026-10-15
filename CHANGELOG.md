@@ -237,6 +237,108 @@ beside the built-in sidebar items rather than replacing them.
   also development dependencies, so the TUI contract is type-checked in CI. A host
   with no TUI can still install this package.
 
+### Fixed
+
+- **The poll stopped twitching the panel.** Every poll tick handed the panel state a list the
+  server had just built - the same CONTENT, but a new array of new objects every time - and the
+  claim's render spread the whole state into its reactive scope, which tracks every field: a tick
+  that only moved the clock re-laid the panel out. Two halves, same rule: a list-note now carries
+  over the rows it already shows (a row whose fields did not move keeps its object identity, a
+  changed row is the only one re-handed), and the claim hands the view the store rather than a copy,
+  so a watcher re-renders only what its field moved. Measured as a state rule and red-proved by
+  name ("keeps the rows' identity...").
+- **The send dialog's key chips fit a medium dialog.** At 60 columns (the width `dialogWidth`
+  hands a medium dialog) the chips row was longer than the dialog, and the reader measured the last
+  chip (`Enter`) running out at the edge - a wider test width had hidden it. The row wraps (the
+  host's own dialogs do, via `flexDrop`), the hint moved to the footer, and a narrow-width render
+  asserts every label drawn inside the box.
+- **The console now scrolls the history the emulator was holding, and stops selling blank
+  rows as content.** `/screen` answered with the visible screen only, so a line printed moments
+  ago left the panel's console for good - measured, the emulator HELD 103 scrollback rows for the
+  same session the `/screen` was answering with 81 screen rows, and the web UI scrolled all the
+  way up through the full transcript. The route now takes `?scrollback=<n>` (default 0, so
+  `pty_screen` and the web's client keep their exact shape) and prepends the older rows, oldest
+  first, within the replay window; the response says how many it added. The panel asks for the
+  history. And the consumer drops the trailing blank rows a screen has BY SHAPE: a fresh 81-row
+  run half-printed produced a console full of blanks with a scrollbar the reader measured
+  scrolling through before any output filled it.
+- **The console stays where the reader scrolled it, and the texts speak one language.** A reader
+  who scrolled up in a PTY console was dragged back to the bottom by the next poll, because the
+  scrollbox pinned itself unconditionally. The pin is now a decision (`scroll-keeper.ts`): it holds
+  only while the reader is at the bottom, releases while they are away - the view keeps its rows -
+  and resumes when they return. A fresh selection arms it, so a session the reader has not read
+  starts at its bottom like any screen they never scrolled. The host's own transcript is the
+  reference for the same rule. The run timer reads `endedAt` where a record has no `exitAt`, which
+  is what a 19-second build needed to stop claiming it had run 17 hours. And the session panel's
+  German leftovers (`N Sessionen… (aufklappen)`, `… und N weitere in der Sidebar`) are English,
+  like the sidebar next to them already was.
+- **The send dialog survived the gesture that opened it, and grew the keys it was missing.** The
+  dialog asked for on the panel header's mouse-down was dead on arrival: a click delivers a
+  mouse-down and a mouse-up, and by release time the host's dialog backdrop sat under the pointer,
+  whose mouse-up closes the dialog - so the field only stayed open while the button was held.
+  Reported by a reader, reproduced from the host's own backdrop handler
+  (`packages/tui/src/ui/dialog.tsx` in the opencode checkout). The opener now fires on mouse-up -
+  mousedown-only stays for the togglers, and a one-shot open belongs to the release. The dialog
+  itself is now the plugin's own rather than the SDK prompt, because the SDK one draws only a title
+  and a field: it has a `✕ close` the pointer can click, `enter submit · esc close` for the
+  keyboard, and a row of key chips (`Ctrl+C`, `Ctrl+D`, `Ctrl+Z`, `Esc`, `Tab`, `Enter`) that send
+  their control byte at once, without the typed line - `writeInput` posts bytes, so the chips are
+  data, and the ending key is data the line discipline reads as enter. The dialog settles once and
+  closes after, so a dismissal and a submission cannot interleave; the action keeps a blank-line
+  guard at the seam because a whitespace answer is neither a key nor a command.
+
+- **A row clicked in the sidebar now shows that process, even when its conversation is another
+  project's.** The sidebar lists PTYs from every project, while a panel belongs to ONE session and
+  listed only that session's processes - so a row whose conversation this project has never opened
+  showed nothing, in every tab. Measured: seven `Lizenz-Hashes erzeugen` runs whose parent was a
+  davx5 conversation from the day before, listed by the sidebar and by no panel at all. A click now
+  scopes the panel to the conversation the row names - the parent id needs no session to exist, it is
+  the key the PTY was recorded under - and the line above the console says which process is on
+  screen: title, date, state, and the conversation that started it, falling back to the parent id
+  when the host cannot name it. Opening the panel from the palette clears that scope, so it means
+  this conversation again.
+- **Sidebar rows and group headings wrapped in a narrow sidebar, splitting a group in two.** At ~36
+  columns chevron (2) + title (22) + meta (18) came to 42, and a text wraps by default: the heading
+  drew over two lines. The title is now the element that shrinks and never wraps, the state and the
+  controls are fixed, and the state is its own element rather than the tail of one string - a row cut
+  from its end lost `123456L` to `1` below 30 columns. (Committed one commit before this entry was
+  written; the code and its tests are in `bd2095e`.)
+- **The sidebar asks the server half where it is listening, instead of deriving it.** The origin
+  record is filed under the location the server was STARTED for, and one long-lived
+  `opencode serve --service` makes that unknowable: it hosts the plugin for every project the
+  user opens, so the record sits under the directory that process was started in while the panel
+  sits in a session somewhere else. Measured while chasing it - the record said `/var/home/j`
+  while the panel was in `.../homelab/openwrt-installer-lab`, with 376 sessions (48 of them
+  failed) behind a server that answered `/health`, and the panel read "not running". A plugin can
+  register an RPC method its TUI half calls (`@opencode/plugin/rpc`, `context.client.rpc`), so
+  this plugin now answers one question - where is the server - read off the live server object.
+  That needs no key and cannot be stale. The record is still tried next, since that is what a host
+  without RPC has, and a panel that can name neither still takes any healthy record, logged,
+  because a list from another instance beats no list at all. Starting a server stays where it was:
+  only a user who expanded the panel causes one.
+- **A sidebar store written before a field existed took the whole section down.** The host's
+  `store` persists an object and hands it back exactly as it was: `initial` is used only when
+  nothing was stored, and is never merged into what comes back. So every preference added after
+  a reader's first run is `undefined` until something writes it - and `filter` was read as a
+  string, reached `normalizeQuery`, and threw `undefined is not an object (evaluating
+  'query.trim')` inside the `sidebar.content` slot on every render, which is why dismissing the
+  crash panel brought it straight back. The preferences are now repaired once per setup
+  (`fillMissingPrefs`), which also replaces a stored value of the wrong type, and covers
+  `collapsedGroups` from the same kind of store.
+- **The sidebar reported "not running" next to a healthy server, so its footer stayed empty.**
+  A PTY server files ONE origin record, under the location it was STARTED for, while the host
+  hands a plugin the SESSION's location (`packages/tui/src/routes/session/index.tsx` sets it
+  from `session().location`). A server that `autostart` started is filed under the app's default
+  location, so as soon as a session was moved - `/cd`, or opencode launched in one directory
+  with a session in a project below it - the two keys differed: the lookup matched records on
+  the directory exactly, found nothing, and the panel drew "not running" with no sessions. The
+  footer only draws when there is something to report, which is why it vanished with it.
+  Measured on a running 2.0.29: `findProjectOrigin("/var/home/j")` answered
+  `http://127.0.0.1:4200` while the panel's own key returned null, with 376 sessions
+  (48 of them failed - the footer said nothing) behind it. The panel now tries the session's
+  location first and the app's default second, so a moved session still reads its own project's
+  server rather than another one.
+
 ## [0.5.1] - 2026-10-05
 
 ### Fixed

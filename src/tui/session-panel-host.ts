@@ -2,137 +2,125 @@ import type { Plugin } from '@opencode/plugin/tui'
 
 import { isFinished, type PanelSession } from './lib.ts'
 import type { PanelState } from './panel-state.ts'
-import type { Tones } from './render.ts'
-import { readScreen } from './server.ts'
+import type { Tones } from './tones.ts'
+import {
+  createClaimMeter,
+  createConsoleKeeper,
+  noteListAndScreen,
+  readSelectedScreenInto,
+} from './panel-instrument.ts'
+import type { ScrollKeeper } from './scroll-keeper.ts'
 import { sessionPanelView } from './session-panel.ts'
 import {
   initialSessionPanelState,
   noteSessionListToggled,
-  noteSessionPanelInput,
-  noteSessionPanelList,
-  noteSessionScreen,
+  noteScopeChosen,
   noteSessionSelected,
-  type SessionPanelState,
   selectedSession,
+  type SessionPanelState,
 } from './session-panel-state.ts'
 
-/** Durable: which row is on screen, and for which session, is worth keeping. */
+/** The state store's key this panel restores from. */
 const SESSION_PANEL_KEY = 'opencode-pty.session-panel'
 
-/**
- * The name this panel claims under `session.panel`, and the name the host reports back
- * from `ui.panel.current()`. They must be the same string: the poll matches on the latter,
- * and a mismatch would leave the panel open and permanently empty with nothing failing.
- */
 const SESSION_PANEL_NAME = 'opencode-pty'
 
 /**
- * Everything about the session panel that needs the HOST: its store, the poll hook that
- * keeps it in step, the slot claim and the command that opens it.
+ * What the claim learns from its input, for the commands that need it.
  *
- * A factory rather than four loose blocks in `index.ts`, because `index.ts` is the
- * plugin's wiring for the SIDEBAR and the file was over the size the linter allows - and
- * because "everything about the session panel" is a boundary worth being able to name.
+ * The ceiling is measured, not chosen: the keymap hangs off the RENDERER, and the host
+ * handles "a focused editor owns the input" by enabling a layer rather than by letting a
+ * renderable swallow the key. So `ctrl+y` closes and `f3` enlarges.
  */
+export interface PanelActions {
+  /** The claim's `toggleFullscreen`, once it has rendered. Absent before the first render. */
+  toggleFullscreen?: () => void
+}
+
 export interface SessionPanelHostDeps {
   readonly context: Plugin.Context
-  /** The sidebar's live state: the panel's rows are a subset of this list. */
+  /** The panel's live state: read, never mutated here. */
   readonly panel: PanelState
   readonly tones: () => Tones
-  readonly debug: (event: string, detail?: unknown) => void
-  /** The sidebar's refresh. Opening the panel asks for the sessions, like expanding it. */
+  /** Re-list. force for a refresh the user is waiting on. */
   readonly refresh: (mayStart?: boolean, force?: boolean) => Promise<void>
+  readonly debug: (event: string, detail?: unknown) => void
+  /** Where the plugin's own server is listening, resolved wherever it was filed. */
   readonly origin: () => string | null
-  /** Ask for a line and write it to the process behind a row. */
+  /** Hand a line to the selected process. */
   readonly sendInput: (session: PanelSession) => Promise<void>
 }
 
 export interface SessionPanelHost {
-  /** Called on the sidebar's poll tick; returns once the panel is in step. */
-  readonly sync: () => Promise<void>
-  /** Registers the slot claim and the command that opens the panel. */
-  readonly register: () => void
-  /** Registers the command that closes it again. */
-  readonly registerClose: () => void
-  /**
-   * Open the panel with a given session already on screen.
-   *
-   * Selecting first and opening second is what makes a click in the SIDEBAR mean the same
-   * thing as `/pty-sessions` with a row chosen - one gesture, and the process the reader
-   * clicked is the one they get. Opening first would show the panel on whatever was selected
-   * before, which reads as the click having done nothing.
-   */
-  readonly openWith: (sessionID: string) => void
+  /** The poll's half: read the fresh state, list, and screen. */
+  sync: () => Promise<void>
+  register: () => void
+  registerClose: () => void
+  /** Open the panel on a given session (the sidebar's click path). */
+  openWith: (session: PanelSession) => void
 }
 
+/**
+ * Everything about the PANEL that touches the host: the store, the poll hook, the slot
+ * claim, and the commands a reader has while it is open.
+ */
 export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanelHost {
   const { context } = deps
   const [state, setState] = context.storage.memory<SessionPanelState>(SESSION_PANEL_KEY, {
     initial: initialSessionPanelState(),
   })
 
-  /**
-   * Read the selected session's screen, and say so in the panel when that fails.
-   *
-   * Separate from `sync` because it is the half that does I/O: a poll that does nothing
-   * when the panel is closed should not look like the same function as one that waits on
-   * a request, and a long function that mixes the two is the one nobody reads.
-   */
-  const readSelectedScreen = async (id: string): Promise<void> => {
-    const origin = deps.origin()
-    if (origin === null) return
-    const now = Date.now()
-    try {
-      const screen = await readScreen(origin, id)
-      setState((draft) => noteSessionScreen(draft, screen, now))
-    } catch (error) {
-      // Said in the panel rather than only in the log: a screen that silently stayed on
-      // the previous session's output would read as the panel tracking the wrong process.
-      setState((draft) =>
-        noteSessionScreen(draft, `(could not read the screen: ${String(error)})`, now)
-      )
-      deps.debug('panel.screen.failed', { id, error: String(error) })
-    }
-  }
+  const readSelectedScreen = (id: string): Promise<void> =>
+    readSelectedScreenInto(setState, deps, state, id)
 
   const sync = async (): Promise<void> => {
     const active = context.ui.panel.current()
-    // Both halves matter: no panel means nothing to do, and a panel of ANOTHER name means
-    // this plugin must not read a screen because somebody else is on screen. The SDK
-    // documents `current()` as "this plugin's active panel", so the name check is
-    // defensive - and it is covered by a test so it does not get dropped as such.
+    // Both halves matter: no panel means nothing to do, and a panel of ANOTHER name
+    // means this plugin must not read a screen because somebody else is on screen.
     if (active === undefined || active.name !== SESSION_PANEL_NAME) return
     const sessionID = active.sessionID
-    setState((draft) => {
-      noteSessionPanelInput(draft, sessionID)
-      noteSessionPanelList(draft, deps.panel.sessions, sessionID)
-    })
+    noteListAndScreen(setState, deps, state, sessionID)
     const chosen = selectedSession(state)
     if (chosen === null) return
     await readSelectedScreen(chosen.id)
   }
 
-  // Own the write, so the claim above can be a plain function instead of a closure over
-  // the store: `deps.select` is the one way this host changes the selection.
-  // The one place this host changes the selection, kept as a local so the claim below can
-  // be a plain function that receives it rather than a closure over the store.
-  const select = (id: string): void => setState((draft) => noteSessionSelected(draft, id))
+  // The instrument lives in panel-instrument.ts; both halves only run with
+  // PTY_TUI_DEBUG, and counters are the last thing a decision file should carry.
+  const keeper: ScrollKeeper = createConsoleKeeper(deps.debug)
+  const countClaimRender = createClaimMeter(deps.debug)
 
-  // What the claim learned from its input, for the commands that need it.
+  const select = (id: string): void => {
+    setState((draft) => noteSessionSelected(draft, id))
+    // Re-arm on a fresh selection: the reader starts at the bottom of a session they
+    // have not read.
+    keeper.arm()
+  }
+
   const panel: PanelActions = {}
 
+  /** Dropping a scope a click set, so the panel means this conversation again. */
+  const resetScope = (): void => setState((draft) => noteScopeChosen(draft, null))
+
   const register = (): void => {
-    claimSessionPanel(context, deps, state, select, sync, panel)
-    registerSessionPanelCommand(context, deps)
+    claimSessionPanel(context, deps, state, select, sync, panel, keeper, countClaimRender)
+    registerSessionPanelCommand(context, deps, resetScope)
   }
 
   const registerClose = (): void => registerSessionPanelCommands(context, panel, deps, state)
 
-  const openWith = (id: string): void => {
-    select(id)
+  const openWith = (session: PanelSession): void => {
+    setState((draft) => {
+      noteScopeChosen(draft, session.parentSessionId ?? null)
+      noteSessionSelected(draft, session.id)
+    })
+    // A freshly opened panel shows a session the reader has not read: its bottom row
+    // comes first, so the keeper is armed rather than left where the previous
+    // selection's scroll left it.
+    keeper.arm()
     context.ui.panel.open(SESSION_PANEL_NAME)
-    // The screen is read on the poll, so the panel opens showing the SELECTED row rather than
-    // the previous one's output until the next tick.
+    // The screen is read on the poll, so the panel opens showing the SELECTED row rather
+    // than the previous one's output until the next tick.
     void sync()
   }
 
@@ -150,35 +138,41 @@ function claimSessionPanel(
   state: SessionPanelState,
   select: (id: string) => void,
   sync: () => Promise<void>,
-  panel: PanelActions
+  panel: PanelActions,
+  keeper: ScrollKeeper,
+  /** Counts one claim render; the instrument reads its cadence. */
+  renderMeter: () => void
 ): void {
   context.ui.slot({
     append: 'session.panel',
     render: (input) => {
       // Recorded on every render rather than once: the host builds this input itself and
-      // hands over a fresh one whenever the panel is re-opened, so a reference kept from the
-      // first render would belong to the previous panel and toggle that one.
+      // hands over a fresh one whenever the panel is re-opened.
       panel.toggleFullscreen = input.toggleFullscreen
+      renderMeter()
       return sessionPanelView({
         tones: deps.tones(),
-        // The slot input is the authority on which session this is. A render must not
-        // write state, so the view is handed a copy carrying the id and the poll does the
-        // bookkeeping.
-        state: { ...state, sessionID: input.sessionID },
-        live: deps.panel.sessions,
+        // The STORE itself, not a copy: a spread in a reactive render scope reads EVERY
+        // field of the store, so any poll tick's write re-laid the panel out - which is
+        // the twitch the reader measured. Accessors read fields lazily instead.
+        state,
+        // The accessor keeps the poll's list read OUT of this render scope: a read here
+        // is tracked, the poll writes per tick, and the claim's whole tree was being
+        // rebuilt with a freshly born console widget inside it per tick.
+        live: () => deps.panel.sessions,
         focused: input.focused,
         fullscreen: input.presentation === 'fullscreen',
         onClose: input.close,
+        // The parent may be a conversation this project never opened, so the lookup
+        // answers nothing and the line falls back to the id.
+        parentName: (id) => (id === undefined ? undefined : context.data.session.get(id)?.title),
         onSend: deps.sendInput,
         onSelect: (id) => {
           select(id)
           void sync()
         },
-        // Owns the row's gesture rather than rendering it, for the reason the comment
-        // above a render states: a render must not write state, so it hands the fold up
-        // and the host writes it. No `sync()` afterwards - the store change alone
-        // re-renders the panel, and a second read of the screen buys nothing.
         onToggleList: () => noteSessionListToggled(state),
+        onConsoleCanvas: (canvas) => keeper.attach(canvas),
       })
     },
   })
@@ -187,15 +181,17 @@ function claimSessionPanel(
 /**
  * The command that opens the panel: a palette entry, a slash command, and no keybind.
  *
- * A keybind is deliberately NOT configured: any guess could collide with the host's own,
- * and a collision is discovered by the user pressing the wrong thing. The command has an
- * id, so it can be bound in the user's keymap config, and until then the palette entry and
- * the slash command reach it.
+ * A keybind is deliberately NOT configured: any guess could collide with the host's
+ * own. The command has an id, so it can be bound in the user's keymap config.
  */
-function registerSessionPanelCommand(context: Plugin.Context, deps: SessionPanelHostDeps): void {
+function registerSessionPanelCommand(
+  context: Plugin.Context,
+  deps: SessionPanelHostDeps,
+  /** Drops a scope a click set: opening from the palette means THIS conversation. */
+  resetScope: () => void
+): void {
   context.keymap.layer(() => ({
-    // `global`, so the command answers outside the prompt too - the panel is not a prompt
-    // feature and its reader may well be somewhere else.
+    // `global`, so the command answers outside the prompt too.
     mode: 'global',
     commands: [
       {
@@ -204,14 +200,12 @@ function registerSessionPanelCommand(context: Plugin.Context, deps: SessionPanel
         description: 'The processes this conversation started, with one of them on screen.',
         group: 'opencode-pty',
         palette: true,
-        // `pty-sessions` rather than `pty`: a bare `pty` would be a name another plugin
-        // may already have claimed in the same completion list.
         slash: { name: 'pty-sessions' },
         run: () => {
+          resetScope()
           context.ui.panel.open(SESSION_PANEL_NAME)
           // Opening is a request to see the sessions, exactly like expanding the sidebar,
-          // so it is a trigger that may start the server. Without it the panel would be
-          // empty on a host where nothing else ever asked for one.
+          // so it is a trigger that may start the server.
           void deps.refresh(true)
         },
       },
@@ -220,41 +214,8 @@ function registerSessionPanelCommand(context: Plugin.Context, deps: SessionPanel
 }
 
 /**
- * What the panel claim learned from its input, for the commands that need it.
- *
- * Mutable and owned by the host, because the only source is the slot's render: a render must
- * not write state, so it records the function it was given and the poll does the bookkeeping.
- */
-export interface PanelActions {
-  /** The claim's `toggleFullscreen`, once it has rendered. Absent before the first render. */
-  toggleFullscreen?: () => void
-}
-
-/**
- * The commands a reader has while the panel is open: leave it, enlarge it, or leave for the
- * session list. Those three and nothing else.
- *
- * The ceiling is measured, not chosen. The keymap hangs off the RENDERER
- * (`createDefaultOpenTuiKeymap(renderer)`, packages/tui/src/context/keymap.tsx:66), and the
- * host handles "a focused editor owns the input" by enabling a layer
- * (`registerManagedTextareaLayer`) rather than by letting a renderable swallow the key - so a
- * focused panel does not eat keys, and a bound command does reach us. What is scarce is the
- * KEYS: 167 binds are taken in packages/tui/src/config/keybind.ts. `escape` is
- * `session.interrupt`, and `q` is `diff.close`, whose command carries no `enabled` predicate
- * and so is reachable at any time. Both were the obvious choices for "leave this", and both
- * would have been wrong.
- *
- * So `ctrl+y` closes and `f3` enlarges, each measured free, and each also has a palette entry
- * - the route that cannot be taken away, because the palette is a host overlay no plugin can
- * shadow, so it answers even while the panel holds focus. The ids let the user move either
- * key. `enabled` keeps a key from lying: a binding that does nothing the rest of the time
- * teaches the reader to distrust the one time it matters.
- *
- * Switching sessions needs no key of ours. The host has `session.list` on `<leader>l` and
- * closes this panel as a side effect of leaving the session, so a key here would only shadow a
- * binding that already exists and works. The command exists for the same reason the close
- * command does: the reader is in the panel, and the routes out should be listed where they
- * can be found.
+ * The commands a reader has while the panel is open: leave it, enlarge it, or leave for
+ * the session list. `ctrl+y` closes and `f3` enlarges, measured free.
  */
 function registerSessionPanelCommands(
   context: Plugin.Context,
@@ -284,23 +245,15 @@ function registerSessionPanelCommands(
         palette: true,
         bind: 'f3',
         enabled: open,
-        // `ui.panel` is only `open`, `close` and `current` - `toggleFullscreen` exists on
-        // `PanelInput`, which arrives inside the slot's render and nowhere else. So the claim
-        // leaves the function it was handed in `panel`, and the key drives that.
         run: () => panel.toggleFullscreen?.(),
       },
       {
-        // The one key that makes the view usable rather than a screenshot. `f4` is measured
-        // free; `escape` and `q` are not available, and a program that reads `q` therefore
-        // has to be reached through the prompt this opens.
         id: 'opencode-pty.session-panel.send',
         title: 'Send a line to the selected PTY',
         description: 'Type one line for the program on screen, delivered as if typed.',
         group: 'opencode-pty',
         palette: true,
         bind: 'f4',
-        // Only with something selected AND still running: the key would otherwise open a
-        // field whose answer the server refuses.
         enabled: () => {
           const chosen = selectedSession(state)
           return open() && chosen !== null && !isFinished(chosen)
@@ -313,14 +266,10 @@ function registerSessionPanelCommands(
         },
       },
       {
-        // No key, deliberately: the host's `session.list` is the way to switch conversation,
-        // and a binding here would shadow it for no gain.
+        // No key, deliberately: the host's `session.list` is the way to switch
+        // conversation, and a binding here would shadow it for no gain.
         id: 'opencode-pty.session-panel.sessions',
         title: 'Leave the PTY panel for the session list',
-        // The panel belongs to one conversation, so leaving it for the session list means
-        // leaving it altogether - and closing first is required, because the host closes a
-        // panel only when the route changes to a DIFFERENT SESSION (app.tsx:596). Navigating
-        // home is not that, and would leave the panel open on top of the list.
         description: 'Close the PTY panel and open the session list.',
         group: 'opencode-pty',
         palette: true,

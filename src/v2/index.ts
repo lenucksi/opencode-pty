@@ -3,9 +3,10 @@ import { createV2Adapter } from '../adapters/v2/index.ts'
 import { manager } from '../plugin/pty/manager.ts'
 import { setParentSessionTitleResolver } from '../plugin/pty/parent-session-title.ts'
 import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
-import { getOrCreateServer, registerV2Commands } from './commands.ts'
+import { getActiveServer, getOrCreateServer, registerV2Commands } from './commands.ts'
 import { V2SessionNotifier } from './notifier.ts'
 import { announceRestart } from './restart-announce.ts'
+import { PtyServerRpc, serverOrigin } from './rpc.ts'
 import { registerUsageSkill } from './skill.ts'
 import { registerV2Tools } from './tools.ts'
 import { define, type OpencodePtyOptions, type PluginContextV2, type PluginV2 } from './types.ts'
@@ -72,6 +73,21 @@ export const Plugin: PluginV2 = define({
 
     const adapter = createV2Adapter({ notifier })
     installHostAdapter(adapter)
+
+    // The TUI half asks this for the address instead of deriving it from the origin record: one
+    // `opencode serve --service` hosts the plugin for every project the user opens, so the record
+    // is filed under the directory THAT process was started in - which no panel can compute from
+    // its own session. Registered even without `autostart`, because "not running" is an answer the
+    // panel needs. `runRegistration` keeps a build without RPC loading everything else.
+    await runRegistration('rpc', () =>
+      ctx.rpc?.register(PtyServerRpc, {
+        origin: async (_input, context) => {
+          const url = serverOrigin(getActiveServer())
+          if (url === null) return context.error('not_running', 'No PTY server is running yet', {})
+          return { url }
+        },
+      })
+    )
 
     // Each registration step is optional and isolated: a host that does not
     // implement one of them must not lose the tools (a single failing

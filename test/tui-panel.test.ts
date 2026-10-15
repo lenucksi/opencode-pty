@@ -144,12 +144,33 @@ interface Observed {
    * the title path untested.
    */
   sessionTitles: Record<string, string>
+  /**
+   * The app's default location, which is what an `autostart` server files its record under.
+   *
+   * The project in every case but the moved-session one - `session.location` is what the host
+   * hands a plugin, and the two part company as soon as a session is moved.
+   */
+  defaultDirectory?: string
+  /**
+   * Durable stores to restore instead of `initial`, by key.
+   *
+   * The host persists an object and hands it back as it was, so a store written by an older
+   * build is missing whatever was added since. A case that wants that has to say so.
+   */
+  persisted?: Record<string, Record<string, unknown>>
   /** The prompts the plugin opened, in order. */
   prompts: { readonly title: string; readonly value?: string }[]
   /** What the prompt resolves with. `undefined` is the dismissed dialog. */
   answerPrompt: string | undefined
   /** When set, the prompt throws this instead of answering. */
   promptError?: string
+  /**
+   * What the server half's RPC answers with the address, when it has one.
+   *
+   * Unset models a host whose RPC has no server running (or none at all), which must fall through
+   * to the origin record rather than breaking the poll.
+   */
+  rpcOrigin?: string
 }
 
 let runtimeDir: string
@@ -193,11 +214,18 @@ function panelTheme(): TuiContext['theme'] {
 function makeContext(observed: Observed): TuiContext {
   // A store is modelled as the object plus a mutator that applies the draft. That
   // is exactly what the panel reads; see the file header for what it cannot model.
+  //
+  // `persisted` models the one thing the host does that a naive fixture hides: a durable store
+  // comes back exactly as it was persisted, and `initial` is NOT merged into it. Without that,
+  // every case would be handed a complete object and a field added after a reader's first run
+  // could never be seen missing - which is how a missing `filter` reached a `.trim()`.
   const store = <Value extends object>(key: string, options: { initial: Value }) => {
-    observed.stores.set(key, options.initial as Record<string, unknown>)
+    const restored = observed.persisted?.[key]
+    const value = (restored ?? options.initial) as Value
+    observed.stores.set(key, value as Record<string, unknown>)
     const pair: readonly [Value, (mutation: (draft: Value) => void) => void] = [
-      options.initial,
-      (mutation) => mutation(options.initial),
+      value,
+      (mutation) => mutation(value),
     ]
     return pair
   }
@@ -219,6 +247,14 @@ function makeContext(observed: Observed): TuiContext {
         observed.sessionCalls.push('remove')
       },
     },
+    // The call the panel makes FIRST, before any record is consulted. A host without RPC, or one
+    // whose server is not up, rejects - which is an answer, not a failure.
+    rpc: () => ({
+      origin: async (): Promise<{ url: string }> => {
+        if (observed.rpcOrigin === undefined) throw new Error('not_running')
+        return { url: observed.rpcOrigin }
+      },
+    }),
   }
 
   const ui = {
@@ -329,6 +365,11 @@ function makeContext(observed: Observed): TuiContext {
           const title = observed.sessionTitles[id]
           return title === undefined ? undefined : { title }
         },
+      },
+      // The host's default location, which is where a server that `autostart` started files its
+      // record - and the second key the panel now tries.
+      location: {
+        default: () => ({ directory: observed.defaultDirectory ?? project }),
       },
     },
     attention: { notify: async () => ({ ok: true, notification: false, sound: false }) },
@@ -530,11 +571,17 @@ async function clickFooter(observed: Observed): Promise<void> {
  * session, and a fixture that fabricated one would not notice if the shape the
  * server serves had drifted from the shape the panel reads.
  */
-async function spawnSession(title: string, command = 'true', args: string[] = []): Promise<string> {
+async function spawnSession(
+  title: string,
+  command = 'true',
+  args: string[] = [],
+  /** The conversation to record as the one that started it; the panel's own by default. */
+  parentSessionId = 'test-parent-session'
+): Promise<string> {
   const started = await ptySpawn.execute(
     { command, args, title, description: 'tui panel test' },
     {
-      sessionID: 'test-parent-session',
+      sessionID: parentSessionId,
       messageID: 'msg-1',
       agent: 'test-agent',
       abort: new AbortController().signal,
@@ -693,6 +740,74 @@ describe('the PTY sidebar panel', () => {
     }
   })
 
+  // The measured bug (TASK-27): opencode was launched in one directory, the session lives in a
+  // project below it, and the server's record is filed under the app DEFAULT. Looking up the
+  // session's key alone said "not running" beside a server that answers /health - with an empty
+  // footer, because the panel had no sessions to report on at all.
+  test('finds a server filed under the app default when the session moved', async () => {
+    const appDir = realpathSync(mkdtempSync(join(tmpdir(), 'pty-tui-app-')))
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: appDir })
+    try {
+      await spawnSession('moved-session', 'sh', ['-c', 'exit 1'])
+      const seen = observed()
+      // The session is in `project`; the server published its record under the app directory.
+      seen.defaultDirectory = appDir
+      await tuiPanel.setup(makeContext(seen))
+
+      const row = await waitForRow(seen, 'moved-session', 'exited')
+      if (!row) throw new Error('the panel never listed a server filed under the app default')
+      expect(panelStore(seen).status).toMatch(/^\d+ sessions?$/)
+    } finally {
+      server[Symbol.dispose]()
+      rmSync(appDir, { recursive: true, force: true })
+    }
+  })
+
+  // The shape ONE `opencode serve --service` produces, measured on the author's machine: the PTY
+  // server lives in that long-lived process and is filed under the directory IT was started in,
+  // while the panel sits in a session elsewhere and the app default is elsewhere again. Neither
+  // key the panel can name matches, and it read "not running" - with the footer gone, because it
+  // had no sessions to report on at all.
+  test('finds a server filed under a directory neither key names', async () => {
+    const serviceDir = realpathSync(mkdtempSync(join(tmpdir(), 'pty-tui-service-')))
+    const appDir = realpathSync(mkdtempSync(join(tmpdir(), 'pty-tui-app2-')))
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: serviceDir })
+    try {
+      await spawnSession('unattributed-session', 'sh', ['-c', 'exit 1'])
+      const seen = observed()
+      // The session is in `project`, the app default elsewhere, the record under a third.
+      seen.defaultDirectory = appDir
+      await tuiPanel.setup(makeContext(seen))
+
+      const row = await waitForRow(seen, 'unattributed-session', 'exited')
+      if (!row) throw new Error('the panel never listed a server filed under a third directory')
+      expect(panelStore(seen).status).toMatch(/^\d+ sessions?$/)
+    } finally {
+      server[Symbol.dispose]()
+      rmSync(serviceDir, { recursive: true, force: true })
+      rmSync(appDir, { recursive: true, force: true })
+    }
+  })
+
+  // The route that needs no key at all, and the reason it exists. This server publishes NO record
+  // (it was never given a directory to file one under), so a panel that only reads records can
+  // never find it - and a panel that asks can, because the answer comes from the live server.
+  test('finds a server that published no record at all, by asking', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1' })
+    try {
+      await spawnSession('unfiled-session', 'sh', ['-c', 'exit 1'])
+      const seen = observed()
+      seen.rpcOrigin = `http://127.0.0.1:${server.server.port}`
+      await tuiPanel.setup(makeContext(seen))
+
+      const row = await waitForRow(seen, 'unfiled-session', 'exited')
+      if (!row) throw new Error('the panel never asked the server half where it is')
+      expect(panelStore(seen).status).toMatch(/^\d+ sessions?$/)
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
   test('collapses by default, so the panel stays out of the way', async () => {
     const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
     try {
@@ -712,6 +827,29 @@ describe('the PTY sidebar panel', () => {
     } finally {
       server[Symbol.dispose]()
     }
+  })
+
+  // The crash a reader reported: a prefs store written before `filter` and `collapsedGroups`
+  // existed comes back without those keys, the host does NOT merge `initial` into it, and the
+  // first read of one took the whole section down - "openode-pty crashed in slot
+  // sidebar.content: undefined is not an object (evaluating 'query.trim')". Every render threw,
+  // so dismissing the panel brought it straight back.
+  test('repairs a prefs store written before a field existed', async () => {
+    const seen = observed()
+    // Exactly what a build from before those two fields left behind.
+    seen.persisted = { 'opencode-pty.sidebar': { collapsed: false, showFinished: false } }
+    await tuiPanel.setup(makeContext(seen))
+
+    // The render that used to throw now draws the truth. First, because this is the failure a
+    // reader saw: the section did not misreport, it did not draw at all.
+    const frame = await sidebarFrame(seen)
+    expect(frame).toContain('PTY')
+    expect(frame).toContain('nothing running')
+
+    // And the values it reads are filled in, rather than handed to a `.trim()` as undefined.
+    const prefs = prefsOf(seen)
+    expect(prefs.filter).toBe('')
+    expect(prefs.collapsedGroups).toEqual([])
   })
 
   // A click delivers BOTH a mouse-down and a mouse-up, so a toggle registered on each
@@ -1197,6 +1335,42 @@ describe('the PTY sidebar panel', () => {
     }
   })
 
+  // The click that used to show NOTHING, measured: seven `Lizenz-Hashes erzeugen` runs whose parent
+  // was a davx5 conversation from the day before, listed by the sidebar and by no panel - because
+  // the panel filtered by ITS session, and that conversation is another project's. The row carries
+  // the conversation that started the process, and that is what the panel now lists.
+  test('a click on a foreign row shows the processes of the conversation that started it', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('elsewhere', 'sh', ['-c', 'exit 1'], 'ses_another-project')
+      const seen = observed()
+      // The conversation the process came from may not even be one this project has open, so the
+      // host cannot name it - which is the case the identity line has to survive.
+      seen.sessionTitles['ses_another-project'] = 'davx5 build'
+      await tuiPanel.setup(makeContext(seen))
+      // Expanded, and with the archive open: a finished run is only a row when it carries news.
+      const prefs = prefsOf(seen)
+      prefs.collapsed = false
+      prefs.showFinished = true
+      await waitForRow(seen, 'elsewhere', 'exited')
+
+      await clickSidebarRow(seen, 'elsewhere')
+
+      const store = seen.stores.get('opencode-pty.session-panel') as
+        | { scope?: string | null; sessions?: { title?: string }[] }
+        | undefined
+      const listed = await waitFor(() =>
+        (store?.sessions?.length ?? 0) > 0 ? store?.sessions : undefined
+      )
+      // The clicked conversation's processes - not the empty list this panel's own session would
+      // produce.
+      expect(store?.scope).toBe('ses_another-project')
+      expect(listed?.map((entry) => entry.title)).toEqual(['elsewhere'])
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
   // Expanding the sidebar is the only trigger that may start a server, and opening this
   // panel asks for the same thing, so it is the same trigger. Otherwise the panel would
   // be empty on a host where nothing else ever asked for one - and the empty state says
@@ -1340,18 +1514,22 @@ describe('the PTY sidebar panel', () => {
       expect(frame).toContain('PTY')
       expect(frame).toContain('2 sessions')
       // The list is FOLDED by default, and that is what a frame shows: the fold row, not
-      // the session rows. Asserting `two` on a folded frame would fail on the design the
-      // panel chose because its rows used to cost the console a third of the panel, so the
-      // rows are only on a frame rendered with the fold open.
-      expect(frame).toContain('(aufklappen)')
-      expect(frame).not.toContain('two')
+      // the session rows. Asserted about ROWS rather than about the title being absent from the
+      // frame, because the identity line above the console names the selected session - which is
+      // what that line is for, and asserted here so the two cannot drift apart.
+      expect(frame).toContain('(expand)')
+      expect(frame.split('\n').some((line) => line.includes('•'))).toBe(false)
+      expect(frame).toContain('two  ·  ')
+      // And it names the conversation that started it, which is how a reader learns whose process
+      // they are looking at.
+      expect(frame).toContain('started by test-parent-session')
 
       // The click goes to the fold's row, which it actually drew rather than a row
       // position from a list that was on screen before the fold existed.
       const foldY = setup
         .captureCharFrame()
         .split('\n')
-        .findIndex((line) => line.includes('aufklappen'))
+        .findIndex((line) => line.includes('expand'))
       if (foldY < 0) throw new Error('no fold row on the frame')
       await setup.mockMouse.click(4, foldY)
       await setup.renderOnce()

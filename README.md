@@ -279,6 +279,15 @@ session, which does not belong on a load path. If the PTY plugin is not
 registered in the project's `opencode.jsonc`, the header says so rather than
 offering a retry that cannot work.
 
+The panel asks this plugin's own server half where it is listening — over the
+host's plugin RPC (`@opencode/plugin/rpc`), so the answer is read from the live
+server and needs no project key — and only then falls back to the address the
+server published for a project. That order matters when one
+`opencode serve --service` hosts the plugin for several projects: the published
+record is filed under the directory that process was started in, which a panel
+cannot derive from its own session, and deriving it alone meant reading *not
+running* beside a server that answered.
+
 ### Requirements
 
 The panel needs an OpenCode build with the V2 TUI plugin API — 2.0.23 and later.
@@ -343,10 +352,13 @@ Without this panel having an exit of its own, opening it left no way back except
 killing the terminal. `f3` does nothing below 80 columns: OpenCode forces the panel
 full-screen there, so there is no half to swap back to.
 
-Clicking a running session in the sidebar opens this panel with that session on screen.
-The footer names it and counts it — id, status, terminal size, output lines, and how many
-rows of the rendered screen are on view. Size matters: a program given 120x40 and shown in
-80 columns is wrapping, not failing.
+Clicking a session in the sidebar opens this panel on it — including one whose conversation lives in
+another project, which the sidebar lists but no panel used to show: the click scopes the panel to the
+conversation that started the process, and the parent id needs no live session to do that. The line
+above the console names what is on screen (title, date, state, and the conversation that started it),
+and the footer counts it — id, status, terminal size, output lines, and how many rows of the rendered
+screen are on view. Size matters: a program given 120x40 and shown in 80 columns is wrapping, not
+failing.
 
 ### Driving the program on screen
 

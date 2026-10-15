@@ -66,6 +66,15 @@ export interface PanelSession {
    * row below shows the status word rather than a duration.
    */
   readonly exitAt?: string
+  /**
+   * ISO: when the server recorded the process gone.
+   *
+   * Same meaning as `exitAt`, carried by records that were written before `exitAt`
+   * existed: after a restart the archive is still read, and its older entries answer
+   * only this. The duration function takes whichever of the two it finds, so a
+   * yesterday's run measures to its end rather than to the panel opening.
+   */
+  readonly endedAt?: string
 }
 
 /** Title column width in the sidebar. */
@@ -77,8 +86,13 @@ const TITLE_MAX = 24
  */
 export const ROW_BULLET = '• '
 
-/** The trailing state field of a row. */
-function rowTail(session: PanelSession): string {
+/**
+ * The trailing state field of a row.
+ *
+ * Exported because the sidebar draws it as its own element: a row there has to keep its state
+ * when the title is what has to give way, and one string can only be cut from one end.
+ */
+export function rowTail(session: PanelSession): string {
   if (session.status === 'running') {
     return `${typeof session.lineCount === 'number' ? session.lineCount : 0}L`
   }
@@ -129,6 +143,54 @@ export function resolveParentTitles(
     if (title) titles[id] = title
   }
   return titles
+}
+
+/**
+ * A local date and time, for a session's identity line.
+ *
+ * `formatClock` prints a time, which is right for a run that started minutes ago and useless for one
+ * that started yesterday - and these outlive the day they started in, so the line has to say which
+ * day. Locale-formatted, like `formatClock` next door, because the reader is the one who has to read
+ * it.
+ */
+export function formatStamp(iso: string | undefined): string {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString([], {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+}
+
+/**
+ * Who a session is: its title, when it started, how it ended, and what started it.
+ *
+ * The four things that answer "which process am I looking at", for the line above the console. The
+ * state comes from `rowTail`, so the line and the row cannot disagree about whether a run is
+ * `exit 2` or still counting lines. `parent` is resolved by the caller, which is the only one
+ * holding the host's session lookup - and a session started by hand says so rather than leaving the
+ * field blank, because "nobody's conversation started this" is the answer for one.
+ */
+export function sessionIdentity(session: PanelSession, parentName: string | undefined): string {
+  // The parent is decided by the SESSION, not by the lookup: a conversation from another project has
+  // no title to resolve here, and that is not the same as a session nobody's conversation started.
+  const parent =
+    session.parentSessionId === undefined
+      ? 'started by hand'
+      : `started by ${parentName !== undefined && parentName.length > 0 ? parentName : session.parentSessionId}`
+  return [
+    session.title && session.title.length > 0 ? session.title : session.id,
+    formatStamp(session.createdAt),
+    rowTail(session),
+    parent,
+  ]
+    .filter((part) => part.length > 0)
+    .join('  ·  ')
 }
 
 /**
@@ -252,8 +314,12 @@ export function formatDetail(session: PanelSession): string {
 export function sessionDurationMs(session: PanelSession, now: number): number | null {
   const started = Date.parse(session.createdAt ?? '')
   if (!Number.isFinite(started)) return null
-  const stopped = Date.parse(session.exitAt ?? '')
-  return (Number.isFinite(stopped) ? stopped : now) - started
+  // The end of a stopped process is whichever stamp the record carries - `exitAt` on
+  // newer records, `endedAt` on ones that did not have the field when they were
+  // written. A record whose end the panel cannot read is timed to `now`, which is why
+  // the caller supplies the clock rather than this reading it.
+  const ended = Date.parse(session.exitAt ?? session.endedAt ?? '')
+  return (Number.isFinite(ended) ? ended : now) - started
 }
 
 /**
@@ -314,7 +380,15 @@ export function decodeScreen(raw: unknown): string {
   }
   // A bare array is accepted so a caller that gets the body directly is not punished
   // for it, exactly as `decodeBuffer` accepted a bare string.
-  return (rows(raw) ?? []).join('\n')
+  // Trailing blanks are the screen's SHAPE, not the program's output: a fresh run
+  // prints its first lines at the top and the screen still has its full height - the
+  // reader measured a console that scrolled through blank rows and showed a scrollbar
+  // while the screen was not even full. The stage keeps the rows; the consumer drops
+  // the blank tail.
+  const combined = rows(raw) ?? []
+  let end = combined.length
+  while (end > 0 && (combined[end - 1]?.trim() ?? '') === '') end -= 1
+  return combined.slice(0, end).join('\n')
 }
 
 /**
