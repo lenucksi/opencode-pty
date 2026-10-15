@@ -2,7 +2,7 @@ import type { Plugin } from '@opencode/plugin/tui'
 
 import { isFinished, type PanelSession } from './lib.ts'
 import type { PanelState } from './panel-state.ts'
-import type { Tones } from './render.ts'
+import type { Tones } from './tones.ts'
 import { readScreen } from './server.ts'
 import { sessionPanelView } from './session-panel.ts'
 import {

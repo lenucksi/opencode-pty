@@ -77,8 +77,13 @@ const TITLE_MAX = 24
  */
 export const ROW_BULLET = '• '
 
-/** The trailing state field of a row. */
-function rowTail(session: PanelSession): string {
+/**
+ * The trailing state field of a row.
+ *
+ * Exported because the sidebar draws it as its own element: a row there has to keep its state
+ * when the title is what has to give way, and one string can only be cut from one end.
+ */
+export function rowTail(session: PanelSession): string {
   if (session.status === 'running') {
     return `${typeof session.lineCount === 'number' ? session.lineCount : 0}L`
   }

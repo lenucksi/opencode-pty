@@ -4,15 +4,8 @@ import { testRender } from '@opentui/solid'
 
 import type { PanelSession } from '../src/tui/lib.ts'
 import { groupsForDisplay } from '../src/tui/panel-state.ts'
-import {
-  clearTargetCount,
-  dialogRows,
-  dialogSize,
-  outputDialogView,
-  type PanelView,
-  REMOVE_GLYPH,
-  sidebarView,
-} from '../src/tui/render.ts'
+import { dialogRows, dialogSize, outputDialogView } from '../src/tui/output-dialog.ts'
+import { clearTargetCount, type PanelView, REMOVE_GLYPH, sidebarView } from '../src/tui/render.ts'
 
 /**
  * What the panel draws, rendered headlessly.
@@ -189,7 +182,11 @@ describe('sidebarView', () => {
         })
       )
     )
-    expect(text).toContain('…')
+    // The renderer's own marker (`...`), not `truncateText`'s `…`: the title is the element that
+    // shrinks, so the widget is the one that knows how much room was left. Pre-clipping the string
+    // as well produced two markers and a middle-truncated id.
+    expect(text).toContain('...')
+    // Which is the point: the title gives way, the state does not.
     expect(text).toContain('42L')
   })
 
@@ -267,6 +264,57 @@ describe('sidebarView group headings', () => {
     expect(heading).not.toContain('▼')
     expect(text).toContain('first')
     expect(text).toContain('second')
+  })
+
+  // Measured on the author's ~36-column sidebar: the heading wrapped onto a second line
+  // ("▼Session" / " ses_ed48fd0ce…  build  10"), because chevron (2) + title (22) + meta (18) came
+  // to 42 columns and a text wraps by default. A heading that wraps splits the group in two.
+  test('keeps a group heading on one line in a narrow sidebar', async () => {
+    const sessions = Array.from({ length: 10 }, (_, index) =>
+      parented(`s${index}`, 'ses_ed48fd0ce4f1a2b', {
+        parentAgent: 'build',
+        title: `run-${index}`,
+      })
+    )
+    const text = await frame(() => sidebarView(view({ sessions })), 36)
+    const lines = text.split('\n')
+    // The group's own line, found by the agent in its meta: the panel header above it also has a
+    // chevron.
+    const heading = lines.findIndex((line) => line.includes('build'))
+    expect(heading).toBeGreaterThanOrEqual(0)
+    // One line, with the fold control and the count on it, and nothing spilled below.
+    expect(lines[heading]).toContain('▼')
+    expect(lines[heading]).toContain('10 sessions')
+    expect(lines[heading + 1] ?? '').not.toContain('sessions')
+  })
+
+  // The state is the reason a row exists, so a narrow sidebar must cost the TITLE its tail and
+  // not the row its state. Measured: below 30 columns the tail landed on a line of its own, and
+  // with the row drawn from one string the state was then clipped to `1`.
+  test('keeps a row on one line, and keeps its state, in a narrow sidebar', async () => {
+    const text = await frame(
+      () =>
+        sidebarView(
+          view({
+            sessions: [
+              session({
+                id: 'a',
+                status: 'running',
+                lineCount: 123456,
+                title: 'davx5-emu: Boot long-way round with adb',
+              }),
+            ],
+          })
+        ),
+      30
+    )
+    const lines = text.split('\n')
+    const row = lines.findIndex((line) => line.includes('123456L'))
+    expect(row).toBeGreaterThanOrEqual(0)
+    // The whole row on one line: bullet, state and the remove control all present.
+    expect(lines[row]).toContain('•')
+    expect(lines[row]).toContain('✕')
+    expect(lines[row + 1] ?? '').not.toContain('123456L')
   })
 
   test('folds a group of more than two on its chevron, open by default', async () => {

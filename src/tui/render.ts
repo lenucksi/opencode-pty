@@ -1,5 +1,4 @@
 import type { MouseEvent } from '@opentui/core'
-import { insert } from '@opentui/solid'
 import { jsx } from '@opentui/solid/jsx-runtime'
 
 import { parentSessionGroupTitle } from '../web/shared/session-meta.ts'
@@ -7,17 +6,11 @@ import {
   archiveLabel,
   clearActionLabel,
   finishedSessions,
-  formatDetail,
-  formatDuration,
   headerLabel,
-  isFinished,
   type PanelSession,
   ROW_BULLET,
-  rowLabel,
+  rowTail,
   rowTone,
-  sessionDurationMs,
-  tail,
-  truncateText,
 } from './lib.ts'
 import {
   emptyListLabel,
@@ -45,22 +38,7 @@ import {
 /** The per-row remove control. Leading space so it does not crowd the label. */
 export const REMOVE_GLYPH = ' ✕'
 
-/**
- * The colour slots this plugin draws with, named rather than typed.
- *
- * Exported because three surfaces need them - the sidebar, its dialog and the session
- * panel - and three copies of a palette is three places for a rename to miss. Typed as
- * `unknown` because the host's resolved theme is a chain of optional lookups and the
- * panel reads six slots, not the whole type.
- */
-export interface Tones {
-  readonly base: unknown
-  readonly muted: unknown
-  readonly success: unknown
-  readonly error: unknown
-  readonly border: unknown
-  readonly raised: unknown
-}
+import type { Tones } from './tones.ts'
 
 export interface PanelView {
   readonly tones: Tones
@@ -125,16 +103,35 @@ function rowFor(view: PanelView, session: PanelSession) {
         : tone === 'error'
           ? view.tones.error
           : view.tones.muted,
+    wrapMode: 'none',
+    flexShrink: 0,
     children: ROW_BULLET,
   })
   const label = jsx('text', {
     fg: view.tones.base,
-    // Grows so the remove glyph is pushed to the panel's right edge.
+    // The TITLE alone grows and shrinks, and never wraps: a wrapped row is two rows, and a list of
+    // them stops being a list (measured: the tail landed on its own line below 30 columns).
     flexGrow: 1,
-    children: rowLabel(session),
+    flexShrink: 1,
+    minWidth: 0,
+    wrapMode: 'none',
+    truncate: true,
+    children: session.title && session.title.length > 0 ? session.title : 'untitled',
+  })
+  // The state is its own element, fixed, because it is the reason the row exists: cut the title
+  // and the state survives, which one string cannot do (measured: `123456L` became `1`).
+  const tail = jsx('text', {
+    fg: view.tones.muted,
+    wrapMode: 'none',
+    flexShrink: 0,
+    children: `  ${rowTail(session)}`,
   })
   const remove = jsx('text', {
     fg: view.tones.muted,
+    // Never shrunk and never wrapped: a remove control that has moved to its own line is one
+    // nobody finds.
+    wrapMode: 'none',
+    flexShrink: 0,
     children: REMOVE_GLYPH,
     // BOTH events, not just the one it acts on: the row opens on mouse UP, so
     // letting the UP through would remove the session and then open its output.
@@ -162,7 +159,7 @@ function rowFor(view: PanelView, session: PanelSession) {
     // DOWN only to stop it, never to act. Without this the panel's own header toggle - an
     // ancestor of the list - would collapse the section on the press half of every click.
     onMouseDown: (event: MouseEvent) => event.stopPropagation(),
-    children: [bullet, label, remove],
+    children: [bullet, label, tail, remove],
   })
 }
 
@@ -225,9 +222,6 @@ function headerFor(view: PanelView) {
   })
 }
 
-/** The group heading's title column, kept narrower than a row's so the chevron and the count fit. */
-const GROUP_TITLE_MAX = 22
-
 /**
  * One parent conversation's heading, with its fold control.
  *
@@ -256,6 +250,9 @@ function groupHeaderFor(view: PanelView, group: PanelGroup, open: boolean) {
         ? [
             jsx('text', {
               fg: view.tones.muted,
+              // Fixed, or it shrinks to nothing first and the fold control disappears.
+              wrapMode: 'none',
+              flexShrink: 0,
               children: open ? '▼ ' : '▶ ',
               // ONE handler, on mouse-DOWN only. A click delivers a down AND an up, so a
               // toggle registered on each fired twice and the group looked like it ignored
@@ -270,11 +267,25 @@ function groupHeaderFor(view: PanelView, group: PanelGroup, open: boolean) {
         : []),
       jsx('text', {
         fg: view.tones.base,
-        // Grows so the agent and the count are pushed to the panel's right edge.
+        // Grows so the agent and the count are pushed to the panel's right edge, shrinks first
+        // when there is not room, and NEVER wraps: measured in a ~36-column sidebar, chevron (2)
+        // + title (22) + meta (18) came to 42, the default wrap split the heading over two lines,
+        // and the group stopped looking like one group.
         flexGrow: 1,
-        children: truncateText(parentSessionGroupTitle(group, view.titles), GROUP_TITLE_MAX),
+        flexShrink: 1,
+        minWidth: 0,
+        wrapMode: 'none',
+        truncate: true,
+        children: parentSessionGroupTitle(group, view.titles),
       }),
-      jsx('text', { fg: view.tones.muted, children: meta }),
+      jsx('text', {
+        fg: view.tones.muted,
+        // Short, and the last thing that may give way: a count that is clipped reads as a
+        // different count.
+        wrapMode: 'none',
+        flexShrink: 0,
+        children: meta,
+      }),
     ],
   })
 }
@@ -345,92 +356,6 @@ export function sidebarFooterView(view: PanelView) {
         }) ?? '',
     }),
   })
-}
-
-export interface DialogView {
-  readonly tones: Tones
-  readonly session: PanelSession
-  /** Its current row from the panel, so a process that exits stops the timer. */
-  readonly live: PanelSession
-  /** The clock the run timer reads. */
-  readonly now: number
-  /** Its plain output. */
-  readonly output: string
-  /** Height of the scrollable output area, in rows. */
-  readonly rows: number
-}
-
-/** How much of the screen a dialog may fill, given the host pins its top edge. */
-export function dialogRows(screenRows: number): number {
-  // The host centres horizontally and puts the top edge a quarter of the screen
-  // down, growing downward from there - so HEIGHT is the only shape lever, and it
-  // is spent filling to the screen edge. The 12 covers the header, its border and
-  // the host's own chrome, so the box cannot run past the bottom.
-  return Math.max(6, screenRows - Math.floor(screenRows / 4) - 12)
-}
-
-/** The size the host should give the dialog, from the terminal width. */
-export function dialogSize(cols: number): 'medium' | 'large' | 'xlarge' {
-  // The same thresholds opencode's own plugin manager uses; asking for the widest
-  // unconditionally would overflow a narrow terminal.
-  return cols >= 128 ? 'xlarge' : cols >= 96 ? 'large' : 'medium'
-}
-
-/** The output dialog: a detail header over a scrollable buffer. */
-export function outputDialogView(view: DialogView) {
-  const header = jsx('box', {
-    flexDirection: 'column',
-    width: '100%',
-    border: true,
-    borderStyle: 'single',
-    borderColor: view.tones.border,
-    backgroundColor: view.tones.raised,
-  })
-  insert(header, jsx('text', { children: `⟡ ${view.session.title || view.session.id}` }))
-  insert(header, jsx('text', { fg: view.tones.muted, children: formatDetail(view.session) }))
-  const foot = jsx('box', { flexDirection: 'row', width: '100%' })
-  insert(foot, jsx('text', { flexGrow: 1, fg: view.tones.muted, children: 'esc to close' }))
-  // The run timer sits in the band's bottom-right corner: as the last row it reads
-  // as the footer. Empty rather than "0s" when the session has no usable start,
-  // because a duration nobody can compute should not be shown as none.
-  insert(
-    foot,
-    jsx('text', {
-      fg: view.tones.muted,
-      children: (): string => {
-        if (isFinished(view.live) === false && view.live.status === undefined) return ''
-        const ms = sessionDurationMs(view.live, view.now)
-        return ms === null ? '' : formatDuration(ms)
-      },
-    })
-  )
-  insert(header, foot)
-
-  // A plain box, not a scrollbox. Measured against opentui 0.5.14: a scrollbox
-  // renders NOTHING when its text contains a line break - and `stickyScroll`
-  // together with `stickyStart: 'bottom'` blanks it even for a single line. A box
-  // renders multi-line text and clips itself with `overflow: 'hidden'`.
-  //
-  // So the line budget is the box's height rather than a fixed tail: `tail` returns
-  // exactly that many lines, newest last, which is precisely what fits.
-  // No `flexShrink: 0` here: measured, removing it changes nothing once the
-  // scrollbox is gone. An earlier version needed it for the scrollbox, and a
-  // comment claiming it was still required would be a guess dressed as a finding.
-  const output = jsx('box', {
-    width: '100%',
-    height: view.rows,
-    overflow: 'hidden',
-    children: jsx('text', { children: (): string => tail(view.output, view.rows) }),
-  })
-  const frame = jsx('box', {
-    width: '100%',
-    border: true,
-    borderStyle: 'single',
-    borderColor: view.tones.border,
-  })
-  insert(frame, output)
-
-  return jsx('box', { flexDirection: 'column', children: [header, frame] })
 }
 
 /** How many finished sessions a "clear finished" would act on, for reporting. */

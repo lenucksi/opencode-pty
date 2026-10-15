@@ -9,7 +9,8 @@ import {
   noteDialogTick,
   type PanelState,
 } from './panel-state.ts'
-import { dialogRows, dialogSize, outputDialogView, type Tones } from './render.ts'
+import { dialogRows, dialogSize, outputDialogView } from './output-dialog.ts'
+import type { Tones } from './tones.ts'
 import { cleanupSession, readScreen, writeInput } from './server.ts'
 
 /**

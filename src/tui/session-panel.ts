@@ -10,7 +10,7 @@ import {
   rowTone,
   sessionDurationMs,
 } from './lib.ts'
-import type { Tones } from './render.ts'
+import type { Tones } from './tones.ts'
 import { type SessionPanelState, selectedLive, visibleRows } from './session-panel-state.ts'
 
 /**
