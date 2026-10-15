@@ -1,5 +1,5 @@
-import { Ghostty } from 'ghostty-web'
 import type { GhosttyCell, RGB } from 'ghostty-web'
+import { Ghostty } from 'ghostty-web'
 
 /**
  * Renders a PTY's raw output into the screen a user would actually see.

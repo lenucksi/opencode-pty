@@ -7,12 +7,10 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { INDEX_FILE, LOG_FILE, META_FILE, PREVIOUS_LOG_FILE } from './archive-files.ts'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import type { BoundedReadResult, BoundedSearchResult } from './output-manager.ts'
-import { logPtyEvent } from './plugin-log.ts'
+import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../constants.ts'
+import { INDEX_FILE, LOG_FILE, META_FILE, PREVIOUS_LOG_FILE } from './archive-files.ts'
 import { readArchive, readArchiveRaw, searchArchive } from './archive-reader.ts'
 import {
   emptyTrash,
@@ -21,8 +19,9 @@ import {
   removeArchive,
   restoreFromTrash,
 } from './archive-trash.ts'
+import type { BoundedReadResult, BoundedSearchResult } from './output-manager.ts'
+import { logPtyEvent } from './plugin-log.ts'
 import { sessionsRoot } from './state-paths.ts'
-import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../constants.ts'
 import type { PTYSessionInfo } from './types.ts'
 
 /** Everything worth keeping about a session, including who asked for it. */
@@ -103,7 +102,7 @@ export class SessionStore {
   private readonly generation: string
   private readonly now: () => number
   private readonly enabled: boolean
-  private readonly retention: RetentionPolicy
+  private retention: RetentionPolicy
   private readonly flushIntervalMs: number
   private readonly flushBytes: number
   private readonly pending = new Map<string, string>()
@@ -155,6 +154,23 @@ export class SessionStore {
 
   getRetention(): RetentionPolicy {
     return { ...this.retention }
+  }
+
+  /**
+   * Change the retention policy, then prune with the new one.
+   *
+   * The re-prune is the point, not an afterthought. `prune()` runs once in the constructor,
+   * so a configured cap that waited for the next boot would be a setting that lies in
+   * between: `getRetention()` feeds the restart message, which would announce a limit the
+   * store was not yet applying. Pruning here is what closes that gap.
+   *
+   * Lowering a cap therefore removes sessions immediately. They are renamed to .trash
+   * rather than deleted, and stay restorable (`restore`) until the next boot, when
+   * `purgeTrash` empties it - the same undo window a normal remove gets.
+   */
+  updateRetention(policy: Partial<RetentionPolicy>): string[] {
+    this.retention = { ...this.retention, ...policy }
+    return this.enabled ? this.prune() : []
   }
 
   // ---------------------------------------------------------------- lifecycle
@@ -411,10 +427,7 @@ export class SessionStore {
     const cutoff = this.now() - this.retention.maxAgeDays * 24 * 60 * 60 * 1000
 
     for (const entry of this.list()) {
-      // A session that never finished is marked lost at startup and pruned
-      // afterwards; removing its directory while output may still be appended
-      // would only leave a half archive behind.
-      if (entry.status === 'running' || entry.status === 'killing') continue
+      if (!this.isPrunable(entry)) continue
 
       const ended = entry.endedAt ? Date.parse(entry.endedAt) : Number.NaN
       const created = Date.parse(entry.createdAt)
@@ -424,7 +437,13 @@ export class SessionStore {
       }
     }
 
-    for (const entry of this.list().slice(this.retention.maxSessions)) {
+    // The count cap, over the same set. Without `isPrunable` here it evicted sessions
+    // that were still LIVE: `remove` renames the directory to .trash and drops the index
+    // entry, so a process still writing to its log would have its archive pulled out from
+    // under it - the exact half-archive the age loop above already refuses to create.
+    for (const entry of this.list()
+      .filter((entry) => this.isPrunable(entry))
+      .slice(this.retention.maxSessions)) {
       if (this.remove(entry.id)) removed.push(entry.id)
     }
 
@@ -432,6 +451,19 @@ export class SessionStore {
       logPtyEvent('info', `pruned ${removed.length} archived session(s)`, { ids: removed })
     }
     return removed
+  }
+
+  /**
+   * Whether a session may be pruned in place, as opposed to restored from its archive.
+   *
+   * ONE predicate for both loops, because two answers to "is this still alive?" is how the
+   * count cap came to evict running sessions while the age cap deliberately did not. A
+   * session that never finished is marked lost at startup and pruned afterwards; removing
+   * its directory while output may still be appended would only leave a half archive
+   * behind.
+   */
+  private isPrunable(entry: PersistedSession): boolean {
+    return entry.status !== 'running' && entry.status !== 'killing'
   }
 
   // ------------------------------------------------------------------ private

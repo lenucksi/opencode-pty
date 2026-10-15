@@ -42,6 +42,16 @@ export interface PTYSession {
   createdAt: Date
   /** Set when the process ends (exit or kill). */
   endedAt?: Date
+  /**
+   * When the process actually stopped, as opposed to when we were told.
+   *
+   * The buffer keeps what a process printed but nothing recorded when it
+   * stopped, so "this run took four minutes" had to be answered by watching a
+   * clock. `endedAt` is close but not the same thing: it is set from the exit
+   * notification, which a restart loses, and it is the wall clock at handling
+   * time rather than at process exit.
+   */
+  exitAt?: Date
   parentSessionId: string
   parentAgent?: string
   notifyOnExit: boolean
@@ -81,6 +91,14 @@ export interface PTYSessionInfo {
   parentAgent?: string
   /** ISO timestamp of the end, when the session is no longer running. */
   endedAt?: string
+  /**
+   * ISO timestamp of when the process stopped, when it did.
+   *
+   * Carried in the archive because a restart loses `endedAt`, and a transcript
+   * that outlives its process is exactly the one whose duration you cannot
+   * otherwise state.
+   */
+  exitAt?: string
   lineCount: number
   /**
    * Current terminal geometry.

@@ -1,7 +1,8 @@
 // global-setup.ts
-import { spawnSync } from 'bun'
+
 import fs from 'node:fs'
 import path from 'node:path'
+import { spawnSync } from 'bun'
 
 const ROOT = path.resolve(__dirname, '..')
 const DIST_HTML = path.join(ROOT, 'dist/web/index.html')

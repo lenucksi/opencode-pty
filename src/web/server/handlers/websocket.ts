@@ -2,19 +2,19 @@ import type { ServerWebSocket } from 'bun'
 import { manager } from '../../../plugin/pty/manager'
 import { checkCommandPermission, checkWorkdirPermission } from '../../../plugin/pty/permissions'
 import {
-  type WSMessageServerSessionList,
-  type WSMessageClientSubscribeSession,
-  type WSMessageServerError,
-  type WSMessageClientUnsubscribeSession,
-  type WSMessageClientSessionList,
+  CustomError,
   type WSMessageClient,
-  type WSMessageClientSpawnSession,
   type WSMessageClientInput,
   type WSMessageClientReadRaw,
   type WSMessageClientResize,
+  type WSMessageClientSessionList,
+  type WSMessageClientSpawnSession,
+  type WSMessageClientSubscribeSession,
+  type WSMessageClientUnsubscribeSession,
+  type WSMessageServerError,
   type WSMessageServerReadRawResponse,
+  type WSMessageServerSessionList,
   type WSMessageServerSubscribedSession,
-  CustomError,
   type WSMessageServerUnsubscribedSession,
 } from '../../shared/types'
 

@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
-import { test as extendedTest } from '../fixtures'
 import type { PTYSessionInfo } from '../../../src/plugin/pty/types'
+import { test as extendedTest } from '../fixtures'
 
 extendedTest.describe('Server Clean Start', () => {
   extendedTest('should start with empty session list via API', async ({ api }) => {

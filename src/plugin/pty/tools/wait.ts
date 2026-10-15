@@ -1,13 +1,13 @@
 import { tool } from '@opencode-ai/plugin'
+import { charsForTokens, DEFAULT_READ_MAX_TOKENS } from '../../../shared/constants.ts'
+import { formatLine, TRUNCATION_MARKER } from '../formatters.ts'
 import { manager } from '../manager.ts'
 import {
   registerSessionUpdateCallback,
   removeSessionUpdateCallback,
 } from '../manager-notifications.ts'
-import { DEFAULT_READ_MAX_TOKENS, charsForTokens } from '../../../shared/constants.ts'
-import { buildSessionNotFoundError } from '../utils.ts'
-import { formatLine, TRUNCATION_MARKER } from '../formatters.ts'
 import type { PTYSessionInfo } from '../types.ts'
+import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './wait.txt'
 
 const WAIT_TAIL_LINES = 20

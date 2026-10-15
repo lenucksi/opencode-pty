@@ -1,8 +1,8 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
 import { api } from '../../shared/api-client.ts'
-import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { RawTerminal } from '../components/terminal-renderer.tsx'
+import { copyTextToClipboard } from '../lib/clipboard.ts'
 
 /**
  * The copy feedback line and the two things that fill it.

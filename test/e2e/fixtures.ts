@@ -45,6 +45,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       const proc: ChildProcess = spawn('bun', ['run', 'test/e2e/test-web-server.ts'], {
         env: {
           ...process.env,
+          // `test` is not a nice-to-have here. The child writes its port file only when
+          // NODE_ENV is exactly `test`, so without this the fixture waits on a file that no
+          // version of the code will ever write - and the wait has no timeout of its own, so
+          // it ends as a "server fixture timeout" that looks like a server that failed to
+          // start. Playwright does NOT set NODE_ENV for us. Measured: with it the whole setup
+          // finishes in about 100ms; without it nothing after "server started" ever runs.
+          NODE_ENV: 'test',
           TEST_WORKER_INDEX: workerInfo.workerIndex.toString(),
           // Keep the archived sessions of a test run out of the developer's
           // real state directory.

@@ -1,8 +1,8 @@
-import type { BuildInfo } from '../../shared/build-info.ts'
 import type { PTYSessionInfo, PTYStatus, SpawnOptions } from '../../plugin/pty/types'
+import type { BuildInfo } from '../../shared/build-info.ts'
 
 export type { BulkRemoveResult, RestoreSessionsResult } from '../../plugin/pty/types'
-export type { PTYSessionInfo, PTYStatus, HealthResponse }
+export type { HealthResponse, PTYSessionInfo, PTYStatus }
 
 /** Readable titles for the OpenCode sessions that requested visible PTYs. */
 export interface ParentSessionTitlesResponse {

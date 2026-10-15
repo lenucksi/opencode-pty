@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'bun:test'
-
-import type { PTYSessionInfo } from '../src/web/shared/types.ts'
 import {
   countSessions,
   filterGroups,
   normalizeQuery,
   sessionMatches,
 } from '../src/web/shared/session-search.ts'
+import type { PTYSessionInfo } from '../src/web/shared/types.ts'
 
 /**
  * The sidebar filter is pure, so the rules that are easy to get wrong - a group
@@ -77,6 +76,14 @@ describe('sessionMatches', () => {
 
   it('rejects a non-match', () => {
     expect(sessionMatches(build, 'kubernetes')).toBe(false)
+  })
+
+  // The TUI sidebar reads a trimmed shape across a process boundary, and that shape carries no
+  // command line at all. A session without one must not throw the matcher out of its own
+  // haystack - and it is the shape the `Searchable` signature exists to accept.
+  it('matches a session that has no command line at all', () => {
+    expect(sessionMatches({ id: 'pty_trim', title: 'trimmed' }, 'trimmed')).toBe(true)
+    expect(sessionMatches({ id: 'pty_trim', title: 'trimmed' }, 'bash')).toBe(false)
   })
 })
 

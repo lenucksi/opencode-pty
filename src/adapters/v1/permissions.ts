@@ -1,6 +1,6 @@
+import { allStructured } from '../../plugin/pty/wildcard.ts'
 import type { PluginClient } from '../../plugin/types.ts'
 import type { PermissionAuthorizer } from '../types.ts'
-import { allStructured } from '../../plugin/pty/wildcard.ts'
 
 type PermissionAction = 'allow' | 'ask' | 'deny'
 type BashPermissions = PermissionAction | Record<string, PermissionAction>

@@ -1,5 +1,5 @@
-import { logPtyEvent, type PtyLogger } from '../plugin/pty/plugin-log.ts'
 import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../plugin/constants.ts'
+import { logPtyEvent, type PtyLogger } from '../plugin/pty/plugin-log.ts'
 import {
   CHARS_PER_TOKEN,
   DEFAULT_READ_MAX_TOKENS,

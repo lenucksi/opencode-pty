@@ -1,6 +1,4 @@
-import { spawn, type IPty } from 'bun-pty'
-import { RingBuffer } from './buffer.ts'
-import type { PTYSession, PTYSessionInfo, SpawnOptions } from './types.ts'
+import { type IPty, spawn } from 'bun-pty'
 import {
   FALLBACK_TERMINAL_COLS,
   FALLBACK_TERMINAL_ROWS,
@@ -9,6 +7,8 @@ import {
   MIN_TERMINAL_COLS,
   MIN_TERMINAL_ROWS,
 } from '../constants.ts'
+import { RingBuffer } from './buffer.ts'
+import type { PTYSession, PTYSessionInfo, SpawnOptions } from './types.ts'
 
 const SESSION_ID_BYTE_LENGTH = 4
 
@@ -158,13 +158,25 @@ export class SessionLifecycleManager {
   }
 
   private spawnProcess(session: PTYSession): void {
-    const env = { ...process.env, ...session.env } as Record<string, string>
     const ptyProcess: IPty = spawn(session.command, session.args, {
       name: 'xterm-256color',
       cols: session.cols,
       rows: session.rows,
       cwd: session.workdir,
-      env,
+      // The WHOLE environment, always.
+      //
+      // `session.env` holds only what a caller asked to ADD - the tool schema
+      // says "additional environment variables", and this layer is also reached
+      // from the web UI and the SDK, which pass additions too. bun-pty 0.5.0
+      // replaced its old merge-over-parent behaviour, so a map handed over as-is
+      // is now the child's entire environment: a session spawned with
+      // `{ env: { CI: '1' } }` would get no PATH, no HOME and no TERM, and fail
+      // for a reason that has nothing to do with what the caller asked for.
+      //
+      // So the merge is unconditional rather than "only when env was given".
+      // Merging unconditionally also removes a branch: `env` has one meaning
+      // here, and it is not "whatever the caller happened to pass".
+      env: { ...process.env, ...session.env } as Record<string, string>,
     })
     session.process = ptyProcess
     session.pid = ptyProcess.pid
@@ -191,6 +203,9 @@ export class SessionLifecycleManager {
       session.exitCode = exitCode
       session.exitSignal = signal
       session.endedAt = new Date()
+      // Set here rather than derived from endedAt: this is the process's exit,
+      // and it is the only timestamp that survives a restart.
+      session.exitAt = new Date()
       onExit(session, exitCode)
     })
   }
@@ -308,6 +323,7 @@ export class SessionLifecycleManager {
       timedOut: session.timedOut,
       exitCode: session.exitCode,
       exitSignal: session.exitSignal,
+      ...(session.exitAt === undefined ? {} : { exitAt: session.exitAt.toISOString() }),
       pid: session.pid,
       createdAt: session.createdAt.toISOString(),
       parentSessionId: session.parentSessionId,

@@ -1,13 +1,13 @@
 import { tool } from '@opencode-ai/plugin'
-import { manager } from '../manager.ts'
-import { buildSessionNotFoundError } from '../utils.ts'
 import {
   MAX_TERMINAL_COLS,
   MAX_TERMINAL_ROWS,
   MIN_TERMINAL_COLS,
   MIN_TERMINAL_ROWS,
 } from '../../constants.ts'
+import { manager } from '../manager.ts'
 import type { PTYSessionInfo } from '../types.ts'
+import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './resize.txt'
 
 /**

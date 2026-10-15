@@ -70,3 +70,52 @@ describe('sortSessionsByTime', () => {
     expect(sorted.map((s) => s.id)).toEqual(['a', 'b'])
   })
 })
+
+describe('sortSessionsByTime and a lost endedAt', () => {
+  // `endedAt` is LOST across a restart - that is what `exitAt` exists for. Ordered by
+  // `endedAt ?? createdAt`, a restarted session has no end time and falls back to its
+  // START, so a session that finished twenty minutes ago sorted ABOVE one that finished
+  // a minute ago. Both surfaces were wrong in the same direction, which is the worst kind.
+  // The shape that actually distinguishes the two rules: A ENDED after B, but A STARTED
+  // before B. Ordered by `endedAt ?? createdAt`, A has no `endedAt` and falls back to its
+  // start, so B sorts above it - and the more recently finished session appears further
+  // down the list. An earlier version of this case picked two sessions whose start order
+  // and end order agreed, so it passed with the old rule too and proved nothing.
+  it('prefers exitAt over endedAt, so a restarted session sorts where it finished', () => {
+    const endedLater = session('ended-later', {
+      status: 'exited',
+      exitCode: 0,
+      createdAt: '2026-09-21T10:00:00.000Z',
+      exitAt: '2026-09-21T10:20:00.000Z',
+    })
+    const startedLater = session('started-later', {
+      status: 'exited',
+      exitCode: 0,
+      createdAt: '2026-09-21T10:10:00.000Z',
+      exitAt: '2026-09-21T10:15:00.000Z',
+    })
+    // Both sessions carry no `endedAt`, which is exactly the restart case.
+    expect(endedLater.endedAt).toBeUndefined()
+    expect(startedLater.endedAt).toBeUndefined()
+    expect(sortSessionsByTime([startedLater, endedLater]).map((s) => s.id)).toEqual([
+      'ended-later',
+      'started-later',
+    ])
+  })
+
+  // The fallback chain still exists, for the case that made `endedAt` necessary: a session
+  // killed by a request never wrote `exitAt`, because `kill(id, cleanup = true)` deletes
+  // the record instead of re-archiving it.
+  it('falls back to endedAt, then to createdAt', () => {
+    const onlyEnded = session('only-ended', {
+      status: 'exited',
+      createdAt: '2026-09-21T10:00:00.000Z',
+      endedAt: '2026-09-21T10:40:00.000Z',
+    })
+    const running = session('running', { createdAt: '2026-09-21T10:50:00.000Z' })
+    expect(sortSessionsByTime([onlyEnded, running]).map((s) => s.id)).toEqual([
+      'running',
+      'only-ended',
+    ])
+  })
+})

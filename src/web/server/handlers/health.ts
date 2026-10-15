@@ -1,6 +1,6 @@
 import { manager } from '../../../plugin/pty/manager.ts'
-import { JsonResponse } from './responses.ts'
 import type { HealthResponse } from '../../shared/types.ts'
+import { JsonResponse } from './responses.ts'
 
 export function handleHealth(server: Bun.Server<undefined>) {
   const sessions = manager.list()

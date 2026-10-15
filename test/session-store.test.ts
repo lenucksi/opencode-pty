@@ -5,8 +5,8 @@ import { join } from 'node:path'
 
 import {
   mergePersistedSessions,
-  SessionStore,
   type PersistedSession,
+  SessionStore,
 } from '../src/plugin/pty/session-store.ts'
 import type { PTYSessionInfo } from '../src/plugin/pty/types.ts'
 
@@ -162,6 +162,118 @@ describe('SessionStore', () => {
     )
 
     expect(counting.prune()).toEqual(['pty_1'])
+  })
+
+  // The one that counts. A running session is the only case where pruning in place
+  // destroys data that is still being written: `remove` renames the directory to .trash
+  // and drops the index entry, so the process behind it loses its archive while still
+  // appending to it. The age loop has always refused this, with a comment explaining
+  // why; the count loop below it did not, and evicted whatever sat past the cap.
+  //
+  // The shape is the realistic one: a long-lived process (started days ago) pushed past
+  // the count cap by newer finished sessions, because `list()` is newest-first.
+  it('never evicts a live session with the count cap', () => {
+    const store = makeStore({ retention: { maxSessions: 3, maxAgeDays: 30 } })
+
+    // Oldest of the four, and the only one still running.
+    store.startSession(sessionInfo({ id: 'pty_live', createdAt: '2026-09-01T00:00:00.000Z' }))
+    store.startSession(sessionInfo({ id: 'pty_f1', createdAt: '2026-09-10T00:00:00.000Z' }))
+    store.endSession(
+      sessionInfo({ id: 'pty_f1', status: 'exited', createdAt: '2026-09-10T00:00:00.000Z' }),
+      0
+    )
+    store.startSession(sessionInfo({ id: 'pty_f2', createdAt: '2026-09-11T00:00:00.000Z' }))
+    store.endSession(
+      sessionInfo({ id: 'pty_f2', status: 'exited', createdAt: '2026-09-11T00:00:00.000Z' }),
+      0
+    )
+    store.startSession(sessionInfo({ id: 'pty_f3', createdAt: '2026-09-12T00:00:00.000Z' }))
+    store.endSession(
+      sessionInfo({ id: 'pty_f3', status: 'exited', createdAt: '2026-09-12T00:00:00.000Z' }),
+      0
+    )
+
+    // Newest-first, so the live one is the one past the cap.
+    expect(store.prune()).toEqual([])
+    expect(store.list().map((entry) => entry.id)).toContain('pty_live')
+    // And the directory it writes through still exists, rather than sitting in .trash.
+    expect(existsSync(join(store.getRoot(), 'pty_live'))).toBe(true)
+  })
+
+  // `killing` is the same in-place danger as `running`: the process has been asked to stop
+  // and may still be writing its last lines out.
+  it('never evicts a session that is being killed, either', () => {
+    const store = makeStore({ retention: { maxSessions: 1, maxAgeDays: 30 } })
+    store.startSession(sessionInfo({ id: 'pty_live', createdAt: '2026-09-01T00:00:00.000Z' }))
+    store.endSession(
+      sessionInfo({ id: 'pty_live', status: 'killing', createdAt: '2026-09-01T00:00:00.000Z' }),
+      null
+    )
+    store.startSession(sessionInfo({ id: 'pty_f1', createdAt: '2026-09-12T00:00:00.000Z' }))
+    store.endSession(
+      sessionInfo({ id: 'pty_f1', status: 'exited', createdAt: '2026-09-12T00:00:00.000Z' }),
+      0
+    )
+
+    expect(store.prune()).toEqual([])
+    expect(store.list().map((entry) => entry.id)).toContain('pty_live')
+  })
+
+  // A configured cap that waited for the next boot would be a setting that lies in between:
+  // the restart message is built from getRetention(), so it would announce a limit the store
+  // was not yet applying. Pruning here closes that gap - and is what makes lowering a cap
+  // take effect at all, since prune() otherwise runs only in the constructor.
+  it('applies a changed retention at once, rather than at the next boot', () => {
+    const store = makeStore({ retention: { maxSessions: 4, maxAgeDays: 30 } })
+    // Distinct creation dates, because `list()` is newest-first and ties keep the index's
+    // own order: an assertion written against equal timestamps would pass or fail on
+    // something other than the rule under test.
+    const dates: Record<string, string> = {
+      pty_1: '2026-09-01T00:00:00.000Z',
+      pty_2: '2026-09-02T00:00:00.000Z',
+      pty_3: '2026-09-03T00:00:00.000Z',
+      pty_4: '2026-09-04T00:00:00.000Z',
+    }
+    for (const id of ['pty_1', 'pty_2', 'pty_3', 'pty_4']) {
+      const at = dates[id] ?? '2026-09-01T00:00:00.000Z'
+      store.startSession(sessionInfo({ id, createdAt: at }))
+      store.endSession(sessionInfo({ id, status: 'exited', createdAt: at }), 0)
+    }
+    expect(store.list()).toHaveLength(4)
+
+    // Newest-first, so the cap keeps pty_4 and the tail falls off oldest-first.
+    expect(store.updateRetention({ maxSessions: 1 })).toEqual(['pty_3', 'pty_2', 'pty_1'])
+    // The policy the restart message would announce is now the one in force.
+    expect(store.getRetention().maxSessions).toBe(1)
+    expect(store.list().map((entry) => entry.id)).toEqual(['pty_4'])
+  })
+
+  // A session that fails both rules is removed once, not twice. `remove` re-reads the index
+  // after each drop, so the second loop never sees it again - which matters because the
+  // count is reported and two logs of one removal read as two sessions lost.
+  it('removes a session once even when age and count both apply', () => {
+    // A moving clock: `endedAt` comes from `now()`, so ending a session "19 days ago"
+    // with a constant clock stamps it with today and the age rule never sees it as old.
+    let clock = Date.UTC(2026, 8, 1, 12, 0, 0)
+    const store = makeStore({ now: () => clock, retention: { maxSessions: 1, maxAgeDays: 1 } })
+    store.startSession(sessionInfo({ id: 'pty_old', createdAt: '2026-09-01T00:00:00.000Z' }))
+    store.endSession(
+      sessionInfo({ id: 'pty_old', status: 'exited', createdAt: '2026-09-01T00:00:00.000Z' }),
+      0
+    )
+
+    // The second one decides the age rule's answer, and pushes pty_old past the count cap
+    // as well - so either rule alone would have taken it.
+    clock = Date.UTC(2026, 8, 20, 18, 0, 0)
+    store.startSession(sessionInfo({ id: 'pty_new', createdAt: '2026-09-20T00:00:00.000Z' }))
+    store.endSession(
+      sessionInfo({ id: 'pty_new', status: 'exited', createdAt: '2026-09-20T00:00:00.000Z' }),
+      0
+    )
+
+    expect(store.prune()).toEqual(['pty_old'])
+    expect(store.prune()).toEqual([])
+    expect(store.list().map((entry) => entry.id)).toEqual(['pty_new'])
   })
 
   it('marks stale entries as lost when a store is reopened', () => {

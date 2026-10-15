@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { originsForProject } from '../src/shared/runtime.ts'
 import {
-  PTY_OPEN_CLIENT_COMMAND,
-  PTY_SHOW_SERVER_URL_COMMAND,
-  Plugin,
   getActiveServer,
   getOrCreateServer,
   handleShowServerUrlCommand,
+  Plugin,
+  PTY_OPEN_CLIENT_COMMAND,
+  PTY_SHOW_SERVER_URL_COMMAND,
   ptyTools,
   stopActiveServer,
 } from '../src/v2/index.ts'
@@ -191,6 +195,36 @@ describe('OpenCode V2 Plugin API', () => {
       const active = getActiveServer()
       expect(active).not.toBeNull()
       expect(active?.server.url.hostname).toBe('127.0.0.1')
+    })
+
+    it('publishes a findable origin, because the context says where the project is', async () => {
+      // The line under test is the pass-through in the autostart branch: with
+      // it, a TUI in this project can look the server up; without it, the server
+      // publishes nothing at all and the sidebar has no way to find it.
+      const runtime = mkdtempSync(join(tmpdir(), 'pty-v2-runtime-'))
+      // realpathSync: the record is keyed on the canonical path, and /var is a
+      // symlink on some hosts, so a raw temp path would not match.
+      const project = realpathSync(mkdtempSync(join(tmpdir(), 'pty-v2-project-')))
+      const previous = process.env.PTY_RUNTIME_DIR
+      process.env.PTY_RUNTIME_DIR = runtime
+
+      try {
+        const ctx: PluginContextV2 = {
+          options: { autostart: true, hostname: '127.0.0.1' },
+          location: { directory: project },
+        }
+        await Plugin.setup(ctx)
+
+        const records = originsForProject(project)
+        expect(records).toHaveLength(1)
+        expect(records[0]?.port).toBe(getActiveServer()?.server.port)
+      } finally {
+        stopActiveServer()
+        if (previous === undefined) delete process.env.PTY_RUNTIME_DIR
+        else process.env.PTY_RUNTIME_DIR = previous
+        rmSync(runtime, { recursive: true, force: true })
+        rmSync(project, { recursive: true, force: true })
+      }
     })
 
     it('shows server URL via handleShowServerUrlCommand', async () => {

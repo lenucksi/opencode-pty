@@ -1,15 +1,15 @@
 import { tool } from '@opencode-ai/plugin'
-import { manager } from '../manager.ts'
-import { buildSessionNotFoundError } from '../utils.ts'
-import { logPtyEvent } from '../plugin-log.ts'
-import { fitScreenSize, renderScreen, type ColorSpan, type ScreenSnapshot } from '../screen.ts'
 import {
   MAX_TERMINAL_COLS,
   MAX_TERMINAL_ROWS,
   MIN_TERMINAL_COLS,
   MIN_TERMINAL_ROWS,
 } from '../../constants.ts'
+import { manager } from '../manager.ts'
+import { logPtyEvent } from '../plugin-log.ts'
+import { type ColorSpan, fitScreenSize, renderScreen, type ScreenSnapshot } from '../screen.ts'
 import type { PTYSessionInfo } from '../types.ts'
+import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './screen.txt'
 
 /**

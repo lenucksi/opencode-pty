@@ -1,0 +1,327 @@
+import type { MouseEvent } from '@opentui/core'
+import { jsx } from '@opentui/solid/jsx-runtime'
+
+import {
+  formatDuration,
+  isFinished,
+  type PanelSession,
+  ROW_BULLET,
+  rowLabel,
+  rowTone,
+  sessionDurationMs,
+} from './lib.ts'
+import type { Tones } from './render.ts'
+import { type SessionPanelState, selectedLive, visibleRows } from './session-panel-state.ts'
+
+/**
+ * The PTY panel inside a session: the processes THIS conversation started, with one of
+ * them on screen.
+ *
+ * The placement is joint with the web UI in one throne: a session belongs beside the
+ * conversation that commissioned it, in exactly that card.
+ *
+ * == The frame's shape
+ *
+ * The header and the folded list row are `flexShrink: 0` + `height: 1`, not assumed. The
+ * console owns everything else; the reader reported a panel that sounded like a
+ * full-screen dump of a few rows at minimum - the console collapsing to its minimum while
+ * the ROWS of the list grew. For that, the list is folded - collapsed - by default, and
+ * the console takes the rest (`flexGrow: 1` + `minHeight: 0`).
+ *
+ * == What is INSIDE the frame
+ *
+ * The console is a scrollbox with a scrollbar, sticky at the bottom, exactly as the panel
+ * in `src/tui/session-panel-host.ts` renders and types it.
+ */
+export interface SessionPanelView {
+  readonly tones: Tones
+  readonly state: SessionPanelState
+  /** The fresh list, so the selected row's timer stops when the process does. */
+  readonly live: readonly PanelSession[]
+  /** True while the host has this panel focused. */
+  readonly focused: boolean
+  /** `fullscreen` when the reader asked for the whole screen. */
+  readonly fullscreen: boolean
+  /**
+   * Close the panel.
+   *
+   * Not a convenience: the host has NO key for closing a plugin panel. All four
+   * `panels.close()` call sites are side effects of something else - changing session,
+   * selecting a terminal, opening the sidebar - so a plugin that opens a panel owes the
+   * reader a way out of it. Ours has three: this control, a palette entry and a keybind.
+   */
+  readonly onClose: () => void
+  /** Ask for a line and hand it to the selected process. */
+  readonly onSend: (session: PanelSession) => void
+  readonly onSelect: (id: string) => void
+  /** Fold the session list open or closed. The click on its header row. */
+  readonly onToggleList: () => void
+}
+
+/** One row, with the selected one marked. */
+function rowFor(view: SessionPanelView, session: PanelSession) {
+  const tone = rowTone(session)
+  const selected = view.state.selected === session.id
+  return jsx('box', {
+    flexDirection: 'row',
+    width: '100%',
+    height: 1,
+    flexShrink: 0,
+    children: [
+      jsx('text', {
+        fg:
+          tone === 'success'
+            ? view.tones.success
+            : tone === 'error'
+              ? view.tones.error
+              : view.tones.muted,
+        children: ROW_BULLET,
+      }),
+      jsx('text', {
+        flexGrow: 1,
+        // The selection is marked in the TEXT, not only by colour: a reader who cannot
+        // distinguish the tones still has to see which row is on screen.
+        fg: selected ? view.tones.base : view.tones.muted,
+        children: selected ? `> ${rowLabel(session)}` : `  ${rowLabel(session)}`,
+        onMouseDown: (event: MouseEvent) => {
+          event.stopPropagation()
+          view.onSelect(session.id)
+        },
+      }),
+    ],
+  })
+}
+
+/**
+ * The whole panel: a header, this session's rows, and the selected session's screen.
+ *
+ * An accessor for everything that changes with the poll, so the panel updates in place
+ * instead of being torn down and rebuilt - which is what keeps the reader's scroll
+ * position and the host's focus where they were.
+ */
+/**
+ * The panel's header: what it is showing, how to leave it, and for how long.
+ *
+ * `✕ close` is the middle item rather than a trailing glyph because it is the answer to
+ * the question a reader has first - how do I get out - and a right-aligned control is the
+ * last place a reader looks for it. Three exits exist in total (this, the palette entry
+ * and `ctrl+y`); see `registerSessionPanelCloseCommand` for why the other two are needed.
+ */
+function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
+  return jsx('box', {
+    flexDirection: 'row',
+    width: '100%',
+    height: 1,
+    flexShrink: 0,
+    gap: 2,
+    children: [
+      jsx('text', {
+        flexGrow: 1,
+        fg: view.tones.base,
+        children: (): string => {
+          const count = view.state.sessions.length
+          const focus = view.focused ? '  (focused)' : ''
+          const mode = view.fullscreen ? 'fullscreen' : 'panel'
+          const label = count === 1 ? '1 session' : `${count} sessions`
+          return `PTY  ${label}  ${mode}${focus}`
+        },
+      }),
+      jsx('text', {
+        fg: view.tones.muted,
+        // Only for a process that can still be written to: a control opening an input field
+        // whose answer the server refuses is worse than no control at all.
+        children: (): string => (chosen !== null && !isFinished(chosen) ? '⌨ send' : ''),
+        onMouseDown: (event: MouseEvent) => {
+          event.stopPropagation()
+          if (chosen !== null && !isFinished(chosen)) view.onSend(chosen)
+        },
+      }),
+      jsx('text', {
+        fg: view.tones.muted,
+        // ONE handler, and on mouse-down only: a click delivers a mouse-down AND a
+        // mouse-up, so a toggle on each fires twice.
+        onMouseDown: (event: MouseEvent) => {
+          event.stopPropagation()
+          view.onClose()
+        },
+        children: '✕ close',
+      }),
+      jsx('text', {
+        fg: view.tones.muted,
+        // The run timer of the selected session, in the header's right corner. Empty
+        // rather than "0s" when the start cannot be read: a duration nobody can compute
+        // should not be shown as none.
+        children: (): string => {
+          if (chosen === null) return ''
+          const ms = sessionDurationMs(chosen, view.state.now)
+          return ms === null ? '' : formatDuration(ms)
+        },
+      }),
+    ],
+  })
+}
+
+/**
+ * The footer: what is on screen, and how much of it.
+ *
+ * The same two lines the web UI draws - identifiers above, counters below - because a screen
+ * with no numbers on it cannot answer "is this stale?" or "is that the process I think?".
+ * Size and line count are the ones that matter for a full-screen program: `top` at 120x40
+ * wrapped into 80 columns is not a rendering fault but a different program running.
+ */
+function statusBar(view: SessionPanelView, chosen: PanelSession | null): unknown {
+  return jsx('text', {
+    width: '100%',
+    fg: view.tones.muted,
+    children: (): string => {
+      if (chosen === null) return ''
+      const size =
+        chosen.cols === undefined || chosen.rows === undefined
+          ? ''
+          : `  ${chosen.cols}x${chosen.rows}`
+      const rows = view.state.screen === '' ? 0 : view.state.screen.split('\n').length
+      return [
+        `${chosen.id}  ${chosen.status ?? '?'}${size}`,
+        `lines ${chosen.lineCount ?? '?'}  screen ${rows} rows`,
+      ].join('  ·  ')
+    },
+  })
+}
+
+/**
+ * The framed console, or nothing at all while no session is selected.
+ *
+ * Returns undefined rather than an empty box: an empty frame is a large black rectangle
+ * that says nothing, and right next to the sentence explaining why there is nothing, it
+ * reads as a rendering failure rather than as an absence.
+ *
+ * The console is why the panel exists, which is why it owns EVERY row the panel has left
+ * rather than a computed share: `flexGrow: 1` with `minHeight: 0` under everything fixed
+ * (`header`, the list toggle and the footer each declare `flexShrink: 0`), so a longer
+ * list costs the console nothing a shorter one does not and the console never ends up
+ * shorter than the panel can afford. Computed heights were an earlier attempted fix and
+ * the record of that remains in `eabb802`: `renderer.height` is the TERMINAL's height,
+ * not the panel's.
+ *
+ * A scrollbox rather than the box-plus-`overflow` the file used before opentui 0.6.6,
+ * and the choice carries two measured facts with it:
+ *
+ * - In 0.5.14 a scrollbox posed `stickyScroll: true` + `stickyStart: 'bottom'` rendered
+ *   NOTHING when its text contains a line break, so the old box was correct then - and
+ *   it showed the OLDEST screen rows because it clips from the top. Measured: a console
+ *   25 rows tall inside 6 rows of panel drew `k01`… and cut `k29`, the line the reader
+ *   had just run.
+ * - From 0.6.6 the same pose draws the newest with a scrollbar. The panel does not slide
+ *   its own offset and does not truncate `screen` with `tail`; the full dump stays in the
+ *   tree and the widget scrolls it - which is what a reader means by "die Konsole."
+ */
+function framedScreen(view: SessionPanelView): unknown {
+  if (view.state.selected === null) return undefined
+
+  return jsx('box', {
+    width: '100%',
+    flexGrow: 1,
+    minHeight: 0,
+    border: true,
+    borderStyle: 'single',
+    borderColor: view.tones.border,
+    backgroundColor: view.tones.raised,
+    children: jsx('scrollbox', {
+      flexGrow: 1,
+      minHeight: 0,
+      stickyScroll: true,
+      stickyStart: 'bottom',
+      children: jsx('text', { children: (): string => view.state.screen }),
+    }),
+  })
+}
+
+/**
+ * The list header, handed over as a row the click folds the list on.
+ *
+ * COLLAPSED by default, and that is a stance rather than a state saved for later: the
+ * list is the index of everything this conversation started, the console is the reason
+ * the panel is open, and every list row costs the console something. An 18-record list
+ * costs a third of the panel before the console has drawn a thing - measured against the
+ * screenshot that reported the collapse.
+ *
+ * The gesture stays where the list was, so the reader does not have to learn a new
+ * position in either state.
+ */
+function listHeader(view: SessionPanelView, count: number, expanded: boolean): unknown {
+  return jsx('box', {
+    flexDirection: 'row',
+    width: '100%',
+    height: 1,
+    flexShrink: 0,
+    onMouseDown: (event: MouseEvent) => {
+      event.stopPropagation()
+      view.onToggleList()
+    },
+    children: [
+      jsx('text', {
+        fg: view.tones.muted,
+        children: expanded ? '▾' : '▸',
+      }),
+      jsx('text', {
+        flexGrow: 1,
+        fg: view.tones.base,
+        children: expanded
+          ? `${count} Session${count === 1 ? '' : 'en'}`
+          : `${count} Session${count === 1 ? '' : 'en'}…  (aufklappen)`,
+      }),
+    ],
+  })
+}
+
+export function sessionPanelView(view: SessionPanelView) {
+  const chosen = selectedLive(view.state, view.live)
+  const header = panelHeader(view, chosen)
+
+  const { rows, overflow } = visibleRows(view.state.sessions, view.state.listExpanded)
+  const listEntries: unknown[] =
+    view.state.sessions.length === 0
+      ? [
+          jsx('text', {
+            fg: view.tones.muted,
+            children: '   this conversation started no PTY session',
+          }),
+        ]
+      : view.state.listExpanded
+        ? [
+            ...rows.map((session) => rowFor(view, session)),
+            ...(overflow > 0
+              ? [
+                  jsx('text', {
+                    width: '100%',
+                    flexShrink: 0,
+                    fg: view.tones.muted,
+                    children: `   … und ${overflow} weitere in der Sidebar`,
+                  }),
+                ]
+              : []),
+          ]
+        : []
+
+  const list = jsx('box', {
+    flexDirection: 'column',
+    width: '100%',
+    flexShrink: 0,
+    children: [
+      listHeader(view, view.state.sessions.length, view.state.listExpanded),
+      ...listEntries,
+    ],
+  })
+
+  // The footer LAST, and `flexShrink: 0`: the framed screen above it grows to fill, so a
+  // bar inside the frame would be pushed off the bottom by its own content.
+  const footer = jsx('box', { height: 1, flexShrink: 0, children: statusBar(view, chosen) })
+  const screen = framedScreen(view)
+  return jsx('box', {
+    flexDirection: 'column',
+    width: '100%',
+    flexGrow: 1,
+    minHeight: 0,
+    children: screen === undefined ? [header, list, footer] : [header, screen, list, footer],
+  })
+}

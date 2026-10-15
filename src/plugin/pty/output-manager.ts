@@ -1,6 +1,7 @@
 import { applyLineBudget, type LineSlice } from './read-budget.ts'
 
 export type { LineSlice }
+
 import type { PTYSession, ReadResult, SearchResult } from './types.ts'
 
 /**

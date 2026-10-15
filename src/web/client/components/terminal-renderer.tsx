@@ -1,11 +1,11 @@
-import React from 'react'
-import { FitAddon, Ghostty, Terminal, type ITheme } from 'ghostty-web'
+import { FitAddon, Ghostty, type ITheme, Terminal } from 'ghostty-web'
 // Vite emits the package's `ghostty-vt.wasm` as a same-origin, content-hashed
 // asset and rewrites this import to its final URL. Passing that URL to
 // `Ghostty.load()` keeps the WASM out of the JS bundle and avoids the
 // `data:application/wasm` fallback, which the app CSP (`connect-src 'self'`)
 // would block.
 import ghosttyWasmUrl from 'ghostty-web/ghostty-vt.wasm?url'
+import React from 'react'
 import { SerializeAddon } from '../addons/serialize/index.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
 import { linesToText, visibleScreenRange } from '../lib/terminal-text.ts'

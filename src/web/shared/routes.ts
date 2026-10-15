@@ -55,6 +55,16 @@ export const routes = {
       path: '/api/sessions/:id/log',
       methods: ['GET'] as const,
     },
+    /**
+     * "What did the program write?", at three levels of fidelity.
+     *
+     * `raw` is the byte stream, `plain` is that stream with the ANSI escapes
+     * stripped, and both are correct answers to that question: `pty_read` reads
+     * from them and its tests depend on them. Neither answers "what does it look
+     * like?", because the layout of a full-screen program lives in the escape
+     * sequences - strip them and every repaint and every colour change stays as
+     * text on its own line.
+     */
     buffer: {
       raw: {
         path: '/api/sessions/:id/buffer/raw',
@@ -64,6 +74,24 @@ export const routes = {
         path: '/api/sessions/:id/buffer/plain',
         methods: ['GET'] as const,
       },
+    },
+    /**
+     * "What does it look like?" - the answer to the question the pair above
+     * cannot answer.
+     *
+     * Replays the same retained output through the same VT emulator `pty_screen`
+     * uses and returns the resulting grid, so a reader with no terminal and no
+     * ghostty renderer of its own (a TUI plugin, an HTTP client) sees a screen
+     * rather than a transcript. `?cols`/`?rows` render at another geometry
+     * without touching the session; omitted, they mean the session's own size,
+     * exactly as `pty_screen` does.
+     *
+     * Deliberately not a `buffer` flavour: this is a different question, not a
+     * lower-fidelity copy of the same one.
+     */
+    screen: {
+      path: '/api/sessions/:id/screen',
+      methods: ['GET'] as const,
     },
   },
 } as const

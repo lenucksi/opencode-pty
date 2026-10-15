@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { checkExecutable, resolveCommand } from '../src/plugin/pty/command-check.ts'
-import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
+import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 
 /**
  * A command that cannot be executed is caught before the spawn.

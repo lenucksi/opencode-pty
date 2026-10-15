@@ -3,10 +3,11 @@ import type { BunRequest } from 'bun'
 import { manager } from '../src/plugin/pty/manager.ts'
 import { setParentSessionTitleResolver } from '../src/plugin/pty/parent-session-title.ts'
 import { setPermissionAuthorizer } from '../src/plugin/pty/permissions.ts'
-import { handleHealth } from '../src/web/server/handlers/health.ts'
-import { handleServerInfo } from '../src/web/server/handlers/server-info.ts'
-import { describeBuild } from '../src/shared/build-info.ts'
 import { currentBuildInfo, resetBuildInfoCache } from '../src/plugin/pty/read-build-info.ts'
+import { describeBuild } from '../src/shared/build-info.ts'
+import { handleHealth } from '../src/web/server/handlers/health.ts'
+import { getParentSessions } from '../src/web/server/handlers/parent-sessions.ts'
+import { handleServerInfo } from '../src/web/server/handlers/server-info.ts'
 import {
   cleanupSession,
   clearSessions,
@@ -18,10 +19,9 @@ import {
   killSession,
   sendInput,
 } from '../src/web/server/handlers/sessions.ts'
-import { getParentSessions } from '../src/web/server/handlers/parent-sessions.ts'
 import { handleUpgrade } from '../src/web/server/handlers/upgrade.ts'
-import type { HealthResponse } from '../src/web/shared/types.ts'
 import type { routes } from '../src/web/shared/routes.ts'
+import type { HealthResponse } from '../src/web/shared/types.ts'
 
 afterEach(() => {
   setPermissionAuthorizer(null)

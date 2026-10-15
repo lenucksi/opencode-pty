@@ -8,9 +8,9 @@ import {
 } from '../../plugin/pty/manager-notifications.ts'
 import type { PTYSessionInfo } from '../../plugin/pty/types'
 import type {
+  WSMessageServerRawData,
   WSMessageServerSessionRemoved,
   WSMessageServerSessionUpdate,
-  WSMessageServerRawData,
 } from '../shared/types'
 
 export class CallbackManager implements Disposable {

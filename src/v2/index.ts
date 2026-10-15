@@ -1,11 +1,11 @@
-import { createV2Adapter } from '../adapters/v2/index.ts'
 import { installHostAdapter } from '../adapters/index.ts'
-import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
+import { createV2Adapter } from '../adapters/v2/index.ts'
 import { manager } from '../plugin/pty/manager.ts'
 import { setParentSessionTitleResolver } from '../plugin/pty/parent-session-title.ts'
-import { announceRestart } from './restart-announce.ts'
+import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
 import { getOrCreateServer, registerV2Commands } from './commands.ts'
 import { V2SessionNotifier } from './notifier.ts'
+import { announceRestart } from './restart-announce.ts'
 import { registerUsageSkill } from './skill.ts'
 import { registerV2Tools } from './tools.ts'
 import { define, type OpencodePtyOptions, type PluginContextV2, type PluginV2 } from './types.ts'
@@ -115,11 +115,30 @@ export const Plugin: PluginV2 = define({
       })
     }
 
+    // Retention configured through options, applied before anything is announced: the
+    // restart message is built from `getRetention()`, so setting the policy after it would
+    // advertise a limit the store is not yet applying. The re-prune inside `updateRetention`
+    // is what makes a lowered cap take effect at once - the store's own `prune()` runs only
+    // in its constructor, which is long before these options exist.
+    const prunedRetention = manager.getSessionStore().updateRetention(ctx.options?.retention ?? {})
+    if (prunedRetention.length > 0) {
+      logPtyEvent('info', `retention removed ${prunedRetention.length} archived session(s)`, {
+        ids: prunedRetention,
+      })
+    }
+
     if (ctx.options?.autostart) {
       try {
         const server = await getOrCreateServer({
           port: ctx.options.port,
           hostname: ctx.options.hostname,
+          // Published so a TUI can find this server by project. Without it
+          // writeOrigin writes no record at all: an unkeyed one cannot be
+          // attributed to an instance, and /api/server reports no project, so
+          // even a probed candidate could not be told apart from another
+          // instance's. A host that supplies no location therefore gets no
+          // origin, rather than one that looks findable and is not.
+          directory: ctx.location?.directory,
         })
 
         // Sessions that the previous run left behind are announced once per

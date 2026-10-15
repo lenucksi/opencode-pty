@@ -9,22 +9,22 @@ import {
 } from '../src/plugin/pty/manager-notifications.ts'
 import { PTYServer } from '../src/web/server/server'
 import type {
-  WSMessageServer,
-  WSMessageServerSubscribedSession,
-  WSMessageServerUnsubscribedSession,
-  WSMessageServerSessionUpdate,
-  WSMessageServerSessionRemoved,
-  WSMessageServerRawData,
-  WSMessageServerReadRawResponse,
-  WSMessageServerSessionList,
-  WSMessageServerError,
   WSMessageClientInput,
+  WSMessageClientReadRaw,
+  WSMessageClientResize,
   WSMessageClientSessionList,
   WSMessageClientSpawnSession,
   WSMessageClientSubscribeSession,
   WSMessageClientUnsubscribeSession,
-  WSMessageClientResize,
-  WSMessageClientReadRaw,
+  WSMessageServer,
+  WSMessageServerError,
+  WSMessageServerRawData,
+  WSMessageServerReadRawResponse,
+  WSMessageServerSessionList,
+  WSMessageServerSessionRemoved,
+  WSMessageServerSessionUpdate,
+  WSMessageServerSubscribedSession,
+  WSMessageServerUnsubscribedSession,
 } from '../src/web/shared/types'
 
 export class ManagedTestClient implements Disposable {

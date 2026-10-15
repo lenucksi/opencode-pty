@@ -1,6 +1,6 @@
+import { renderScreen } from '../../src/plugin/pty/screen.ts'
 import { expect, test as extendedTest } from './fixtures'
 import { getTerminalPlainText } from './xterm-test-helpers'
-import { renderScreen } from '../../src/plugin/pty/screen.ts'
 
 /**
  * The screen an agent sees and the screen a human sees must be the same screen.

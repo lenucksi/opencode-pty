@@ -1,8 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-
-import type { BoundedReadResult, BoundedSearchResult } from './output-manager.ts'
 import { LOG_FILE, PREVIOUS_LOG_FILE } from './archive-files.ts'
+import type { BoundedReadResult, BoundedSearchResult } from './output-manager.ts'
 import { logPtyEvent } from './plugin-log.ts'
 import { applyLineBudget } from './read-budget.ts'
 

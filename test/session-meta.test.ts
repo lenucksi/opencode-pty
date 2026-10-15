@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test'
 import {
   formatClock,
   formatDuration,
+  formatDurationMs,
   groupSessionsByParent,
   parentSessionGroupTitle,
   sessionCommandLine,
@@ -199,5 +200,47 @@ describe('parentSessionGroupTitle', () => {
 
     expect(parentSessionGroupTitle(required(missing), {})).toBe('Session ses_missing')
     expect(parentSessionGroupTitle(required(manual), {})).toBe('Web API / manual')
+  })
+})
+
+describe('formatDurationMs', () => {
+  // Two presets out of ONE implementation, because two implementations is how a 90-second
+  // run reads `1m 30s` in the sidebar and `2m` in the browser with nobody deciding either.
+  const ninety = 90_000
+
+  it('keeps the seconds below an hour in the precise preset', () => {
+    expect(formatDurationMs(ninety, 'precise')).toBe('1m 30s')
+    expect(formatDurationMs(65_000, 'precise')).toBe('1m 05s')
+  })
+
+  it('keeps only the leading unit in the compact preset', () => {
+    // `1m`, not `2m`: the shared formatter TRUNCATES the minutes rather than rounding,
+    // so a 90-second run reads as one minute. That understates by up to 59 seconds and it
+    // is PRE-EXISTING behaviour in the web UI, not something the presets introduced.
+    //
+    // Pinned as observed on purpose. Rounding it would change every duration label the
+    // browser shows, which is a decision for its own slice, not something to smuggle into
+    // a consolidation - so the finding is recorded rather than acted on here.
+    expect(formatDurationMs(ninety, 'compact')).toBe('1m')
+    expect(formatDurationMs(65_000, 'compact')).toBe('1m')
+  })
+
+  // A run of exactly a minute has no seconds to add, so both presets agree. Two
+  // different strings for the same duration would be a bug, not a preference.
+  it('agrees when there is nothing extra to say', () => {
+    expect(formatDurationMs(60_000, 'precise')).toBe('1m')
+    expect(formatDurationMs(60_000, 'compact')).toBe('1m')
+    expect(formatDurationMs(42_000, 'precise')).toBe('42s')
+  })
+
+  it('never writes days in the precise preset', () => {
+    expect(formatDurationMs(31 * 3_600_000, 'precise')).toBe('31h')
+    expect(formatDurationMs(31 * 3_600_000, 'compact')).toBe('1d 7h')
+  })
+
+  it('renders an unmeasurable duration as nothing', () => {
+    expect(formatDurationMs(Number.NaN)).toBe('')
+    expect(formatDurationMs(-5000)).toBe('')
+    expect(formatDurationMs(0)).toBe('')
   })
 })

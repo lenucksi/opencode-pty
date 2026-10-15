@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import { manager } from '../src/plugin/pty/manager.ts'
 import type {
   CustomError,
   WSMessageServerError,
+  WSMessageServerReadRawResponse,
   WSMessageServerSessionList,
   WSMessageServerSessionRemoved,
   WSMessageServerSessionUpdate,
   WSMessageServerSubscribedSession,
   WSMessageServerUnsubscribedSession,
-  WSMessageServerReadRawResponse,
 } from '../src/web/shared/types.ts'
 import { ManagedTestClient, ManagedTestServer } from './utils.ts'
 

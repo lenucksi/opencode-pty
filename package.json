@@ -39,9 +39,17 @@
       "types": "./dist/src/v2/index.d.ts",
       "default": "./dist/src/v2/index.js"
     },
+    "./v2/tui": {
+      "types": "./dist/src/tui/index.d.ts",
+      "default": "./dist/src/tui/index.js"
+    },
     "./server": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./tui": {
+      "types": "./dist/src/tui/index.d.ts",
+      "default": "./dist/src/tui/index.js"
     },
     ".": {
       "types": "./dist/index.d.ts",
@@ -91,32 +99,61 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
-    "@playwright/test": "1.63.0",
-    "@types/bun": "^1.4.2",
+    "@opencode/theme": "2.0.29",
+    "@opentui/core": "0.6.6",
+    "@opentui/solid": "0.6.6",
+    "@playwright/test": "1.64.1",
+    "@types/bun": "^1.4.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
+    "@vitejs/plugin-react": "^6.1.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "solid-js": "1.9.17",
     "typescript": "^7.0.2",
-    "vite": "^8.3.2"
+    "vite": "^8.3.4"
   },
   "peerDependencies": {
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "@opencode/theme": ">=2.0.29",
+    "@opentui/core": ">=0.6.6",
+    "@opentui/solid": ">=0.6.6",
+    "solid-js": ">=1.9.0"
   },
   "engines": {
     "bun": ">=1.4.2",
     "opencode": ">=1.18.31"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.18.34",
-    "@opencode-ai/sdk": "^1.18.34",
-    "@opencode/plugin": "^2.0.23",
-    "bun-pty": "^0.4.11",
+    "@opencode-ai/plugin": "^1.19.0",
+    "@opencode-ai/sdk": "^1.19.0",
+    "@opencode/plugin": "^2.0.29",
+    "bun-pty": "^0.5.1",
     "ghostty-web": "github:anomalyco/ghostty-web#6e24d040458ddd7aae81572fe2901deec32f9fe7",
     "open": "^11.0.4"
   },
   "patchedDependencies": {
     "ghostty-web@github:anomalyco/ghostty-web#6e24d04": "patches/ghostty-web.patch"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    },
+    "@opencode/theme": {
+      "optional": true
+    },
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
+  },
+  "overrides": {
+    "@babel/core": "7.29.7",
+    "seroval": "1.6.8"
   }
 }

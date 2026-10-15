@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import {
+  createV1Adapter,
   type HostAdapter,
+  installHostAdapter,
   type PermissionAuthorizer,
   type SessionNotifier,
-  createV1Adapter,
-  installHostAdapter,
 } from '../src/adapters/index.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
 import {

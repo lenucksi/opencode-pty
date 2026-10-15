@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
-import { ManagedTestClient, ManagedTestServer } from './utils.ts'
-import type { WSMessageServerSessionUpdate } from '../src/web/shared/types.ts'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import type { PTYSessionInfo } from '../src/plugin/pty/types.ts'
+import type { WSMessageServerSessionUpdate } from '../src/web/shared/types.ts'
+import { ManagedTestClient, ManagedTestServer } from './utils.ts'
 
 describe('PTY Manager Integration', () => {
   let managedTestServer: ManagedTestServer

@@ -1,18 +1,20 @@
 import type { Server } from 'bun'
+import { removeOrigin, writeOrigin } from '../../shared/runtime.ts'
 import { routes } from '../shared/routes.ts'
 import { CallbackManager } from './callback-manager.ts'
 import { handleHealth } from './handlers/health.ts'
 import { getParentSessions } from './handlers/parent-sessions.ts'
 import { handleServerInfo } from './handlers/server-info.ts'
+import { getSessionScreen } from './handlers/session-screen.ts'
 import {
   bulkRemoveSessions,
   cleanupSession,
   clearSessions,
   createSession,
   getPlainBuffer,
-  getSessionLog,
   getRawBuffer,
   getSession,
+  getSessionLog,
   getSessions,
   killSession,
   restoreSessions,
@@ -26,6 +28,9 @@ import { handleWebSocketMessage } from './handlers/websocket.ts'
 export interface ServerOptions {
   port?: number
   hostname?: string
+  /** The project this server belongs to, published so a TUI can find it. */
+  directory?: string
+  worktree?: string
 }
 
 export const MAX_PORT_FALLBACK_ATTEMPTS = 10
@@ -114,6 +119,8 @@ export class PTYServer implements Disposable {
   private readonly staticRoutes: Record<string, Response>
   private readonly stack = new DisposableStack()
   private readonly options?: ServerOptions
+  /** The published origin record, removed when the server is disposed. */
+  private readonly originFile: string | null
 
   private constructor(staticRoutes: Record<string, Response>, options?: ServerOptions) {
     this.staticRoutes = staticRoutes
@@ -121,6 +128,23 @@ export class PTYServer implements Disposable {
     this.server = this.startWebServer()
     this.stack.use(this.server)
     this.stack.use(new CallbackManager(this.server))
+
+    // The bound address, not the requested one: an explicit port that was taken
+    // falls back to another, and a wildcard bind or a normalised hostname would
+    // be recorded as something nobody can connect to. Bun types both as optional,
+    // so they are narrowed rather than asserted - a missing one just means nothing
+    // is published, which is the same as not having a project to publish for.
+    const { hostname, port } = this.server
+    this.originFile =
+      typeof hostname === 'string' && typeof port === 'number'
+        ? writeOrigin({
+            directory: options?.directory,
+            worktree: options?.worktree,
+            hostname,
+            port,
+          })
+        : null
+    this.stack.use({ [Symbol.dispose]: () => removeOrigin(this.originFile) })
   }
 
   [Symbol.dispose]() {
@@ -220,6 +244,9 @@ export class PTYServer implements Disposable {
         },
         [routes.session.buffer.plain.path]: {
           GET: getPlainBuffer,
+        },
+        [routes.session.screen.path]: {
+          GET: getSessionScreen,
         },
       },
 

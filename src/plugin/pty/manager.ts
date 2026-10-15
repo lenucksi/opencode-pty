@@ -1,29 +1,28 @@
-import type { SessionNotifier } from '../../adapters/types.ts'
 import type { OpencodeClient } from '@opencode-ai/sdk'
 import { Terminal } from 'bun-pty'
+import type { SessionNotifier } from '../../adapters/types.ts'
+import { sortSessionsByTime } from '../../web/shared/session-meta.ts'
 import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../constants.ts'
+import {
+  notifyRawOutput,
+  notifySessionRemoved,
+  notifySessionUpdate,
+} from './manager-notifications.ts'
 import { NotificationManager } from './notification-manager.ts'
 import {
-  OutputManager,
   type BoundedReadResult,
   type BoundedSearchResult,
+  OutputManager,
 } from './output-manager.ts'
-import { sortSessionsByTime } from '../../web/shared/session-meta.ts'
 import { logPtyEvent } from './plugin-log.ts'
+import { type BoundedRawResult, buildBoundedRaw } from './read-budget.ts'
+import { SessionLifecycleManager } from './session-lifecycle.ts'
 import {
   mergePersistedSessions,
   type PersistedSession,
   type PersistSessionInput,
   SessionStore,
 } from './session-store.ts'
-
-import {
-  notifyRawOutput,
-  notifySessionRemoved,
-  notifySessionUpdate,
-} from './manager-notifications.ts'
-import { buildBoundedRaw, type BoundedRawResult } from './read-budget.ts'
-import { SessionLifecycleManager } from './session-lifecycle.ts'
 import type {
   BulkRemoveResult,
   PTYSession,

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { UNKNOWN_BUILD, type BuildInfo } from '../../shared/build-info.ts'
+import { type BuildInfo, UNKNOWN_BUILD } from '../../shared/build-info.ts'
 
 /**
  * Reads the build identity that the build stamped into `dist/`.

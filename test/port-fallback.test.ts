@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from 'bun:test'
 import net from 'node:net'
-import { PTYServer } from '../src/web/server/server.ts'
+import { getActiveServer, Plugin, stopActiveServer } from '../src/v2/index.ts'
+import type { PluginContextV2 } from '../src/v2/types.ts'
 import {
-  MAX_PORT_FALLBACK_ATTEMPTS,
   isEaddrinuse,
+  MAX_PORT_FALLBACK_ATTEMPTS,
+  PTYServer,
   portCandidates,
   resolveWebPort,
 } from '../src/web/server/server.ts'
-import { Plugin, getActiveServer, stopActiveServer } from '../src/v2/index.ts'
-import type { PluginContextV2 } from '../src/v2/types.ts'
 
 /**
  * Learn a free port reliably: bind a short-lived listener on port 0, read the

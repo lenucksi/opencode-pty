@@ -1,5 +1,5 @@
-import { currentBuildInfo } from '../../../plugin/pty/read-build-info.ts'
 import { manager } from '../../../plugin/pty/manager.ts'
+import { currentBuildInfo } from '../../../plugin/pty/read-build-info.ts'
 import { JsonResponse } from './responses.ts'
 
 /**

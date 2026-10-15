@@ -1,9 +1,8 @@
 import { afterAll, describe, expect, it, spyOn } from 'bun:test'
-
-import { ptyScreen } from '../src/plugin/pty/tools/screen.ts'
+import { manager } from '../src/plugin/pty/manager.ts'
 import * as ScreenModule from '../src/plugin/pty/screen.ts'
 import { renderScreen } from '../src/plugin/pty/screen.ts'
-import { manager } from '../src/plugin/pty/manager.ts'
+import { ptyScreen } from '../src/plugin/pty/tools/screen.ts'
 
 /**
  * `pty_screen` is its own tool rather than a `pty_read` mode, so it has to stand

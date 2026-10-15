@@ -1,4 +1,4 @@
-import { expect, selectSession, test as extendedTest } from './fixtures'
+import { expect, test as extendedTest, selectSession } from './fixtures'
 import { getTerminalPlainText, waitForTerminalRegex } from './xterm-test-helpers.ts'
 
 const colorQueryReader = String.raw`
