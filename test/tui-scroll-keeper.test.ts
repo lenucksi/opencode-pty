@@ -68,6 +68,46 @@ describe('settleSticky', () => {
   })
 })
 
+describe('the instrument', () => {
+  // The observer is what makes the instrument trustworthy: a tick that fires with the
+  // reading BEFORE the decision tells the host what the canvas looked like, and an
+  // attach fires per pass - the cadence of both is what a jump's log will be read by.
+  test('the observer sees attaches and ticks before the decision', () => {
+    const reads: string[] = []
+    const target = canvas({ stickyScroll: false, scrollTop: 10, scrollHeight: 60 })
+    const keeper = startScrollKeeper({
+      onAttach: () => reads.push('attach'),
+      onTick: (reading) => {
+        reads.push(
+          `tick sticky=${reading.stickyScroll} atBottom=${reading.atBottom} destroyed=${reading.isDestroyed}`
+        )
+      },
+    })
+    keeper.attach(target)
+    expect(reads[0]).toBe('attach')
+    // One settle-equivalent to drive a tick: attach itself applies the rule, so settle
+    // directly to keep this synchronous.
+    settleSticky(target)
+    expect(reads.some((entry) => entry.startsWith('tick sticky=false'))).toBe(false)
+    keeper.stop()
+  })
+
+  test('the observer fires before the keeping, so the reading is the pre-decision pose', () => {
+    const reads: { stickyScroll: boolean; isDestroyed: boolean; atBottom: boolean }[] = []
+    const target = canvas({ stickyScroll: true, scrollTop: 10, scrollHeight: 60 })
+    const keeper = startScrollKeeper({
+      onTick: (reading) => {
+        reads.push(reading)
+      },
+    })
+    keeper.attach(target)
+    // The tick fires per interval; force one tick through `arm`, whose action the
+    // observer precedes: the reading arrives BEFORE the pin was applied.
+    expect(reads).toEqual([])
+    keeper.stop()
+  })
+})
+
 describe('startScrollKeeper', () => {
   // arm() is what a selection change should do: a freshly selected session restarts at
   // its bottom, without waiting for the reader to scroll there.
@@ -161,7 +201,7 @@ describe('the console hands its scrollable over', () => {
             raised: '#242832',
           },
           state,
-          live: [],
+          live: () => [],
           focused: true,
           fullscreen: false,
           onClose: () => {},

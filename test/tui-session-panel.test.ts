@@ -292,7 +292,7 @@ describe('sessionPanelView', () => {
   const view = (over: Partial<Parameters<typeof sessionPanelView>[0]> = {}): SessionPanelView => ({
     tones,
     state: initialSessionPanelState(),
-    live: [],
+    live: () => [],
     focused: false,
     fullscreen: false,
     onClose: () => {},
@@ -611,7 +611,7 @@ describe('sessionPanelView', () => {
     noteSessionScreen(state, 'one\ntwo\nthree', 1)
     const text = await frame(() =>
       sessionPanelView(
-        view({ state, live: [session({ id: 'pty_9', cols: 120, rows: 40, lineCount: 812 })] })
+        view({ state, live: () => [session({ id: 'pty_9', cols: 120, rows: 40, lineCount: 812 })] })
       )
     )
     expect(text).toContain('pty_9')
@@ -634,7 +634,7 @@ describe('sessionPanelView', () => {
     noteSessionPanelList(state, [session({ id: 'pty_9' })], ME)
     noteSessionSelected(state, 'pty_9')
     const text = await frame(() =>
-      sessionPanelView(view({ state, live: [session({ id: 'pty_9' })] }))
+      sessionPanelView(view({ state, live: () => [session({ id: 'pty_9' })] }))
     )
     expect(text).toContain('⌨ send')
   })
@@ -645,7 +645,7 @@ describe('sessionPanelView', () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(state, [ended], ME)
     noteSessionSelected(state, 'pty_9')
-    const text = await frame(() => sessionPanelView(view({ state, live: [ended] })))
+    const text = await frame(() => sessionPanelView(view({ state, live: () => [ended] })))
     expect(text).not.toContain('⌨ send')
   })
 
@@ -658,7 +658,9 @@ describe('sessionPanelView', () => {
     noteSessionSelected(state, 'pty_9')
     const sent: string[] = []
     const element = () =>
-      sessionPanelView(view({ state, live: [live], onSend: (target) => sent.push(target.id) }))
+      sessionPanelView(
+        view({ state, live: () => [live], onSend: (target) => sent.push(target.id) })
+      )
     const rendered = await setup(element)
     const column = rendered.captureCharFrame().split('\n')[0]?.indexOf('⌨') ?? -1
     if (column < 0) throw new Error('the panel header draws no send control to click')

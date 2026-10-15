@@ -1,5 +1,6 @@
 import type { MouseEvent } from '@opentui/core'
 import { jsx } from '@opentui/solid/jsx-runtime'
+import { createMemo, type Accessor } from 'solid-js'
 
 import {
   formatDuration,
@@ -38,8 +39,15 @@ import { type SessionPanelState, selectedLive, visibleRows } from './session-pan
 export interface SessionPanelView {
   readonly tones: Tones
   readonly state: SessionPanelState
-  /** The fresh list, so the selected row's timer stops when the process does. */
-  readonly live: readonly PanelSession[]
+  /**
+   * The fresh list, so the selected row's timer stops when the process does.
+   *
+   * An ACCESSOR, and that is structural: the claim's render must not read the poll's
+   * store - every read there is tracked, and the poll writes per tick (`panel.sessions`
+   * among them), so a plain value meant a re-run of the claim's whole render and a
+   * freshly born console widget per tick. The reader measured that on the jump.
+   */
+  readonly live: () => readonly PanelSession[]
   /** True while the host has this panel focused. */
   readonly focused: boolean
   /** `fullscreen` when the reader asked for the whole screen. */
@@ -75,10 +83,9 @@ export interface SessionPanelView {
   readonly parentName: (id: string | undefined) => string | undefined
 }
 
-/** One row, with the selected one marked. */
+/** One row, with the selected one marked; the selection reads per click, not per render. */
 function rowFor(view: SessionPanelView, session: PanelSession) {
   const tone = rowTone(session)
-  const selected = view.state.selected === session.id
   return jsx('box', {
     flexDirection: 'row',
     width: '100%',
@@ -97,9 +104,12 @@ function rowFor(view: SessionPanelView, session: PanelSession) {
       jsx('text', {
         flexGrow: 1,
         // The selection is marked in the TEXT, not only by colour: a reader who cannot
-        // distinguish the tones still has to see which row is on screen.
-        fg: selected ? view.tones.base : view.tones.muted,
-        children: selected ? `> ${rowLabel(session)}` : `  ${rowLabel(session)}`,
+        // distinguish the tones still has to see which row is on screen. Inside the
+        // accessor, so a click re-texts the affected rows instead of re-laying the panel.
+        children: (): string => {
+          const selected = view.state.selected === session.id
+          return selected ? `> ${rowLabel(session)}` : `  ${rowLabel(session)}`
+        },
         onMouseDown: (event: MouseEvent) => {
           event.stopPropagation()
           view.onSelect(session.id)
@@ -124,7 +134,7 @@ function rowFor(view: SessionPanelView, session: PanelSession) {
  * last place a reader looks for it. Three exits exist in total (this, the palette entry
  * and `ctrl+y`); see `registerSessionPanelCloseCommand` for why the other two are needed.
  */
-function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
+function panelHeader(view: SessionPanelView, chosen: () => PanelSession | null) {
   return jsx('box', {
     flexDirection: 'row',
     width: '100%',
@@ -147,7 +157,10 @@ function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
         fg: view.tones.muted,
         // Only for a process that can still be written to: a control opening an input field
         // whose answer the server refuses is worse than no control at all.
-        children: (): string => (chosen !== null && !isFinished(chosen) ? '⌨ send' : ''),
+        children: (): string => {
+          const picked = chosen()
+          return picked !== null && !isFinished(picked) ? '⌨ send' : ''
+        },
         // On RELEASE, and that is load-bearing: a click delivers a mouse-down and a
         // mouse-up, and a dialog asked for on the down is closed by that same gesture's
         // up - by release time the host's dialog backdrop sits under the pointer and its
@@ -156,7 +169,8 @@ function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
         // this opens once, and once is what the release belongs to.
         onMouseUp: (event: MouseEvent) => {
           event.stopPropagation()
-          if (chosen !== null && !isFinished(chosen)) view.onSend(chosen)
+          const picked = chosen()
+          if (picked !== null && !isFinished(picked)) view.onSend(picked)
         },
       }),
       jsx('text', {
@@ -175,8 +189,9 @@ function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
         // rather than "0s" when the start cannot be read: a duration nobody can compute
         // should not be shown as none.
         children: (): string => {
-          if (chosen === null) return ''
-          const ms = sessionDurationMs(chosen, view.state.now)
+          const picked = chosen()
+          if (picked === null) return ''
+          const ms = sessionDurationMs(picked, view.state.now)
           return ms === null ? '' : formatDuration(ms)
         },
       }),
@@ -195,7 +210,7 @@ function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
  * Empty when nothing is selected, and then the row is not drawn at all - a blank line above an empty
  * panel is a row nobody can use.
  */
-function identityLine(view: SessionPanelView, chosen: PanelSession): unknown {
+function identityLine(view: SessionPanelView, chosen: () => PanelSession | null): unknown {
   return jsx('box', {
     height: 1,
     flexShrink: 0,
@@ -206,7 +221,11 @@ function identityLine(view: SessionPanelView, chosen: PanelSession): unknown {
       // console down by a row for nothing.
       wrapMode: 'none',
       flexShrink: 1,
-      children: sessionIdentity(chosen, view.parentName(chosen.parentSessionId)),
+      children: (): string => {
+        const picked = chosen()
+        if (picked === null) return ''
+        return sessionIdentity(picked, view.parentName(picked.parentSessionId))
+      },
     }),
   })
 }
@@ -219,20 +238,21 @@ function identityLine(view: SessionPanelView, chosen: PanelSession): unknown {
  * Size and line count are the ones that matter for a full-screen program: `top` at 120x40
  * wrapped into 80 columns is not a rendering fault but a different program running.
  */
-function statusBar(view: SessionPanelView, chosen: PanelSession | null): unknown {
+function statusBar(view: SessionPanelView, chosen: () => PanelSession | null): unknown {
   return jsx('text', {
     width: '100%',
     fg: view.tones.muted,
     children: (): string => {
-      if (chosen === null) return ''
+      const picked = chosen()
+      if (picked === null) return ''
       const size =
-        chosen.cols === undefined || chosen.rows === undefined
+        picked.cols === undefined || picked.rows === undefined
           ? ''
-          : `  ${chosen.cols}x${chosen.rows}`
+          : `  ${picked.cols}x${picked.rows}`
       const rows = view.state.screen === '' ? 0 : view.state.screen.split('\n').length
       return [
-        `${chosen.id}  ${chosen.status ?? '?'}${size}`,
-        `lines ${chosen.lineCount ?? '?'}  screen ${rows} rows`,
+        `${picked.id}  ${picked.status ?? '?'}${size}`,
+        `lines ${picked.lineCount ?? '?'}  screen ${rows} rows`,
       ].join('  ·  ')
     },
   })
@@ -266,8 +286,6 @@ function statusBar(view: SessionPanelView, chosen: PanelSession | null): unknown
  *   tree and the widget scrolls it - which is what a reader means by "die Konsole."
  */
 function framedScreen(view: SessionPanelView): unknown {
-  if (view.state.selected === null) return undefined
-
   return jsx('box', {
     width: '100%',
     flexGrow: 1,
@@ -302,7 +320,12 @@ function framedScreen(view: SessionPanelView): unknown {
  * The gesture stays where the list was, so the reader does not have to learn a new
  * position in either state.
  */
-function listHeader(view: SessionPanelView, count: number, expanded: boolean): unknown {
+function listHeader(
+  view: SessionPanelView,
+  sessions: Accessor<PanelSession[]>,
+  expanded: Accessor<boolean>
+): unknown {
+  const count = (): number => sessions().length
   return jsx('box', {
     flexDirection: 'row',
     width: '100%',
@@ -315,74 +338,92 @@ function listHeader(view: SessionPanelView, count: number, expanded: boolean): u
     children: [
       jsx('text', {
         fg: view.tones.muted,
-        children: expanded ? '▾' : '▸',
+        children: expanded() ? '▾' : '▸',
       }),
       jsx('text', {
         flexGrow: 1,
         fg: view.tones.base,
-        children: expanded
-          ? `${count} session${count === 1 ? '' : 's'}`
-          : `${count} session${count === 1 ? '' : 's'}…  (expand)`,
+        children: (): string => {
+          const n = count()
+          const open = expanded()
+          return open
+            ? `${n} session${n === 1 ? '' : 's'}`
+            : `${n} session${n === 1 ? '' : 's'}…  (expand)`
+        },
       }),
     ],
   })
 }
 
 export function sessionPanelView(view: SessionPanelView) {
-  const chosen = selectedLive(view.state, view.live)
+  // Memos, so the claim's render never TRACKS the poll's store: every read of these was
+  // going into the render scope before, and the poll writes per tick - the reader saw
+  // the whole tree rebuilt, and the console's scrollbox was a freshly born widget with
+  // it, yanking their scroll to the bottom. The memos own their reads instead.
+  const chosen = createMemo(() => selectedLive(view.state, view.live()))
+  const sessions = createMemo(() => view.state.sessions)
+  const expanded = createMemo(() => view.state.listExpanded)
+
   const header = panelHeader(view, chosen)
 
-  const { rows, overflow } = visibleRows(view.state.sessions, view.state.listExpanded)
-  const listEntries: unknown[] =
-    view.state.sessions.length === 0
-      ? [
+  // The list children are computed INSIDE the accessor: a list change re-rows the list,
+  // and nothing else - the console outside it cannot hear the write.
+  const list = jsx('box', {
+    flexDirection: 'column',
+    width: '100%',
+    flexShrink: 0,
+    children: (): unknown[] => {
+      const group = sessions()
+      const open = expanded()
+      const head = listHeader(view, sessions, expanded)
+      if (group.length === 0) {
+        return [
+          head,
           jsx('text', {
             fg: view.tones.muted,
             children: '   this conversation started no PTY session',
           }),
         ]
-      : view.state.listExpanded
-        ? [
-            ...rows.map((session) => rowFor(view, session)),
-            ...(overflow > 0
-              ? [
-                  jsx('text', {
-                    width: '100%',
-                    flexShrink: 0,
-                    fg: view.tones.muted,
-                    children: `   … and ${overflow} more in the sidebar`,
-                  }),
-                ]
-              : []),
-          ]
-        : []
+      }
+      const { rows, overflow } = visibleRows(group, open)
+      const entries: unknown[] = [head, ...rows.map((session) => rowFor(view, session))]
+      if (overflow > 0) {
+        entries.push(
+          jsx('text', {
+            width: '100%',
+            flexShrink: 0,
+            fg: view.tones.muted,
+            children: (): string => '   \u2026 and ' + String(overflow) + ' more in the sidebar',
+          })
+        )
+      }
+      return entries
+    },
+  })
 
-  const list = jsx('box', {
+  // The console's slice: identity line above the frame, both absent while nothing is
+  // selected. Reading `chosen` inside the accessor keeps a poll from re-running this
+  // block, so the scrollbox persists across ticks and the reader's scroll holds.
+  const screenBlock = jsx('box', {
     flexDirection: 'column',
     width: '100%',
-    flexShrink: 0,
-    children: [
-      listHeader(view, view.state.sessions.length, view.state.listExpanded),
-      ...listEntries,
-    ],
+    minHeight: 0,
+    children: (): unknown[] => {
+      // Gated by the SELECTION, not by `chosen`: `selected` is exactly what the poll's
+      // `noteSessionSelected` writes and the spot the frame relied on before.
+      if (view.state.selected === null) return []
+      return [identityLine(view, chosen), framedScreen(view)]
+    },
   })
 
   // The footer LAST, and `flexShrink: 0`: the framed screen above it grows to fill, so a
   // bar inside the frame would be pushed off the bottom by its own content.
   const footer = jsx('box', { height: 1, flexShrink: 0, children: statusBar(view, chosen) })
-  const screen = framedScreen(view)
   return jsx('box', {
     flexDirection: 'column',
     width: '100%',
     flexGrow: 1,
     minHeight: 0,
-    children: [
-      header,
-      // Only with something selected: an empty identity row is a row nobody can use.
-      ...(chosen === null ? [] : [identityLine(view, chosen)]),
-      ...(screen === undefined ? [] : [screen]),
-      list,
-      footer,
-    ],
+    children: [header, screenBlock, list, footer],
   })
 }

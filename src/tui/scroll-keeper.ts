@@ -40,8 +40,13 @@ export const SCROLL_SLACK_ROWS = 2
  * Applied, not returned, because the caller's whole job is to hold the CANVAS's
  * current pose; the boolean outcome is observable through the canvas itself.
  */
+/** Whether the reader is resting at the bottom of the canvas, slack included. */
+export function isAtBottom(canvas: ScrollCanvas, slack: number = SCROLL_SLACK_ROWS): boolean {
+  return canvas.scrollTop >= canvas.scrollHeight - canvas.viewport.height - slack
+}
+
 export function settleSticky(canvas: ScrollCanvas, slack: number = SCROLL_SLACK_ROWS): void {
-  const want = canvas.scrollTop >= canvas.scrollHeight - canvas.viewport.height - slack
+  const want = isAtBottom(canvas, slack)
   if (canvas.stickyScroll !== want) canvas.stickyScroll = want
 }
 
@@ -64,15 +69,47 @@ export interface ScrollKeeper {
   stop: () => void
 }
 
-export function startScrollKeeper(): ScrollKeeper {
+/**
+ * What the host may observe, without the keeper gaining a logging dependency.
+ *
+ * The instrument's read: how often a canvas is ATTACHED to (one says the widget
+ * persists; more than one says the tree is rebuilding it per tick), and what the
+ * keeper sees on each tick, sampled.
+ */
+export interface ScrollKeeperObserver {
+  /** Fired from `attach`, with the canvas that just arrived. */
+  onAttach?: () => void
+  /** Fired from each tick that evaluated a live canvas, before the decision applied. */
+  onTick?: (reading: {
+    readonly stickyScroll: boolean
+    readonly scrollTop: number
+    readonly scrollHeight: number
+    readonly viewportHeight: number
+    readonly atBottom: boolean
+    readonly isDestroyed: boolean
+  }) => void
+}
+
+export function startScrollKeeper(observe: ScrollKeeperObserver = {}): ScrollKeeper {
   let canvas: ScrollCanvas | undefined
   const tick = (): void => {
-    if (canvas !== undefined && !canvas.isDestroyed) settleSticky(canvas)
+    if (canvas === undefined) return
+    observe.onTick?.({
+      stickyScroll: canvas.stickyScroll,
+      scrollTop: canvas.scrollTop,
+      scrollHeight: canvas.scrollHeight,
+      viewportHeight: canvas.viewport.height,
+      atBottom: isAtBottom(canvas),
+      isDestroyed: canvas.isDestroyed,
+    })
+    if (canvas.isDestroyed) return
+    settleSticky(canvas)
   }
   const timer = setInterval(tick, SCROLL_KEEPER_MS)
   return {
     attach: (next) => {
       canvas = next
+      observe.onAttach?.()
       // The same renderable arrives on every claim render, so attach arrives while the
       // reader may be mid-scroll on the PREVIOUS screen: their position rules, and
       // attach does not move it - it only applies the position's rule. A canvas that is
