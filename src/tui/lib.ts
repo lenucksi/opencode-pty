@@ -51,9 +51,9 @@ export interface PanelSession {
    * Which agent started it, when one did.
    *
    * Carried for ONE reason: the shared `groupSessionsByParent` reads it to head a group, and
-   * the shared `parentSessionGroupTitle` puts it in parentheses. Both are tested rules, and a
-   * panel that grouped without it would have to format the agent itself - which is the second
-   * answer TASK-19 exists to remove.
+   * both the web sidebar and this panel then show that raw name beside the heading. It is a
+   * tested rule, and a panel that grouped without it would have to format the agent itself -
+   * which is the second answer TASK-19 exists to remove.
    */
   readonly parentAgent?: string
   /** ISO: when the process started. */

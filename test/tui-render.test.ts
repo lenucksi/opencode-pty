@@ -34,6 +34,7 @@ const session = (over: Partial<PanelSession> = {}): PanelSession => ({ id: 'pty_
 interface Handlers {
   onToggle: () => void
   onToggleArchive: () => void
+  onToggleGroup: (key: string) => void
   onClear: () => void
   onOpen: (session: PanelSession) => void
   onRemove: (session: PanelSession) => void
@@ -45,6 +46,7 @@ const handlers = (): Handlers & { calls: string[] } => {
     calls,
     onToggle: () => calls.push('toggle'),
     onToggleArchive: () => calls.push('archive'),
+    onToggleGroup: (key) => calls.push(`group:${key}`),
     onClear: () => calls.push('clear'),
     onOpen: (s) => calls.push(`open:${s.id}`),
     onRemove: (s) => calls.push(`remove:${s.id}`),
@@ -65,6 +67,10 @@ const view = (over: Partial<PanelView> = {}): PanelView => {
     // row does not also have to assert that the row is visible. A test ABOUT the filter
     // passes `visible` itself and says which rows it expects to survive.
     visible: over.visible ?? sessions,
+    // Empty by default: a heading falls back to the stable session id until a test names a
+    // title, so a case about rows and not about titles does not have to invent one.
+    titles: over.titles ?? {},
+    collapsedGroups: over.collapsedGroups ?? [],
     showFinished: over.showFinished ?? false,
     ...handlers(),
     ...over,
@@ -76,6 +82,11 @@ async function frame(element: () => unknown, width = 60, height = 16): Promise<s
   const setup = await testRender(element as () => never, { width, height })
   await setup.renderOnce()
   return setup.captureCharFrame()
+}
+
+/** The frame's line carrying `needle`, so a heading can be asserted where it is drawn. */
+function lineWith(text: string, needle: string): string | undefined {
+  return text.split('\n').find((line) => line.includes(needle))
 }
 
 describe('sidebarView', () => {
@@ -169,6 +180,129 @@ describe('sidebarView', () => {
       sidebarView(view({ sessions: [session({ id: 'a', status: 'running' })] }))
     )
     expect(text).toContain(REMOVE_GLYPH.trim())
+  })
+})
+
+/**
+ * The group headings, rendered headlessly.
+ *
+ * The order and the fold decision are `panel-state`'s own cases; these pin what the view
+ * does with them - the heading text, the fallback for a conversation that is gone, and where
+ * a chevron appears at all.
+ */
+describe('sidebarView group headings', () => {
+  const parented = (id: string, parent: string, over: Partial<PanelSession> = {}): PanelSession =>
+    session({ id, status: 'running', parentSessionId: parent, ...over })
+
+  // AC #1/#2/#3/#4: one heading per conversation, titled from the host's list when it has
+  // it, and from the SHARED fallback when the conversation is gone or the session has none.
+  test('heads each parent conversation with its title, or the shared fallback', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({
+          sessions: [
+            parented('a', 'ses_build', { title: 'dev-server' }),
+            parented('b', 'ses_gone', { title: 'build' }),
+            session({ id: 'c', title: 'manual', status: 'running' }),
+          ],
+          titles: { ses_build: 'Deployment work' },
+        })
+      )
+    )
+    expect(text).toContain('Deployment work')
+    // A conversation that is gone falls back to the stable id, not to nothing.
+    expect(text).toContain('Session ses_gone')
+    // A session nobody's conversation started is still reachable (AC #6).
+    expect(text).toContain('Ungrouped')
+  })
+
+  // AC #7: the agent is the raw name the web sidebar shows beside its heading, not a second
+  // format invented here.
+  test('shows the agent that started a group beside its heading', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({
+          sessions: [parented('a', 'ses_build', { parentAgent: 'architect' })],
+          titles: { ses_build: 'Deployment work' },
+        })
+      )
+    )
+    expect(lineWith(text, 'Deployment work')).toContain('architect')
+  })
+
+  // The host's own rule: a group of one or two is never folded, so a chevron there would be
+  // a control that cannot fold anything - and the rows stay on screen.
+  test('draws no fold chevron on a group of one or two, and keeps its rows', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({
+          sessions: [
+            parented('a', 'ses_one', { title: 'first' }),
+            parented('b', 'ses_one', { title: 'second' }),
+          ],
+        })
+      )
+    )
+    const heading = lineWith(text, 'Session ses_one')
+    expect(heading).toBeDefined()
+    expect(heading).not.toContain('▶')
+    expect(heading).not.toContain('▼')
+    expect(text).toContain('first')
+    expect(text).toContain('second')
+  })
+
+  test('folds a group of more than two on its chevron, open by default', async () => {
+    const three = ['a', 'b', 'c'].map((id, index) =>
+      parented(id, 'ses_big', { title: `run-${index}` })
+    )
+
+    const open = await frame(() => sidebarView(view({ sessions: three })))
+    expect(lineWith(open, 'Session ses_big')).toContain('▼')
+    expect(open).toContain('run-0')
+
+    const folded = await frame(() =>
+      sidebarView(view({ sessions: three, collapsedGroups: ['ses_big'] }))
+    )
+    expect(lineWith(folded, 'Session ses_big')).toContain('▶')
+    expect(folded).not.toContain('run-0')
+  })
+
+  // AC #4: a group holding a running session is drawn above one that only finished. The
+  // partition is `groupsForDisplay`'s and has its own state-level case; this pins that the
+  // view draws the groups in the order it is given rather than in the input's order.
+  //
+  // The finished session is NEWER on purpose: the shared time order alone would put it
+  // first, so only the liveness partition can produce the expected order. Fixtures with
+  // equal or conveniently-ordered timestamps pass whether the partition exists or not.
+  test('draws a group holding a running session above one that only finished', async () => {
+    const dead = parented('old', 'ses_dead', {
+      title: 'stale',
+      status: 'exited',
+      exitCode: 1,
+      createdAt: '2026-01-01T12:00:00Z',
+    })
+    const live = parented('live', 'ses_live', {
+      title: 'alive',
+      createdAt: '2026-01-01T11:00:00Z',
+    })
+    const text = await frame(() =>
+      sidebarView(
+        view({
+          showFinished: true,
+          sessions: [dead, live],
+          // The finished group is listed first here as well, so neither the input order nor
+          // the time order can explain the result.
+          visible: [dead, live],
+          titles: { ses_dead: 'Finished work', ses_live: 'Live work' },
+        })
+      )
+    )
+    const lines = text.split('\n')
+    const liveLine = lines.findIndex((line) => line.includes('Live work'))
+    const deadLine = lines.findIndex((line) => line.includes('Finished work'))
+    expect(liveLine).toBeGreaterThanOrEqual(0)
+    expect(deadLine).toBeGreaterThanOrEqual(0)
+    expect(liveLine).toBeLessThan(deadLine)
   })
 })
 

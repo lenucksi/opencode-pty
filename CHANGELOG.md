@@ -49,6 +49,19 @@ beside the built-in sidebar items rather than replacing them.
 - Opening the archive does not start a server. Expanding the panel is the only trigger
   that does, and the sessions the archive shows are already in the panel state, so the
   expansion needs no refresh at all.
+- **The sidebar groups the running sessions by the conversation that started them.** The
+  list was global: a conversation that had started no PTY still saw the whole machine's
+  sessions, and without the parent id by heart there was no way to tell whose process a row
+  was. Each group now carries one collapsible heading, titled through the host's own
+  `data.session.get` and falling back to `Session <id>` - or `Ungrouped` for a session
+  started by hand - with the same agent name the web sidebar shows. The fold is the host MCP
+  sidebar's idiom, copied: ONE mouse handler, on a chevron that appears only once a group is
+  big enough for folding to save something. A group of one or two is therefore always open,
+  so the collapse can never take the one live process out of sight. A group holding a
+  running session is drawn above one that only finished, and the group state is a durable
+  preference beside the collapsed flag. The grouping applies to the running set - the
+  archive in the footer stays a single count, because 200 sessions across 20 conversations
+  would be a wall of headings in a ~40-column sidebar.
 - The output dialog uses a plain box rather than a scrollbox. Measured against
   opentui 0.5.14: a scrollbox renders nothing when its text contains a line break,
   and `stickyScroll` together with `stickyStart: 'bottom'` blanks it even for a

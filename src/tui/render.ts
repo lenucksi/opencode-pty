@@ -2,6 +2,7 @@ import type { MouseEvent } from '@opentui/core'
 import { insert } from '@opentui/solid'
 import { jsx } from '@opentui/solid/jsx-runtime'
 
+import { parentSessionGroupTitle } from '../web/shared/session-meta.ts'
 import {
   archiveLabel,
   clearActionLabel,
@@ -16,8 +17,17 @@ import {
   rowTone,
   sessionDurationMs,
   tail,
+  truncateText,
 } from './lib.ts'
-import { failedFinished, failureCount } from './panel-state.ts'
+import {
+  failedFinished,
+  failureCount,
+  GROUP_AUTO_OPEN_LIMIT,
+  groupsForDisplay,
+  isGroupOpen,
+  type PanelGroup,
+  sessionCountLabel,
+} from './panel-state.ts'
 
 /**
  * What the panel draws, as plain inputs and plain callbacks.
@@ -65,8 +75,20 @@ export interface PanelView {
   readonly sessions: readonly PanelSession[]
   /** The rows to draw: every running session, plus the failed ones when expanded. */
   readonly visible: readonly PanelSession[]
+  /**
+   * The parent conversations' titles, by id, for the group headings.
+   *
+   * Resolved by the wiring from the host's own session list rather than requested: a
+   * conversation can be gone while its archived session remains, and the heading must then
+   * fall back through `parentSessionGroupTitle` instead of vanishing.
+   */
+  readonly titles: Readonly<Record<string, string>>
+  /** The group keys the reader has folded shut. */
+  readonly collapsedGroups: readonly string[]
   /** Whether the footer has asked for the failed finished rows. */
   readonly showFinished: boolean
+  /** Fold or unfold one group's rows. */
+  readonly onToggleGroup: (key: string) => void
   /** Expand/collapse the header. */
   readonly onToggle: (event: MouseEvent) => void
   /** Show or hide the failed finished rows. */
@@ -172,7 +194,60 @@ function headerFor(view: PanelView) {
   })
 }
 
-/** The rows, or nothing at all while collapsed. */
+/** The group heading's title column, kept narrower than a row's so the chevron and the count fit. */
+const GROUP_TITLE_MAX = 22
+
+/**
+ * One parent conversation's heading, with its fold control.
+ *
+ * The shape is the host MCP sidebar's, copied rather than invented: the chevron exists only
+ * once a group is big enough for folding to save something, and `isGroupOpen` owns which
+ * groups are open so the header and its rows cannot disagree.
+ *
+ * The heading is the shared `parentSessionGroupTitle` given the parent's title, and the
+ * agent is the raw `parentAgent` the web sidebar shows - not a second format invented here.
+ */
+function groupHeaderFor(view: PanelView, group: PanelGroup, open: boolean) {
+  const count = group.sessions.length
+  const collapsible = count > GROUP_AUTO_OPEN_LIMIT
+  const meta = [group.parentAgent, sessionCountLabel(count)].filter(Boolean).join('  ')
+  return jsx('box', {
+    flexDirection: 'row',
+    width: '100%',
+    // Stop only, never act: the panel's own header - an ancestor of this list - toggles on
+    // mouse-down, so a press on the heading's text would collapse the whole section. The
+    // click that folds is the chevron's, and it is the only acting handler here.
+    onMouseDown: (event: MouseEvent) => event.stopPropagation(),
+    children: [
+      // Rendered only where folding does something: a chevron on a group that cannot be
+      // folded is a control with no answer, which is what the host's sidebar avoids too.
+      ...(collapsible
+        ? [
+            jsx('text', {
+              fg: view.tones.muted,
+              children: open ? '▼ ' : '▶ ',
+              // ONE handler, on mouse-DOWN only. A click delivers a down AND an up, so a
+              // toggle registered on each fired twice and the group looked like it ignored
+              // the click - the `dde6ce3` regression class. The host MCP sidebar registers
+              // one for the same reason.
+              onMouseDown: (event: MouseEvent) => {
+                event.stopPropagation()
+                view.onToggleGroup(group.key)
+              },
+            }),
+          ]
+        : []),
+      jsx('text', {
+        fg: view.tones.base,
+        // Grows so the agent and the count are pushed to the panel's right edge.
+        flexGrow: 1,
+        children: truncateText(parentSessionGroupTitle(group, view.titles), GROUP_TITLE_MAX),
+      }),
+      jsx('text', { fg: view.tones.muted, children: meta }),
+    ],
+  })
+}
+
 /** The rows, or nothing at all while collapsed. */
 function listFor(view: PanelView) {
   return jsx('box', {
@@ -185,7 +260,17 @@ function listFor(view: PanelView) {
         // footer carries the archive count, so this line does not repeat it.
         return [jsx('text', { fg: view.tones.muted, children: '   nothing running' })]
       }
-      return view.visible.map((session) => rowFor(view, session))
+      // One heading per parent conversation, then its rows while it is unfolded. The
+      // grouping applies to the VISIBLE set, so a group holding nothing running appears
+      // only while the archive expansion is open - which is what keeps a 200-session
+      // archive from becoming a wall of headings in a 40-column sidebar.
+      return groupsForDisplay(view.visible).flatMap((group) => {
+        const open = isGroupOpen(group.sessions.length, group.key, view.collapsedGroups)
+        return [
+          groupHeaderFor(view, group, open),
+          ...(open ? group.sessions.map((session) => rowFor(view, session)) : []),
+        ]
+      })
     },
   })
 }

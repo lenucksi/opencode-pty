@@ -255,6 +255,14 @@ Each row has a `✕`. On a running session it asks first, because it kills a liv
 process; on a finished one it acts at once. The header offers *(clear finished)*
 whenever there is something finished to clear — never for a running session.
 
+Rows are grouped by the conversation that started them, one collapsible heading per
+parent session, named with that conversation's title (or `Session <id>` once it is gone).
+A group of more than two folds on its chevron; a smaller one is always open, so the fold
+can never hide the one process you came to watch. A session nobody's conversation started
+sits under `Ungrouped`. The archive in the footer stays a single count rather than its own
+groups: 200 sessions across 20 conversations would be a wall of headings in a ~40-column
+sidebar.
+
 The panel needs the PTY server, and starts it when you expand the section. It
 does **not** start it on OpenCode's startup: starting it creates and deletes a
 session, which does not belong on a load path. If the PTY plugin is not

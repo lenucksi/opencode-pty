@@ -6,9 +6,11 @@ import {
   FINISHED_FAILURE_LIMIT,
   failedFinished,
   failureCount,
+  GROUP_AUTO_OPEN_LIMIT,
   groupsForDisplay,
   IDLE_STATUS,
   initialPanelState,
+  isGroupOpen,
   isRunning,
   MAX_START_FAILURES,
   noteDialogClosed,
@@ -555,5 +557,28 @@ describe('groupsForDisplay', () => {
     const list = [running('a', ME, 1), running('b', OTHER, 2)]
     groupsForDisplay(list)
     expect(list).toHaveLength(2)
+  })
+})
+
+describe('isGroupOpen', () => {
+  // The host's own rule, taken from its MCP sidebar: folding appears only once it saves
+  // something, so a small group can never be hidden - not even by a fold key left over from
+  // an earlier run.
+  test('a group of one or two is always open, whatever the reader folded', () => {
+    expect(isGroupOpen(1, 'ses_a', [])).toBe(true)
+    expect(isGroupOpen(2, 'ses_a', ['ses_a'])).toBe(true)
+    expect(isGroupOpen(GROUP_AUTO_OPEN_LIMIT, 'ses_a', ['ses_a'])).toBe(true)
+  })
+
+  test('a bigger group is open until its own key is folded', () => {
+    expect(isGroupOpen(3, 'ses_a', [])).toBe(true)
+    expect(isGroupOpen(3, 'ses_a', ['ses_a'])).toBe(false)
+  })
+
+  // Keyed by the parent session id: folding one conversation must not fold another, and a
+  // key from a conversation that is gone must not match anything at all.
+  test('folding one group leaves the others open', () => {
+    expect(isGroupOpen(3, 'ses_b', ['ses_a'])).toBe(true)
+    expect(isGroupOpen(3, 'ses_gone', ['ses_a'])).toBe(true)
   })
 })

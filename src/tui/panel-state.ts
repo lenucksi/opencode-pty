@@ -220,6 +220,32 @@ export function groupsForDisplay(sessions: readonly PanelSession[]): PanelGroup[
   ]
 }
 
+/**
+ * How many rows a group may hold and still be always shown.
+ *
+ * Taken from the host's own MCP sidebar (`feature-plugins/sidebar/mcp.tsx`, which folds only
+ * past `list().length > 2`): a group of one or two is never hidden behind a header, so the
+ * collapse control never offers to put the one process a reader came for out of sight.
+ */
+export const GROUP_AUTO_OPEN_LIMIT = 2
+
+/**
+ * Whether a group's rows are drawn.
+ *
+ * A small group is always open, so the fold can never hide the whole point of the glance. A
+ * bigger one follows the reader, keyed by the parent session id - and a key for a
+ * conversation that is gone simply never matches, which is the honest outcome rather than a
+ * group that reopens itself.
+ */
+export function isGroupOpen(
+  sessionCount: number,
+  key: string,
+  collapsedGroups: readonly string[]
+): boolean {
+  if (sessionCount <= GROUP_AUTO_OPEN_LIMIT) return true
+  return !collapsedGroups.includes(key)
+}
+
 /** How many sessions, in words. One is not "1 sessions". */
 export function sessionCountLabel(count: number): string {
   return count === 1 ? '1 session' : `${count} sessions`

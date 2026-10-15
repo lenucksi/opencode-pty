@@ -136,6 +136,14 @@ interface Observed {
   onCommand?: () => Promise<void>
   /** The live store values, by key. */
   stores: Map<string, Record<string, unknown>>
+  /**
+   * What `data.session.get` answers, by session id.
+   *
+   * A real lookup rather than `undefined`: the panel reads the parent conversation's title
+   * for its group headings, so a fixture without it would make every heading fall back and
+   * the title path untested.
+   */
+  sessionTitles: Record<string, string>
 }
 
 let runtimeDir: string
@@ -299,7 +307,17 @@ function makeContext(observed: Observed): TuiContext {
     themeMode: 'dark',
     ui,
     storage: { store, memory: store },
-    data: undefined,
+    // The panel's group headings read the parent conversation's title from here. The shape
+    // is reduced to the one field it reads (`title`), taken from the SDK's own `SessionInfo`
+    // rather than typed out a second time.
+    data: {
+      session: {
+        get: (id: string): { readonly title?: string } | undefined => {
+          const title = observed.sessionTitles[id]
+          return title === undefined ? undefined : { title }
+        },
+      },
+    },
     attention: { notify: async () => ({ ok: true, notification: false, sound: false }) },
     markdown: { registerCodeBlockRenderer: () => () => {} },
     keymap: {
@@ -336,6 +354,7 @@ function observed(onCommand?: () => Promise<void>): Observed {
     confirms: [],
     sessionCalls: [],
     stores: new Map(),
+    sessionTitles: {},
     ...(onCommand === undefined ? {} : { onCommand }),
   }
 }
@@ -382,14 +401,39 @@ async function clickHeader(observed: Observed): Promise<void> {
 }
 
 /**
- * Click a row of the sidebar, by its screen row.
+ * Click the sidebar row whose label carries `needle`, by the screen row it is drawn on.
  *
- * Through opentui's own dispatch, like the header, so this is a test of the wiring. Row 0 is
- * the header, so the first session is row 1.
+ * The row comes out of the rendered frame rather than a constant: the list is grouped, so a
+ * session's row sits below its conversation's heading and a hard-coded row number would
+ * click the heading instead. Through opentui's own dispatch, like the header, so this is a
+ * test of the wiring.
  */
-async function clickSidebarRow(observed: Observed, row: number): Promise<void> {
+async function clickSidebarRow(observed: Observed, needle: string): Promise<void> {
   const setup = await renderSidebar(observed)
+  const row = setup
+    .captureCharFrame()
+    .split('\n')
+    .findIndex((line) => line.includes(needle))
+  if (row < 0) throw new Error(`the sidebar draws no row carrying ${needle}`)
   await setup.mockMouse.click(4, row)
+  await setup.renderOnce()
+}
+
+/**
+ * Click a group heading's fold chevron, found by the heading it is drawn on.
+ *
+ * Both the row and the column come out of the rendered frame rather than constants, and the
+ * click goes through opentui's own dispatch, so this exercises the wiring instead of calling
+ * the handler the view was built with.
+ */
+async function clickGroupChevron(observed: Observed, heading: string): Promise<void> {
+  const setup = await renderSidebar(observed)
+  const lines = setup.captureCharFrame().split('\n')
+  const row = lines.findIndex((line) => line.includes(heading))
+  if (row < 0) throw new Error(`the sidebar draws no heading carrying ${heading}`)
+  const column = (lines[row] ?? '').search(/[▼▶]/)
+  if (column < 0) throw new Error('the group draws no chevron to click')
+  await setup.mockMouse.click(column, row)
   await setup.renderOnce()
 }
 
@@ -633,6 +677,62 @@ describe('the PTY sidebar panel', () => {
     await clickHeader(seen)
 
     expect(prefs.collapsed).toBe(false)
+  })
+
+  // AC #2/#3: the heading names the conversation that commissioned the session, resolved
+  // through the host's own session list, with the agent the web sidebar shows beside it.
+  test('heads a group with its conversation title and the agent that started it', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('grouped-run', 'sh', ['-c', 'sleep 30'])
+      const seen = observed()
+      seen.sessionTitles['test-parent-session'] = 'Grouped work'
+      await tuiPanel.setup(makeContext(seen))
+      await waitForRow(seen, 'grouped-run', 'running')
+
+      const prefs = seen.stores.get('opencode-pty.sidebar')
+      if (!prefs) throw new Error('the plugin never created its prefs store')
+      prefs.collapsed = false
+
+      const frame = await sidebarFrame(seen)
+      // The title came from `data.session.get`, not from the `Session <id>` fallback.
+      expect(frame).toContain('Grouped work')
+      expect(frame).not.toContain('Session test-parent-session')
+      expect(frame).toContain('test-agent')
+      expect(frame).toContain('1 session')
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
+  // AC #3: exactly ONE handler on the chevron. A click delivers both a mouse-down and a
+  // mouse-up, so a toggle registered on each fired twice and the group folded and unfolded
+  // inside the one gesture, which reads as a group that ignores the click - the `dde6ce3`
+  // regression class. Three rows, because folding only appears past two.
+  test('one click on a group chevron folds that group, and only once', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('fold-one', 'sh', ['-c', 'sleep 30'])
+      await spawnSession('fold-two', 'sh', ['-c', 'sleep 31'])
+      await spawnSession('fold-three', 'sh', ['-c', 'sleep 32'])
+      const seen = observed()
+      seen.sessionTitles['test-parent-session'] = 'Grouped work'
+      await tuiPanel.setup(makeContext(seen))
+      await waitForRow(seen, 'fold-one', 'running')
+
+      const prefs = seen.stores.get('opencode-pty.sidebar')
+      if (!prefs) throw new Error('the plugin never created its prefs store')
+      prefs.collapsed = false
+      expect(prefs.collapsedGroups).toEqual([])
+
+      // Row 0 is the panel header, so the group's heading - and its chevron - comes next.
+      await clickGroupChevron(seen, 'Grouped work')
+
+      // Folded, not folded-and-unfolded: a second handler would have closed it again.
+      expect(prefs.collapsedGroups).toEqual(['test-parent-session'])
+    } finally {
+      server[Symbol.dispose]()
+    }
   })
 
   // The whole reason the panel may create a session: a host with no server running
@@ -934,8 +1034,9 @@ describe('the PTY sidebar panel', () => {
       await clickHeader(seen)
       await waitForRow(seen, 'clicked', 'running')
 
-      // Row 0 is the header, row 1 the first session.
-      await clickSidebarRow(seen, 1)
+      // The row is found by its label, not by an index: the list is grouped, so this
+      // session's row sits below its conversation's heading.
+      await clickSidebarRow(seen, 'clicked')
 
       expect(seen.opened).toEqual(['opencode-pty'])
       const store = seen.stores.get('opencode-pty.session-panel') as

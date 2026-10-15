@@ -106,10 +106,10 @@ export default Plugin.define({
       initial: initialPanelState(),
     })
     const [prefs, setPrefs] = context.storage.store(PREFS_KEY, {
-      // Both durable, both preferences rather than session state: whether someone
-      // wants to see the failed finished rows is their choice, like the collapsed
-      // state, and it should survive a restart the same way.
-      initial: { collapsed: true, showFinished: false },
+      // All durable, and all preferences rather than session state: which parent
+      // conversation a reader has folded away is their choice, like the archive
+      // expansion and the collapsed state, and it should survive a restart the same way.
+      initial: { collapsed: true, showFinished: false, collapsedGroups: [] as string[] },
     })
 
     let disposed = false
@@ -314,15 +314,56 @@ export default Plugin.define({
       sessionPanelHost.openWith(session.id)
     }
 
+    /**
+     * Fold one parent conversation's rows shut, or open them again.
+     *
+     * A durable preference beside the collapsed flag, and for the same reason: what to look
+     * at is the reader's choice, not state the server owns. Keyed by the parent session id,
+     * so a key left over from a conversation that is gone simply never matches a group.
+     */
+    const onToggleGroup = (key: string): void => {
+      const folded = prefs.collapsedGroups.includes(key)
+      setPrefs((draft) => {
+        draft.collapsedGroups = folded
+          ? draft.collapsedGroups.filter((entry) => entry !== key)
+          : [...draft.collapsedGroups, key]
+      })
+      debug('group.toggle', { key, folded: !folded })
+    }
+
+    /**
+     * The parent conversations' titles, for the group headings.
+     *
+     * A synchronous lookup on the host rather than a request: the panel already holds a
+     * context, and `data.session.get` answers from the list the TUI keeps. A conversation
+     * whose parent is gone yields no entry - the shared `parentSessionGroupTitle` then
+     * falls back to the stable session id, so the heading never disappears.
+     */
+    const parentTitles = (sessions: readonly PanelSession[]): Record<string, string> => {
+      const titles: Record<string, string> = {}
+      const seen = new Set<string>()
+      for (const session of sessions) {
+        const id = session.parentSessionId?.trim()
+        if (!id || seen.has(id)) continue
+        seen.add(id)
+        const title = context.data.session.get(id)?.title?.trim()
+        if (title) titles[id] = title
+      }
+      return titles
+    }
+
     const view = (): PanelView => ({
       tones: tones(),
       collapsed: prefs.collapsed,
       status: panel.status,
       sessions: panel.sessions,
       visible: visibleSessions(panel.sessions, prefs.showFinished),
+      titles: parentTitles(panel.sessions),
+      collapsedGroups: prefs.collapsedGroups,
       showFinished: prefs.showFinished,
       onToggle,
       onToggleArchive,
+      onToggleGroup,
       onClear: actions.onClear,
       onOpen,
       onRemove: actions.confirmRemove,
