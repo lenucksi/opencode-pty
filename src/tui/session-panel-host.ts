@@ -198,7 +198,13 @@ function claimSessionPanel(
         // The slot input is the authority on which session this is. A render must not
         // write state, so the view is handed a copy carrying the id and the poll does the
         // bookkeeping.
-        state: { ...state, sessionID: input.sessionID },
+        // The STORE itself, not a copy: a spread in a reactive render scope reads EVERY
+        // field of the store, so any poll tick's write - `state.now`, say - read the
+        // whole tree as changed and re-laid the panel out, which is the twitch the
+        // reader measured. The view's closures read fields lazily; only the readers of
+        // the field that moved re-render. `state.sessionID` is set by the poll's
+        // `noteSessionPanelInput`, and the view reads none of it.
+        state,
         live: deps.panel.sessions,
         focused: input.focused,
         fullscreen: input.presentation === 'fullscreen',

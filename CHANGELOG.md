@@ -239,6 +239,19 @@ beside the built-in sidebar items rather than replacing them.
 
 ### Fixed
 
+- **The poll stopped twitching the panel.** Every poll tick handed the panel state a list the
+  server had just built - the same CONTENT, but a new array of new objects every time - and the
+  claim's render spread the whole state into its reactive scope, which tracks every field: a tick
+  that only moved the clock re-laid the panel out. Two halves, same rule: a list-note now carries
+  over the rows it already shows (a row whose fields did not move keeps its object identity, a
+  changed row is the only one re-handed), and the claim hands the view the store rather than a copy,
+  so a watcher re-renders only what its field moved. Measured as a state rule and red-proved by
+  name ("keeps the rows' identity...").
+- **The send dialog's key chips fit a medium dialog.** At 60 columns (the width `dialogWidth`
+  hands a medium dialog) the chips row was longer than the dialog, and the reader measured the last
+  chip (`Enter`) running out at the edge - a wider test width had hidden it. The row wraps (the
+  host's own dialogs do, via `flexDrop`), the hint moved to the footer, and a narrow-width render
+  asserts every label drawn inside the box.
 - **The console stays where the reader scrolled it, and the texts speak one language.** A reader
   who scrolled up in a PTY console was dragged back to the bottom by the next poll, because the
   scrollbox pinned itself unconditionally. The pin is now a decision (`scroll-keeper.ts`): it holds

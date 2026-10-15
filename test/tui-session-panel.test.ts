@@ -225,6 +225,42 @@ describe('noteSessionScreen', () => {
     expect(state.sessions.map((entry) => entry.id)).toEqual(['theirs'])
   })
 
+  // THE poll twitch, as a state rule: every tick calls this with a fresh list the SERVER
+  // built, and handing the same CONTENT a new array object makes whatever watches the
+  // store treat every row as changed - which is the reader's measured twitch. Identical
+  // content keeps its identity; only a changed row is re-handed.
+  test('keeps the rows’ identity when the list is the same content twice', () => {
+    const state = initialSessionPanelState()
+    const row = () => session({ id: 'a', title: 'one', lineCount: 3 })
+    noteSessionPanelInput(state, ME)
+    noteSessionPanelList(state, [row()], ME)
+    const first = state.sessions
+    noteSessionPanelList(state, [row()], ME)
+    expect(state.sessions).toBe(first)
+  })
+
+  // The converse of the merge: rows that changed ARE replaced, so a watcher of that one
+  // row still learns (of the change) and the rest keep theirs.
+  test('replaces only the row that changed', () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelInput(state, ME)
+    noteSessionPanelList(
+      state,
+      [session({ id: 'a', title: 'one' }), session({ id: 'b', title: 'two' })],
+      ME
+    )
+    const before = state.sessions
+    noteSessionPanelList(
+      state,
+      [session({ id: 'a', title: 'one' }), session({ id: 'b', title: 'two again' })],
+      ME
+    )
+    const after = state.sessions
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).not.toBe(before[1])
+    expect(after[1]?.title).toBe('two again')
+  })
+
   // A palette open means "this conversation", so the scope a click set has to go.
   test('goes back to its own conversation when the scope is cleared', () => {
     const state = initialSessionPanelState()

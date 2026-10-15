@@ -107,15 +107,12 @@ function keyChip(props: SendDialogProps, label: string, bytes: string): unknown 
 function dialogKeys(props: SendDialogProps): unknown {
   return jsx('box', {
     flexDirection: 'row',
-    gap: 2,
-    children: [
-      ...props.keys.map((key) => keyChip(props, key.label, key.bytes)),
-      jsx('text', {
-        fg: props.tones.muted,
-        flexGrow: 1,
-        children: '↑ keys send at once, without the typed line',
-      }),
-    ],
+    gap: 1,
+    // A medium dialog is 60 columns and the six chips are wider than one row, so the
+    // host's own dialogs wrap here too (`flexWrap` in dialog-shell-output): without it
+    // the last chip left the drawn box entirely, measured.
+    flexWrap: 'wrap',
+    children: props.keys.map((key) => keyChip(props, key.label, key.bytes)),
   })
 }
 
@@ -239,7 +236,10 @@ function SendDialog(raw: Record<string, unknown>): unknown {
         placeholder: 'q',
         ref: setTextareaTarget,
       }),
-      jsx('text', { fg: props.tones.muted, children: 'enter submit · esc close' }),
+      jsx('text', {
+        fg: props.tones.muted,
+        children: '↑ keys send at once · enter submit · esc close',
+      }),
     ],
   })
 }
