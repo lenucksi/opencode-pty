@@ -424,6 +424,11 @@ export function sessionPanelView(view: SessionPanelView) {
     width: '100%',
     flexGrow: 1,
     minHeight: 0,
+    // Two columns of air on the left, measured against the reader's own screenshot:
+    // the glyphs used to start ON the overlay's edge, and a drag starting there
+    // kept landing on the terminal UNDERNEATH the panel. The inset is inside the
+    // surface, so the pointer first hits the panel's own background.
+    paddingLeft: 2,
     children: [header, screenBlock, list, footer],
   })
 }

@@ -594,7 +594,10 @@ describe('sessionPanelView', () => {
     noteSessionSelected(state, 'a')
     noteSessionScreen(state, 'line one', 1)
     const lines = (await frame(() => sessionPanelView(view({ state })))).split('\n')
-    const bottom = lines.findIndex((line) => line.startsWith('└'))
+    // `includes` instead of `startsWith`: the panel carries two columns of air on the
+    // left (the inset that keeps the glyphs off the overlay's edge), so the frame's own
+    // corner glyph sits inside the row, not at its head.
+    const bottom = lines.findIndex((line) => line.includes('└'))
     // LAST is the list's folded header row, then the footer. Naming the three heights is
     // the point: a screen box with a fixed height also ends its frame somewhere and leaves
     // blank rows under it, so "the frame is the last thing drawn" would pass on exactly
