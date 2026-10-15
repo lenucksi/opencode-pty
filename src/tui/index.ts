@@ -18,7 +18,7 @@ import {
   visibleSessions,
 } from './panel-state.ts'
 import { type PanelView, sidebarFooterView, sidebarView } from './render.ts'
-import { findProjectOrigin, isHealthy, listSessions } from './server.ts'
+import { findAnyProjectOrigin, isHealthy, listSessions } from './server.ts'
 import { createSessionPanelHost } from './session-panel-host.ts'
 import { initialSidebarPrefs, SIDEBAR_PREFS_KEY, setFilter, toggleGroup } from './sidebar-prefs.ts'
 
@@ -93,7 +93,28 @@ export default Plugin.define({
       }
     }
 
-    const directory = (): string | undefined => context.location?.directory
+    /**
+     * The locations this panel's server may have filed its record under, most specific first.
+     *
+     * The SESSION's location is what the host hands a plugin, and the app's DEFAULT location is
+     * where an `autostart` server publishes - see `findAnyProjectOrigin` for why both are tried.
+     * Best-effort on the fallback: a host that cannot name its default just means one fewer key,
+     * which must not take the poll down.
+     */
+    const originKeys = (): string[] => {
+      const session = context.location?.directory
+      let fallback: string | undefined
+      try {
+        fallback = context.data.location.default().directory
+      } catch (error) {
+        debug('origin.default.failed', { error: String(error) })
+      }
+      const keys = session && session !== fallback ? [session, fallback] : [fallback]
+      return keys.filter((key): key is string => typeof key === 'string' && key.length > 0)
+    }
+
+    /** The origin this app's server published, under either of the keys above. */
+    const findOrigin = (): Promise<string | null> => findAnyProjectOrigin(originKeys())
 
     /**
      * The theme slots this plugin draws with, named rather than typed.
@@ -140,7 +161,7 @@ export default Plugin.define({
       // a single check. Bounded: a server that never comes up must not spin.
       for (let attempt = 0; attempt < BOOTSTRAP_ATTEMPTS; attempt++) {
         await Bun.sleep(BOOTSTRAP_INTERVAL_MS)
-        const origin = await findProjectOrigin(directory())
+        const origin = await findOrigin()
         if (origin !== null) {
           debug('start.done', { origin, attempt })
           return origin
@@ -165,7 +186,7 @@ export default Plugin.define({
         origin = null
       }
       if (origin === null) {
-        origin = (await findProjectOrigin(directory())) ?? (mayStart ? await startServer() : null)
+        origin = (await findOrigin()) ?? (mayStart ? await startServer() : null)
       }
       if (origin === null) {
         setPanel((draft) => noteNoServer(draft, mayStart))
@@ -222,7 +243,7 @@ export default Plugin.define({
       update: setPanel,
       refresh,
       notify,
-      directory,
+      findOrigin,
       debug,
       tones,
     })

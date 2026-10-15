@@ -9,7 +9,7 @@ import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import { type ActionDeps, type Actions, createActions } from '../src/tui/actions.ts'
 import type { PanelSession } from '../src/tui/lib.ts'
 import { initialPanelState, type PanelState } from '../src/tui/panel-state.ts'
-import { readScreen } from '../src/tui/server.ts'
+import { findProjectOrigin, readScreen } from '../src/tui/server.ts'
 import { PTYServer } from '../src/web/server/server.ts'
 
 /**
@@ -195,7 +195,11 @@ function deps(state: PanelState, over: Partial<ActionDeps> = {}): ActionDeps {
     notify: (message, variant) => {
       recorded.toasts.push({ message, variant })
     },
-    directory: () => project,
+    // The wiring resolves the origin by trying the session's location and the app's default
+    // (see `findAnyProjectOrigin`). The fixture starts its server for `project`, so it looks
+    // that one up rather than faking an address - a wrong URL here would make every test in
+    // this file pass against nothing.
+    findOrigin: () => findProjectOrigin(project),
     debug: (event) => {
       recorded.events.push(event)
     },

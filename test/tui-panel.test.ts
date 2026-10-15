@@ -144,6 +144,13 @@ interface Observed {
    * the title path untested.
    */
   sessionTitles: Record<string, string>
+  /**
+   * The app's default location, which is what an `autostart` server files its record under.
+   *
+   * The project in every case but the moved-session one - `session.location` is what the host
+   * hands a plugin, and the two part company as soon as a session is moved.
+   */
+  defaultDirectory?: string
   /** The prompts the plugin opened, in order. */
   prompts: { readonly title: string; readonly value?: string }[]
   /** What the prompt resolves with. `undefined` is the dismissed dialog. */
@@ -329,6 +336,11 @@ function makeContext(observed: Observed): TuiContext {
           const title = observed.sessionTitles[id]
           return title === undefined ? undefined : { title }
         },
+      },
+      // The host's default location, which is where a server that `autostart` started files its
+      // record - and the second key the panel now tries.
+      location: {
+        default: () => ({ directory: observed.defaultDirectory ?? project }),
       },
     },
     attention: { notify: async () => ({ ok: true, notification: false, sound: false }) },
@@ -690,6 +702,29 @@ describe('the PTY sidebar panel', () => {
       expect(frame).toContain('exit 1')
     } finally {
       server[Symbol.dispose]()
+    }
+  })
+
+  // The measured bug (TASK-27): opencode was launched in one directory, the session lives in a
+  // project below it, and the server's record is filed under the app DEFAULT. Looking up the
+  // session's key alone said "not running" beside a server that answers /health - with an empty
+  // footer, because the panel had no sessions to report on at all.
+  test('finds a server filed under the app default when the session moved', async () => {
+    const appDir = realpathSync(mkdtempSync(join(tmpdir(), 'pty-tui-app-')))
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: appDir })
+    try {
+      await spawnSession('moved-session', 'sh', ['-c', 'exit 1'])
+      const seen = observed()
+      // The session is in `project`; the server published its record under the app directory.
+      seen.defaultDirectory = appDir
+      await tuiPanel.setup(makeContext(seen))
+
+      const row = await waitForRow(seen, 'moved-session', 'exited')
+      if (!row) throw new Error('the panel never listed a server filed under the app default')
+      expect(panelStore(seen).status).toMatch(/^\d+ sessions?$/)
+    } finally {
+      server[Symbol.dispose]()
+      rmSync(appDir, { recursive: true, force: true })
     }
   })
 

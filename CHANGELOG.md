@@ -237,6 +237,22 @@ beside the built-in sidebar items rather than replacing them.
   also development dependencies, so the TUI contract is type-checked in CI. A host
   with no TUI can still install this package.
 
+### Fixed
+
+- **The sidebar reported "not running" next to a healthy server, so its footer stayed empty.**
+  A PTY server files ONE origin record, under the location it was STARTED for, while the host
+  hands a plugin the SESSION's location (`packages/tui/src/routes/session/index.tsx` sets it
+  from `session().location`). A server that `autostart` started is filed under the app's default
+  location, so as soon as a session was moved - `/cd`, or opencode launched in one directory
+  with a session in a project below it - the two keys differed: the lookup matched records on
+  the directory exactly, found nothing, and the panel drew "not running" with no sessions. The
+  footer only draws when there is something to report, which is why it vanished with it.
+  Measured on a running 2.0.29: `findProjectOrigin("/var/home/j")` answered
+  `http://127.0.0.1:4200` while the panel's own key returned null, with 376 sessions
+  (48 of them failed - the footer said nothing) behind it. The panel now tries the session's
+  location first and the app's default second, so a moved session still reads its own project's
+  server rather than another one.
+
 ## [0.5.1] - 2026-10-05
 
 ### Fixed

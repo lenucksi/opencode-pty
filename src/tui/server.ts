@@ -60,6 +60,27 @@ export async function findProjectOrigin(directory: string | undefined): Promise<
   return null
 }
 
+/**
+ * The first healthy origin among several project keys, most specific first.
+ *
+ * There is ONE record per server, filed under the location it was started for, while this panel
+ * renders inside a session whose location can be a different directory: the host hands a plugin
+ * the SESSION's location (`packages/tui/src/routes/session/index.tsx` sets it from
+ * `session().location`), and a server that `autostart` started is filed under the app's DEFAULT
+ * location. Move a session with `/cd` and the two part company - which is how a panel ends up
+ * saying "not running" next to a server that answers /health. Trying both keys is the honest
+ * answer; trying only one assumes a session that never moves.
+ */
+export async function findAnyProjectOrigin(
+  directories: readonly (string | undefined)[]
+): Promise<string | null> {
+  for (const directory of directories) {
+    const origin = await findProjectOrigin(directory)
+    if (origin !== null) return origin
+  }
+  return null
+}
+
 /** The sessions the server knows about, live and archived. */
 export async function listSessions(origin: string): Promise<PanelSession[]> {
   const res = await fetchWithTimeout(`${origin}/api/sessions`)

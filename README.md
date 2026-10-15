@@ -279,6 +279,11 @@ session, which does not belong on a load path. If the PTY plugin is not
 registered in the project's `opencode.jsonc`, the header says so rather than
 offering a retry that cannot work.
 
+The server publishes its address for the app's own location, so the panel looks
+up the session's location first and the app default second — a session moved with
+`/cd` into a project below the one opencode was launched in therefore still finds
+its server, instead of reporting *not running* beside one that answers.
+
 ### Requirements
 
 The panel needs an OpenCode build with the V2 TUI plugin API — 2.0.23 and later.

@@ -7,6 +7,7 @@ import { manager } from '../src/plugin/pty/manager.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import {
   cleanupSession,
+  findAnyProjectOrigin,
   findProjectOrigin,
   isHealthy,
   listSessions,
@@ -161,6 +162,58 @@ describe('findProjectOrigin', () => {
     await startServer()
     stopServer()
     expect(await findProjectOrigin(project)).toBeNull()
+  })
+})
+
+describe('findAnyProjectOrigin', () => {
+  // The measured shape of the bug this exists for: opencode was launched in one directory, the
+  // session moved into a project below it, and the server's record is filed under the former -
+  // so a lookup by the session alone reports "not running" beside a server that answers.
+  test('finds the record filed under the app default while the session is elsewhere', async () => {
+    await startServer()
+    const session = realpathSync(mkdtempSync(join(tmpdir(), 'pty-tui-session-')))
+    try {
+      expect(await findProjectOrigin(session)).toBeNull()
+      const found = await findAnyProjectOrigin([session, project])
+      expect(found).toBe(`http://127.0.0.1:${server?.server.port}`)
+      expect(await isHealthy(found as string)).toBe(true)
+    } finally {
+      rmSync(session, { recursive: true, force: true })
+    }
+  })
+
+  // The session's own key wins when both have a server, so a moved session never ends up
+  // reading another project's list.
+  test('takes the first key that has a server, not any key', async () => {
+    await startServer()
+    const other = realpathSync(mkdtempSync(join(tmpdir(), 'pty-tui-other-')))
+    const second = await PTYServer.createServer({ hostname: '127.0.0.1', directory: other })
+    try {
+      const sessionFirst = await findAnyProjectOrigin([project, other])
+      const defaultFirst = await findAnyProjectOrigin([other, project])
+      expect(sessionFirst).toBe(`http://127.0.0.1:${server?.server.port}`)
+      expect(defaultFirst).toBe(`http://127.0.0.1:${second.server.port}`)
+    } finally {
+      second[Symbol.dispose]()
+      rmSync(other, { recursive: true, force: true })
+    }
+  })
+
+  test('skips the keys that name nothing', async () => {
+    await startServer()
+    expect(await findAnyProjectOrigin([undefined, '', project])).toBe(
+      `http://127.0.0.1:${server?.server.port}`
+    )
+  })
+
+  test('finds nothing when no key has a server', async () => {
+    await startServer()
+    const elsewhere = realpathSync(mkdtempSync(join(tmpdir(), 'pty-tui-nowhere-')))
+    try {
+      expect(await findAnyProjectOrigin([elsewhere, undefined])).toBeNull()
+    } finally {
+      rmSync(elsewhere, { recursive: true, force: true })
+    }
   })
 })
 

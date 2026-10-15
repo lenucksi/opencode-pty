@@ -10,7 +10,7 @@ import {
   type PanelState,
 } from './panel-state.ts'
 import { dialogRows, dialogSize, outputDialogView, type Tones } from './render.ts'
-import { cleanupSession, findProjectOrigin, readScreen, writeInput } from './server.ts'
+import { cleanupSession, readScreen, writeInput } from './server.ts'
 
 /**
  * What a person can do to a session from the panel, and what each one costs.
@@ -33,7 +33,14 @@ export interface ActionDeps {
   /** Re-list. `force` for a refresh the user is waiting on. */
   readonly refresh: (mayStart?: boolean, force?: boolean) => Promise<void>
   readonly notify: (message: string, variant: ToastVariant) => void
-  readonly directory: () => string | undefined
+  /**
+   * The origin this app's server published, under whichever key it was filed.
+   *
+   * A lookup rather than a directory: the server is filed under the location it was STARTED
+   * for, and this panel runs inside a session that can be elsewhere - see
+   * `findAnyProjectOrigin`.
+   */
+  readonly findOrigin: () => Promise<string | null>
   readonly debug: (event: string, detail?: unknown) => void
   /**
    * The theme slots to draw with.
@@ -84,7 +91,7 @@ export async function withOrigin<Value>(
 ): Promise<Outcome<Value>> {
   const known = deps.state.origin
   if (known !== null) return { ran: true, result: await against(deps, known, action) }
-  const found = await findProjectOrigin(deps.directory())
+  const found = await deps.findOrigin()
   if (found === null) {
     if (!quiet) deps.notify('PTY server unavailable', 'warning')
     return { ran: false, result: undefined }
@@ -260,7 +267,7 @@ export function createClearFinished(deps: ActionDeps) {
  */
 export function createOpenOutput(deps: ActionDeps) {
   return async (session: PanelSession): Promise<void> => {
-    const origin = deps.state.origin ?? (await findProjectOrigin(deps.directory()))
+    const origin = deps.state.origin ?? (await deps.findOrigin())
     if (origin === null) {
       deps.notify('PTY server unavailable', 'warning')
       return
