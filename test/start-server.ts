@@ -1,6 +1,6 @@
+import { OpencodeClient } from '@opencode-ai/sdk'
 import { initManager, manager } from 'opencode-pty/plugin/pty/manager'
 import { PTYServer } from 'opencode-pty/web/server/server'
-import { OpencodeClient } from '@opencode-ai/sdk'
 import { createApiClient } from 'opencode-pty/web/shared/api-client'
 
 // Set NODE_ENV if not set

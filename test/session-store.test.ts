@@ -5,8 +5,8 @@ import { join } from 'node:path'
 
 import {
   mergePersistedSessions,
-  SessionStore,
   type PersistedSession,
+  SessionStore,
 } from '../src/plugin/pty/session-store.ts'
 import type { PTYSessionInfo } from '../src/plugin/pty/types.ts'
 

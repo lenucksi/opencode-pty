@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import { testRender } from '@opentui/solid'
 import type { TestRendererSetup } from '@opentui/core/testing'
+import { testRender } from '@opentui/solid'
 
 import type { PanelSession } from '../src/tui/lib.ts'
+import { type SessionPanelView, sessionPanelView } from '../src/tui/session-panel.ts'
 import {
   initialSessionPanelState,
   LOADING_SCREEN,
   NO_SELECTION_SCREEN,
+  noteSessionListToggled,
   noteSessionPanelInput,
   noteSessionPanelList,
   noteSessionScreen,
@@ -14,9 +16,7 @@ import {
   selectedLive,
   selectedSession,
   sessionsForSession,
-  sessionPanelView,
-  type SessionPanelView,
-} from '../src/tui/session-panel.ts'
+} from '../src/tui/session-panel-state.ts'
 
 /**
  * The session panel's decisions, without a terminal.
@@ -224,6 +224,7 @@ describe('sessionPanelView', () => {
     onClose: () => {},
     onSend: () => {},
     onSelect: () => {},
+    onToggleList: () => {},
     ...over,
   })
 
@@ -295,6 +296,102 @@ describe('sessionPanelView', () => {
       ME
     )
     noteSessionSelected(state, 'other')
+    // FOLDED open first: the folded list draws no rows at all, so the marker could not be
+    // on screen, and asserting on a frame that shows none would never have caught a row
+    // that lost its marker. The toggle row is what a folded frame shows instead.
+    noteSessionListToggled(state)
+    const text = await frame(() => sessionPanelView(view({ state })))
+    expect(text).toContain('> ')
+  })
+
+  // The fold. Collapsed by default, because the console is the reason the panel exists
+  // and every list row competes with it for the same height - the reader whose 18
+  // records took a third of the panel described exactly this, not a style preference.
+  //
+  // Split on purpose: the CLICK test owns the wiring (opentui reaches whatever the row
+  // drew and the state turns over), the RENDER test owns the presentation (what each
+  // state looks like). One test doing both needs the state to be a reactive store to
+  // re-render, which the host has through `context.storage.memory` and a headless unit
+  // does not - and faking that here would assert a mechanism that is not on screen.
+  test('folds the session list on a click, in both directions, through the real dispatch', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(
+      state,
+      [session({ id: 'first', title: 'one' }), session({ id: 'second', title: 'two' })],
+      ME
+    )
+    expect(state.listExpanded).toBe(false)
+
+    const setup = await testRender(
+      () =>
+        sessionPanelView(
+          view({ state, onToggleList: () => noteSessionListToggled(state) })
+        ) as never,
+      { width: 60, height: 20 }
+    )
+    await setup.renderOnce()
+
+    // The fold row's Y comes from the FRAME, not from a constant. The list moved to the
+    // bottom of the panel, so a constant taken from the top would click the console, and
+    // the fold would look dead when it was simply not on row 1 any more - the same reason
+    // `clickCloseControl` reads its column from the frame.
+    const foldRow = (): { y: number } => {
+      const open = 'aufklappen'
+      const closed = 'zuklappen'
+      for (const [y, line] of setup.captureCharFrame().split('\n').entries()) {
+        if (line.includes(open) || line.includes(closed)) {
+          return { y }
+        }
+      }
+      throw new Error('no fold row on the frame')
+    }
+
+    // Clicking the fold row turns the state over, and that is what this test can measure:
+    // the headless render holds the tree it drew first, so the frame below stays a
+    // snapshot of the folded list even after the click lands - which is why a frame
+    // assertion here would always say "aufklappen" and look like a dead fold. What the
+    // states LOOK like is the next test's claim, on a state rendered as it is.
+    await setup.mockMouse.click(2, foldRow().y)
+    await setup.renderOnce()
+    expect(state.listExpanded).toBe(true)
+
+    await setup.mockMouse.click(2, foldRow().y)
+    await setup.renderOnce()
+    expect(state.listExpanded).toBe(false)
+  })
+
+  test('the folded list shows only the fold row, an open one the rows', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(
+      state,
+      [session({ id: 'first', title: 'one' }), session({ id: 'second', title: 'two' })],
+      ME
+    )
+    const folded = await frame(() => sessionPanelView(view({ state })))
+    expect(folded).toContain('▸')
+    expect(folded).toContain('(aufklappen)')
+    expect(folded).not.toContain('two')
+
+    const open = initialSessionPanelState()
+    open.listExpanded = true
+    noteSessionPanelList(open, [session({ id: 'second', title: 'two' })], ME)
+    const openFrame = await frame(() => sessionPanelView(view({ state: open })))
+    expect(openFrame).toContain('▾')
+    expect(openFrame).toContain('two')
+  })
+
+  test('marks the selected row in the text, once the list is open', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(
+      state,
+      [session({ id: 'chosen', title: 'dev' }), session({ id: 'other' })],
+      ME
+    )
+    noteSessionSelected(state, 'other')
+    // FOLDED open first: the folded list draws no rows at all, so the marker could not
+    // even be ON screen, and a frame that shows none can never catch a row that lost its
+    // marker. The toggle row is what a folded frame shows instead.
+    noteSessionListToggled(state)
     const text = await frame(() => sessionPanelView(view({ state })))
     expect(text).toContain('> ')
   })
@@ -313,12 +410,15 @@ describe('sessionPanelView', () => {
   // directly.
   test('clicking a row selects it, through the real dispatch', async () => {
     const state = initialSessionPanelState()
+    state.listExpanded = true
     noteSessionPanelList(
       state,
       [session({ id: 'first', title: 'one' }), session({ id: 'second', title: 'two' })],
       ME
     )
     const picked: string[] = []
+    // The list renders EXPANDED here because which rows exist is the fold tests' claim;
+    // this one owns where a row click travels once the rows are drawn.
     const setup = await testRender(
       () =>
         sessionPanelView(
@@ -331,11 +431,41 @@ describe('sessionPanelView', () => {
     )
     await setup.renderOnce()
 
-    // Row 0 is the header, so the second session is on row 2.
-    await setup.mockMouse.click(4, 2)
+    // The rows come from the FRAME rather than from an assumed order: two sessions with
+    // equal timestamps are ordered by a tie rule this test does not own, and assuming
+    // "first is on row 2" would make the test pass on whichever order the sort produced
+    // instead of on the click reaching what was drawn.
+    const frameRow = (word: string): number => {
+      const row = setup
+        .captureCharFrame()
+        .split('\n')
+        .findIndex((l) => l.includes(word))
+      if (row < 0) throw new Error(`the frame drew no row containing ${word}`)
+      return row
+    }
+    await setup.mockMouse.click(4, frameRow('two'))
     await setup.renderOnce()
-
     expect(picked).toEqual(['second'])
+  })
+
+  test('folding the list open shows the rows and folds it closed again', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(
+      state,
+      [session({ id: 'first', title: 'one' }), session({ id: 'second', title: 'two' })],
+      ME
+    )
+    const text = await frame(() => sessionPanelView(view({ state })))
+    expect(text).not.toContain('▶')
+    expect(text).toContain('▸')
+    expect(text).not.toContain('two')
+
+    const open = initialSessionPanelState()
+    open.listExpanded = true
+    noteSessionPanelList(open, [session({ id: 'second', title: 'two' })], ME)
+    const expandedText = await frame(() => sessionPanelView(view({ state: open })))
+    expect(expandedText).toContain('▾')
+    expect(expandedText).toContain('two')
   })
 
   test('reports focus, because a focused panel may be the one taking keys', async () => {
@@ -387,11 +517,11 @@ describe('sessionPanelView', () => {
     noteSessionScreen(state, 'line one', 1)
     const lines = (await frame(() => sessionPanelView(view({ state })))).split('\n')
     const bottom = lines.findIndex((line) => line.startsWith('└'))
-    // The last row of the SCREEN area, which is one above the footer's. Naming the footer
-    // height is the point: a screen box with a fixed height also ends its frame somewhere
-    // and leaves blank rows under it, so "the frame is the last thing drawn" would pass on
-    // exactly the code that is wrong here.
-    expect(bottom).toBe(PANEL_ROWS - FOOTER_ROWS - 1)
+    // LAST is the list's folded header row, then the footer. Naming the three heights is
+    // the point: a screen box with a fixed height also ends its frame somewhere and leaves
+    // blank rows under it, so "the frame is the last thing drawn" would pass on exactly
+    // the code that is wrong here. The list is folded by default, so it is one row.
+    expect(bottom).toBe(PANEL_ROWS - FOOTER_ROWS - 1 - 1)
   })
 
   // The footer and the send control. Both exist because a screen with no numbers on it

@@ -1,9 +1,9 @@
+import { expect, test as extendedTest } from './fixtures'
 import {
   getSerializedContentByXtermSerializeAddon,
   getTerminalBufferLines,
   waitForTerminalRegex,
 } from './xterm-test-helpers'
-import { test as extendedTest, expect } from './fixtures'
 
 extendedTest(
   'should assert exactly 2 "$" prompts appear and verify extraction methods match (ignoring \\r) with echo "Hello World"',

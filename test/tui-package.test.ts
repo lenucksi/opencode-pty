@@ -231,7 +231,7 @@ describe('the TUI dependencies', () => {
     // Expiry, like the override above: solid-js is at 1.9.15 with no release carrying a
     // patched seroval, and `~1.5.4` will not reach 1.6.x on its own. When solid-js moves to
     // a version that asks for a fixed seroval, this goes with it.
-    expect(manifest.overrides?.['seroval']).toBe('1.6.8')
+    expect(manifest.overrides?.seroval).toBe('1.6.8')
   })
 
   // The premise the override is comfortable in: the vulnerable code is a build-time and

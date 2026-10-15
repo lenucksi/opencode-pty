@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import type { createApiClient } from 'opencode-pty/web/shared/api-client'
-import { expect, selectSession, test as extendedTest } from './fixtures'
+import { expect, test as extendedTest, selectSession } from './fixtures'
 import {
   getSerializedContentByXtermSerializeAddon,
   waitForTerminalRegex,

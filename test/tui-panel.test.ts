@@ -1,19 +1,17 @@
-import type { PanelSession } from '../src/tui/lib.ts'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
 import type { Plugin } from '@opencode/plugin/tui'
-import { testRender } from '@opentui/solid'
-import type { TestRendererSetup } from '@opentui/core/testing'
 import { RGBA } from '@opentui/core'
-
-import tuiPanel from '../src/tui/index.ts'
+import type { TestRendererSetup } from '@opentui/core/testing'
+import { testRender } from '@opentui/solid'
 import { manager } from '../src/plugin/pty/manager.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
-import { PTYServer } from '../src/web/server/server.ts'
 import { removeOrigin, writeOrigin } from '../src/shared/runtime.ts'
+import tuiPanel from '../src/tui/index.ts'
+import type { PanelSession } from '../src/tui/lib.ts'
+import { PTYServer } from '../src/web/server/server.ts'
 
 /**
  * The panel, end to end, without a terminal.
@@ -1091,17 +1089,29 @@ describe('the PTY sidebar panel', () => {
       const frame = setup.captureCharFrame()
       expect(frame).toContain('PTY')
       expect(frame).toContain('2 sessions')
-      expect(frame).toContain('two')
+      // The list is FOLDED by default, and that is what a frame shows: the fold row, not
+      // the session rows. Asserting `two` on a folded frame would fail on the design the
+      // panel chose because its rows used to cost the console a third of the panel, so the
+      // rows are only on a frame rendered with the fold open.
+      expect(frame).toContain('(aufklappen)')
+      expect(frame).not.toContain('two')
 
+      // The click goes to the fold's row, which it actually drew rather than a row
+      // position from a list that was on screen before the fold existed.
+      const foldY = setup
+        .captureCharFrame()
+        .split('\n')
+        .findIndex((line) => line.includes('aufklappen'))
+      if (foldY < 0) throw new Error('no fold row on the frame')
+      await setup.mockMouse.click(4, foldY)
+      await setup.renderOnce()
+      const stored = seen.stores.get('opencode-pty.session-panel') as
+        | { listExpanded?: boolean }
+        | undefined
       // Row 0 is the header, so row 1 is the first session. The click has to reach the
       // panel's own handler and not just stop at the element - a claim that renders and
       // ignores every click is still broken.
-      await setup.mockMouse.click(4, 1)
-      await setup.renderOnce()
-      const stored = seen.stores.get('opencode-pty.session-panel') as
-        | { selected?: string | null }
-        | undefined
-      expect(stored?.selected).not.toBeNull()
+      expect({ expanded: stored?.listExpanded }).toEqual({ expanded: true })
 
       // The fullscreen key, checked HERE rather than in a test of its own, for a harness
       // reason rather than a stylistic one: `toggleFullscreen` exists only on `PanelInput`,

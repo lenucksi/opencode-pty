@@ -1,11 +1,11 @@
-import type { MouseEvent } from '@opentui/core'
 import type { Plugin } from '@opencode/plugin/tui'
+import type { MouseEvent } from '@opentui/core'
 
 import { isFinished, type PanelSession } from './lib.ts'
 import {
-  noteDialogOutput,
   noteDialogClosed,
   noteDialogOpened,
+  noteDialogOutput,
   noteDialogTick,
   type PanelState,
 } from './panel-state.ts'

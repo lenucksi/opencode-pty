@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { OpencodeClient } from '@opencode-ai/sdk'
+import type { Subprocess } from 'bun'
 import { initManager, manager } from '../src/plugin/pty/manager.ts'
 import { rawOutputCallbacks } from '../src/plugin/pty/manager-notifications.ts'
 import { RawOutputCollector } from './utils.ts'
-import type { Subprocess } from 'bun'
 
 function positiveIntFromEnv(name: string, fallback: number): number {
   const value = process.env[name]

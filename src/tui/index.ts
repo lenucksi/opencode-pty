@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { Plugin } from '@opencode/plugin/tui'
-
+import { runtimeDir } from '../shared/runtime.ts'
 import { createActions } from './actions.ts'
 import type { PanelSession } from './lib.ts'
 import {
@@ -11,14 +11,13 @@ import {
   noteNoServer,
   noteStartError,
   noteUnreachable,
+  type PanelState,
   statusWhenUnavailable,
   visibleSessions,
-  type PanelState,
 } from './panel-state.ts'
-import { sidebarFooterView, sidebarView, type PanelView } from './render.ts'
-import { createSessionPanelHost } from './session-panel-host.ts'
+import { type PanelView, sidebarFooterView, sidebarView } from './render.ts'
 import { findProjectOrigin, isHealthy, listSessions } from './server.ts'
-import { runtimeDir } from '../shared/runtime.ts'
+import { createSessionPanelHost } from './session-panel-host.ts'
 
 /**
  * The PTY sidebar: this project's PTY sessions, listed where the built-in sidebar

@@ -2,16 +2,16 @@ import { describe, expect, it } from 'bun:test'
 import { readFileSync } from 'node:fs'
 
 import {
-  type PreferenceStorage,
-  THEME_ATTRIBUTE,
-  THEME_STORAGE_KEY,
-  type ThemeRoot,
   applyScheme,
   initTheme,
+  type PreferenceStorage,
   parsePreference,
   readStoredPreference,
   resolveScheme,
   storePreference,
+  THEME_ATTRIBUTE,
+  THEME_STORAGE_KEY,
+  type ThemeRoot,
   themeFromStyles,
 } from '../src/web/client/lib/theme.ts'
 

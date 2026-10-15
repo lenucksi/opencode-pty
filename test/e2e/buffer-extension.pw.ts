@@ -1,7 +1,7 @@
-import { test as extendedTest, expect } from './fixtures'
-import { waitForTerminalRegex } from './xterm-test-helpers'
 import type { Page } from '@playwright/test'
 import type { createApiClient } from 'opencode-pty/web/shared/api-client'
+import { expect, test as extendedTest } from './fixtures'
+import { waitForTerminalRegex } from './xterm-test-helpers'
 
 /**
  * Session and Terminal Helpers for E2E buffer extension tests

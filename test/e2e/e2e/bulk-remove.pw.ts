@@ -1,7 +1,6 @@
 import { expect } from '@playwright/test'
-
-import { test as extendedTest, revealSession } from '../fixtures'
 import type { createApiClient } from '../../../src/web/shared/api-client'
+import { test as extendedTest, revealSession } from '../fixtures'
 
 /** The api client the fixture hands out, by its own type rather than a guess. */
 type Api = ReturnType<typeof createApiClient>

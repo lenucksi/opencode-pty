@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
-  captureCommand,
   CommandFailure,
   CommandTimeout,
+  captureCommand,
   runInherited,
 } from '../scripts/quality/process.ts'
 

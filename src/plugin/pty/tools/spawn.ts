@@ -1,7 +1,7 @@
 import { tool } from '@opencode-ai/plugin'
+import { checkExecutable } from '../command-check.ts'
 import { manager } from '../manager.ts'
 import { checkCommandPermission, checkWorkdirPermission } from '../permissions.ts'
-import { checkExecutable } from '../command-check.ts'
 import { describeError } from '../utils.ts'
 import DESCRIPTION from './spawn.txt'
 

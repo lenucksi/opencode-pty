@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 
 import type { createApiClient } from '../../src/web/shared/api-client.ts'
-import { expect, selectSession, test as extendedTest } from './fixtures'
+import { expect, test as extendedTest, selectSession } from './fixtures'
 import { waitForTerminalRegex } from './xterm-test-helpers.ts'
 
 /**

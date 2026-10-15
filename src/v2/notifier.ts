@@ -1,5 +1,5 @@
 import type { Plugin } from '@opencode/plugin'
-import type { SessionNotifier, SessionNoticeTarget } from '../adapters/types.ts'
+import type { SessionNoticeTarget, SessionNotifier } from '../adapters/types.ts'
 import { buildExitNotification } from '../plugin/pty/notification-manager.ts'
 import { logPtyEvent, type PtyLogger } from '../plugin/pty/plugin-log.ts'
 import type { PTYSession } from '../plugin/pty/types.ts'

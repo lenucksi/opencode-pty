@@ -1,181 +1,38 @@
 import type { MouseEvent } from '@opentui/core'
-import { insert } from '@opentui/solid'
 import { jsx } from '@opentui/solid/jsx-runtime'
 
 import {
   formatDuration,
   isFinished,
+  type PanelSession,
+  ROW_BULLET,
   rowLabel,
   rowTone,
-  ROW_BULLET,
   sessionDurationMs,
-  type PanelSession,
 } from './lib.ts'
-import { orderForDisplay } from './panel-state.ts'
 import type { Tones } from './render.ts'
+import { type SessionPanelState, selectedLive, visibleRows } from './session-panel-state.ts'
 
 /**
  * The PTY panel inside a session: the processes THIS conversation started, with one of
  * them on screen.
  *
- * ## Why the session panel and not the sidebar
+ * The placement is joint with the web UI in one throne: a session belongs beside the
+ * conversation that commissioned it, in exactly that card.
  *
- * A PTY session belongs to the OpenCode session that spawned it - the web UI groups its
- * list by `parentSessionId` for the same reason. So the view of those processes belongs
- * next to the conversation that asked for them: while a build fails on screen, the chat
- * that commissioned it is right there.
+ * == The frame's shape
  *
- * ## Read-only, and what the ceiling actually is
+ * The header and the folded list row are `flexShrink: 0` + `height: 1`, not assumed. The
+ * console owns everything else; the reader reported a panel that sounded like a
+ * full-screen dump of a few rows at minimum - the console collapsing to its minimum while
+ * the ROWS of the list grew. For that, the list is folded - collapsed - by default, and
+ * the console takes the rest (`flexGrow: 1` + `minHeight: 0`).
  *
- * The panel cannot type into a session, and the reason is measured rather than assumed:
- * `context.keymap` offers exactly `layer()`, `dispatch()` and `shortcuts()`, so a plugin
- * can bind NAMED COMMANDS and nothing else. There is no access to raw key events -
- * `packages/plugin/src/tui/context.ts` declares neither `intercept` nor `useKeyboard`,
- * while the host's own terminal pane uses `Keymap.use()` from the internal TUI context,
- * which a plugin does not get. The renderer is NOT the obstacle: see below. So
- * `pty_write` from free typing, scrolling and resizing are unreachable from a TUI plugin
- * on this version, and what is left is a better place to READ.
+ * == What is INSIDE the frame
  *
- * ## What the SDK would still have to change
- *
- * Not typing and not the renderer: `EmbeddedTerminalRenderable` is FULLY typed in
- * opentui 0.5.14 - `renderables/EmbeddedTerminal.d.ts:28` declares it with `write`,
- * `screen()` and `handleKeyPress(key: KeyEvent): boolean`. An earlier note in this file
- * claimed it was missing from the type declarations; that was a grep in the wrong file,
- * since `index.d.ts` is a re-export barrel with no `declare class` of its own.
- *
- * The real gap is the KEYSTROKE. `context.keymap` binds named commands and nothing else,
- * while the host's own terminal pane takes raw keys through `keymap.intercept` on the
- * internal `Keymap` context. `KeymapCommand.run(input?, event?: KeyEvent)` does hand the
- * triggering event to a bound command, and `KeymapLayer.target` can scope a layer to a
- * focused renderable - so a plugin CAN drive `handleKeyPress` from bound commands. The
- * price is that every key has to be bound, and a binding is the user's to give up: the
- * host takes all keys at priority 100.
- *
- * This file is pure state plus a view, like `panel-state.ts` and `render.ts`, so the
- * decisions can be tested without a terminal.
+ * The console is a scrollbox with a scrollbar, sticky at the bottom, exactly as the panel
+ * in `src/tui/session-panel-host.ts` renders and types it.
  */
-
-export interface SessionPanelState {
-  /**
-   * Which OpenCode session the panel belongs to, or null before it has rendered.
-   *
-   * From `PanelInput.sessionID`, and from `ui.panel.current()` for the poll. There is no
-   * third source: `data.session` is a lookup that takes an id, so it cannot answer
-   * "which session am I in", and the sidebar's slot input is a different claim to hang
-   * this on.
-   */
-  sessionID: string | null
-  /** This session's PTY sessions, in display order. */
-  sessions: PanelSession[]
-  /** Which one is on screen, or null when the list is empty. */
-  selected: string | null
-  /** Its rendered screen, or a line saying why there is none. */
-  screen: string
-  /** When the screen was read, so the run timer can be computed from it. */
-  now: number
-}
-
-export function initialSessionPanelState(): SessionPanelState {
-  return { sessionID: null, sessions: [], selected: null, screen: '', now: Date.now() }
-}
-
-/**
- * The panel was rendered for this OpenCode session.
- *
- * The poll needs the same id and cannot get it from a render, so it reads
- * `ui.panel.current()` - the host's own answer to "is my panel open, and for which
- * session". Writing it here is what lets the list be grouped without a render.
- */
-export function noteSessionPanelInput(state: SessionPanelState, sessionID: string): void {
-  state.sessionID = sessionID
-}
-
-/** What the panel shows before a session is picked, or while none is chosen. */
-export const NO_SELECTION_SCREEN = 'no PTY session selected'
-
-/** What it shows while the screen is being read. */
-export const LOADING_SCREEN = 'loading…'
-
-/**
- * The sessions one OpenCode session started.
- *
- * `sessionID` comes from `PanelInput`, not from `data.session`: that one is a lookup
- * taking an id, so it cannot answer "which session am I in". The slot input carries the
- * id, so the grouping has a source.
- *
- * Ordered by `orderForDisplay` for the same reason the sidebar list is: a live process
- * below a page of records is one you cannot watch.
- */
-export function sessionsForSession(
-  sessions: readonly PanelSession[],
-  sessionID: string
-): PanelSession[] {
-  return orderForDisplay(sessions.filter((session) => session.parentSessionId === sessionID))
-}
-
-/**
- * The list arrived.
- *
- * A selection that has disappeared - the session was removed, or this conversation's
- * group is empty - falls back to the first running session, because that is the one a
- * reader opening a panel wants to see. With nothing running, the first row is selected
- * rather than nothing, so the panel is never empty for no reason.
- */
-export function noteSessionPanelList(
-  state: SessionPanelState,
-  sessions: readonly PanelSession[],
-  sessionID: string
-): void {
-  const mine = sessionsForSession(sessions, sessionID)
-  state.sessions = mine
-  const stillThere = mine.some((session) => session.id === state.selected)
-  if (stillThere) return
-  // `mine[0]`, not a separate search for a running row: `sessionsForSession` ordered the
-  // group, so the first row IS the newest running one, and with nothing running it is
-  // the newest finished. An explicit `find(isRunning)` here would be a second answer to
-  // a question the ordering has already answered - and provably so: with the lookup
-  // removed, the same rows come out in the same order.
-  state.selected = mine[0]?.id ?? null
-  if (state.selected === null) state.screen = NO_SELECTION_SCREEN
-}
-
-/** The row the panel is showing, or null when there is no selection. */
-export function selectedSession(state: SessionPanelState): PanelSession | null {
-  if (state.selected === null) return null
-  return state.sessions.find((session) => session.id === state.selected) ?? null
-}
-
-/**
- * The row's CURRENT state from the sidebar's list, falling back to the panel's own copy.
- *
- * The panel keeps a snapshot and the sidebar keeps a fresh one, so a process that exits
- * while its screen sits on screen would keep a running timer. Reading the fresh list
- * first is what stops that.
- */
-export function selectedLive(
-  state: SessionPanelState,
-  live: readonly PanelSession[]
-): PanelSession | null {
-  const chosen = selectedSession(state)
-  if (chosen === null) return null
-  return live.find((session) => session.id === chosen.id) ?? chosen
-}
-
-/** A different row was picked. Its screen is read on the next tick. */
-export function noteSessionSelected(state: SessionPanelState, id: string): void {
-  if (state.selected === id) return
-  state.selected = id
-  state.screen = LOADING_SCREEN
-}
-
-/** A screen read landed, or failed and says so. */
-export function noteSessionScreen(state: SessionPanelState, screen: string, now: number): void {
-  if (state.selected === null) return
-  state.screen = screen
-  state.now = now
-}
-
 export interface SessionPanelView {
   readonly tones: Tones
   readonly state: SessionPanelState
@@ -197,6 +54,8 @@ export interface SessionPanelView {
   /** Ask for a line and hand it to the selected process. */
   readonly onSend: (session: PanelSession) => void
   readonly onSelect: (id: string) => void
+  /** Fold the session list open or closed. The click on its header row. */
+  readonly onToggleList: () => void
 }
 
 /** One row, with the selected one marked. */
@@ -206,6 +65,8 @@ function rowFor(view: SessionPanelView, session: PanelSession) {
   return jsx('box', {
     flexDirection: 'row',
     width: '100%',
+    height: 1,
+    flexShrink: 0,
     children: [
       jsx('text', {
         fg:
@@ -250,6 +111,9 @@ function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
   return jsx('box', {
     flexDirection: 'row',
     width: '100%',
+    height: 1,
+    flexShrink: 0,
+    gap: 2,
     children: [
       jsx('text', {
         flexGrow: 1,
@@ -325,32 +189,36 @@ function statusBar(view: SessionPanelView, chosen: PanelSession | null): unknown
 }
 
 /**
- * The framed screen, or nothing at all while no session is selected.
+ * The framed console, or nothing at all while no session is selected.
  *
  * Returns undefined rather than an empty box: an empty frame is a large black rectangle
  * that says nothing, and right next to the sentence explaining why there is nothing, it
  * reads as a rendering failure rather than as an absence.
+ *
+ * The console is why the panel exists, which is why it owns EVERY row the panel has left
+ * rather than a computed share: `flexGrow: 1` with `minHeight: 0` under everything fixed
+ * (`header`, the list toggle and the footer each declare `flexShrink: 0`), so a longer
+ * list costs the console nothing a shorter one does not and the console never ends up
+ * shorter than the panel can afford. Computed heights were an earlier attempted fix and
+ * the record of that remains in `eabb802`: `renderer.height` is the TERMINAL's height,
+ * not the panel's.
+ *
+ * A scrollbox rather than the box-plus-`overflow` the file used before opentui 0.6.6,
+ * and the choice carries two measured facts with it:
+ *
+ * - In 0.5.14 a scrollbox posed `stickyScroll: true` + `stickyStart: 'bottom'` rendered
+ *   NOTHING when its text contains a line break, so the old box was correct then - and
+ *   it showed the OLDEST screen rows because it clips from the top. Measured: a console
+ *   25 rows tall inside 6 rows of panel drew `k01`… and cut `k29`, the line the reader
+ *   had just run.
+ * - From 0.6.6 the same pose draws the newest with a scrollbar. The panel does not slide
+ *   its own offset and does not truncate `screen` with `tail`; the full dump stays in the
+ *   tree and the widget scrolls it - which is what a reader means by "die Konsole."
  */
 function framedScreen(view: SessionPanelView): unknown {
   if (view.state.selected === null) return undefined
 
-  const screen = jsx('box', {
-    width: '100%',
-    // `flexGrow` + `minHeight: 0`, NOT a fixed height. The earlier version computed a row
-    // count from `renderer.height` - the TERMINAL's height - and asked for half of it
-    // inside a panel that is far smaller, which overflowed the session view instead of
-    // filling the panel. The host's panel is `flexGrow: 1` with `minHeight: 0`
-    // (packages/tui/src/component/panel-host.tsx:26-31), and its own terminal pane grows
-    // the same way.
-    flexGrow: 1,
-    minHeight: 0,
-    overflow: 'hidden',
-    // A plain box rather than a scrollbox, for the measured reason in `render.ts`: a
-    // scrollbox renders nothing when its text contains a line break.
-    children: jsx('text', { children: (): string => view.state.screen }),
-  })
-
-  const frame = jsx('box', {
+  return jsx('box', {
     width: '100%',
     flexGrow: 1,
     minHeight: 0,
@@ -358,33 +226,95 @@ function framedScreen(view: SessionPanelView): unknown {
     borderStyle: 'single',
     borderColor: view.tones.border,
     backgroundColor: view.tones.raised,
+    children: jsx('scrollbox', {
+      flexGrow: 1,
+      minHeight: 0,
+      stickyScroll: true,
+      stickyStart: 'bottom',
+      children: jsx('text', { children: (): string => view.state.screen }),
+    }),
   })
-  insert(frame, screen)
-  return frame
+}
+
+/**
+ * The list header, handed over as a row the click folds the list on.
+ *
+ * COLLAPSED by default, and that is a stance rather than a state saved for later: the
+ * list is the index of everything this conversation started, the console is the reason
+ * the panel is open, and every list row costs the console something. An 18-record list
+ * costs a third of the panel before the console has drawn a thing - measured against the
+ * screenshot that reported the collapse.
+ *
+ * The gesture stays where the list was, so the reader does not have to learn a new
+ * position in either state.
+ */
+function listHeader(view: SessionPanelView, count: number, expanded: boolean): unknown {
+  return jsx('box', {
+    flexDirection: 'row',
+    width: '100%',
+    height: 1,
+    flexShrink: 0,
+    onMouseDown: (event: MouseEvent) => {
+      event.stopPropagation()
+      view.onToggleList()
+    },
+    children: [
+      jsx('text', {
+        fg: view.tones.muted,
+        children: expanded ? '▾' : '▸',
+      }),
+      jsx('text', {
+        flexGrow: 1,
+        fg: view.tones.base,
+        children: expanded
+          ? `${count} Session${count === 1 ? '' : 'en'}`
+          : `${count} Session${count === 1 ? '' : 'en'}…  (aufklappen)`,
+      }),
+    ],
+  })
 }
 
 export function sessionPanelView(view: SessionPanelView) {
   const chosen = selectedLive(view.state, view.live)
   const header = panelHeader(view, chosen)
 
-  const list = jsx('box', {
-    flexDirection: 'column',
-    width: '100%',
-    children: (): unknown[] => {
-      if (view.state.sessions.length === 0) {
-        return [
+  const { rows, overflow } = visibleRows(view.state.sessions, view.state.listExpanded)
+  const listEntries: unknown[] =
+    view.state.sessions.length === 0
+      ? [
           jsx('text', {
             fg: view.tones.muted,
             children: '   this conversation started no PTY session',
           }),
         ]
-      }
-      return view.state.sessions.map((session) => rowFor(view, session))
-    },
+      : view.state.listExpanded
+        ? [
+            ...rows.map((session) => rowFor(view, session)),
+            ...(overflow > 0
+              ? [
+                  jsx('text', {
+                    width: '100%',
+                    flexShrink: 0,
+                    fg: view.tones.muted,
+                    children: `   … und ${overflow} weitere in der Sidebar`,
+                  }),
+                ]
+              : []),
+          ]
+        : []
+
+  const list = jsx('box', {
+    flexDirection: 'column',
+    width: '100%',
+    flexShrink: 0,
+    children: [
+      listHeader(view, view.state.sessions.length, view.state.listExpanded),
+      ...listEntries,
+    ],
   })
 
-  // The footer LAST, and `flexShrink: 0`: the framed screen above it grows to fill, so a bar
-  // inside the frame would be pushed off the bottom by its own content.
+  // The footer LAST, and `flexShrink: 0`: the framed screen above it grows to fill, so a
+  // bar inside the frame would be pushed off the bottom by its own content.
   const footer = jsx('box', { height: 1, flexShrink: 0, children: statusBar(view, chosen) })
   const screen = framedScreen(view)
   return jsx('box', {
@@ -392,6 +322,6 @@ export function sessionPanelView(view: SessionPanelView) {
     width: '100%',
     flexGrow: 1,
     minHeight: 0,
-    children: screen === undefined ? [header, list, footer] : [header, list, screen, footer],
+    children: screen === undefined ? [header, list, footer] : [header, screen, list, footer],
   })
 }

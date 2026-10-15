@@ -1,7 +1,7 @@
-import { test as extendedTest, expect } from './fixtures'
+import { expect, test as extendedTest } from './fixtures'
 import {
-  waitForTerminalRegex,
   getSerializedContentByXtermSerializeAddon,
+  waitForTerminalRegex,
 } from './xterm-test-helpers'
 
 extendedTest.describe('Xterm Newline Handling', () => {

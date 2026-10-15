@@ -1,6 +1,6 @@
-import { defineConfig, devices } from '@playwright/test'
-import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { defineConfig, devices } from '@playwright/test'
 
 // Before any spec is loaded, and that ordering is the whole point: `test/utils.ts` (which
 // every spec reaches through `fixtures.ts`) imports the PTY manager, so the WORKER process

@@ -10,11 +10,11 @@ import {
   headerLabel,
   isFinished,
   isPtyHealth,
+  type PanelSession,
   rowLabel,
   rowTone,
   sessionDurationMs,
   tail,
-  type PanelSession,
 } from '../src/tui/lib.ts'
 
 /**

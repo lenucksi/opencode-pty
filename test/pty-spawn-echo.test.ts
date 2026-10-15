@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test'
-import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import { manager } from '../src/plugin/pty/manager.ts'
+import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import { ManagedTestServer, RawOutputCollector } from './utils.ts'
 
 describe('ptySpawn Integration', () => {

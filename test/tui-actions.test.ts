@@ -2,16 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import { RGBA } from '@opentui/core'
 import type { Plugin } from '@opencode/plugin/tui'
-
-import { createActions, type ActionDeps, type Actions } from '../src/tui/actions.ts'
-import type { PanelSession } from '../src/tui/lib.ts'
-import { readScreen } from '../src/tui/server.ts'
-import { initialPanelState, type PanelState } from '../src/tui/panel-state.ts'
+import { RGBA } from '@opentui/core'
 import { manager } from '../src/plugin/pty/manager.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
+import { type ActionDeps, type Actions, createActions } from '../src/tui/actions.ts'
+import type { PanelSession } from '../src/tui/lib.ts'
+import { initialPanelState, type PanelState } from '../src/tui/panel-state.ts'
+import { readScreen } from '../src/tui/server.ts'
 import { PTYServer } from '../src/web/server/server.ts'
 
 /**

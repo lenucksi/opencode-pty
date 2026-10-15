@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'bun:test'
-
-import type { PTYSessionInfo } from '../src/web/shared/types.ts'
 import {
   countSessions,
   filterGroups,
   normalizeQuery,
   sessionMatches,
 } from '../src/web/shared/session-search.ts'
+import type { PTYSessionInfo } from '../src/web/shared/types.ts'
 
 /**
  * The sidebar filter is pure, so the rules that are easy to get wrong - a group

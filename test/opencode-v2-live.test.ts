@@ -1,18 +1,18 @@
 import { afterEach, describe, expect, it } from 'bun:test'
-import {
-  PTY_OPEN_CLIENT_COMMAND,
-  PTY_SHOW_SERVER_URL_COMMAND,
-  Plugin,
-  getOrCreateServer,
-  ptyTools,
-  stopActiveServer,
-} from '../src/v2/index.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
 import {
   resolveParentSessionTitles,
   setParentSessionTitleResolver,
 } from '../src/plugin/pty/parent-session-title.ts'
-import { V2SessionNotifier } from '../src/v2/index.ts'
+import {
+  getOrCreateServer,
+  Plugin,
+  PTY_OPEN_CLIENT_COMMAND,
+  PTY_SHOW_SERVER_URL_COMMAND,
+  ptyTools,
+  stopActiveServer,
+  V2SessionNotifier,
+} from '../src/v2/index.ts'
 import type {
   CommandDefinition,
   CommandDraft,

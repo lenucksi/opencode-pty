@@ -1,4 +1,4 @@
-import { test as extendedTest, expect, selectSession } from './fixtures'
+import { expect, test as extendedTest, selectSession } from './fixtures'
 import {
   getTerminalBufferLines,
   getTerminalPlainText,

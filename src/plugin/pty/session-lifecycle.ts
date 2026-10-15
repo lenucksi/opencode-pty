@@ -1,6 +1,4 @@
-import { spawn, type IPty } from 'bun-pty'
-import { RingBuffer } from './buffer.ts'
-import type { PTYSession, PTYSessionInfo, SpawnOptions } from './types.ts'
+import { type IPty, spawn } from 'bun-pty'
 import {
   FALLBACK_TERMINAL_COLS,
   FALLBACK_TERMINAL_ROWS,
@@ -9,6 +7,8 @@ import {
   MIN_TERMINAL_COLS,
   MIN_TERMINAL_ROWS,
 } from '../constants.ts'
+import { RingBuffer } from './buffer.ts'
+import type { PTYSession, PTYSessionInfo, SpawnOptions } from './types.ts'
 
 const SESSION_ID_BYTE_LENGTH = 4
 

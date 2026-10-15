@@ -1,5 +1,5 @@
-import { expect, test as extendedTest } from './fixtures'
 import type { Page } from '@playwright/test'
+import { expect, test as extendedTest } from './fixtures'
 
 /**
  * The version and commit of the build that is actually running.

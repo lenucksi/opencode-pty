@@ -1,5 +1,5 @@
-import type { PluginContext } from '../../plugin/types.ts'
 import { manager } from '../../plugin/pty/manager.ts'
+import type { PluginContext } from '../../plugin/types.ts'
 import type { HostAdapter } from '../types.ts'
 import { V1NotificationAdapter } from './notifications.ts'
 import { V1PermissionAuthorizer } from './permissions.ts'

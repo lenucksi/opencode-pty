@@ -1,4 +1,4 @@
-import { test as extendedTest, expect } from './fixtures'
+import { expect, test as extendedTest } from './fixtures'
 
 extendedTest.describe('WebSocket Raw Data Counter', () => {
   extendedTest(

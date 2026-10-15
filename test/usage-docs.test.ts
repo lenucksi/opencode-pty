@@ -1,20 +1,19 @@
 import { describe, expect, it } from 'bun:test'
-
-import { PTY_USAGE_SKILL } from '../src/v2/skill.ts'
+import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../src/plugin/constants.ts'
+import KILL_DESCRIPTION from '../src/plugin/pty/tools/kill.txt'
+import { ptyRead } from '../src/plugin/pty/tools/read.ts'
+import { ptyResize } from '../src/plugin/pty/tools/resize.ts'
+import { ptyScreen } from '../src/plugin/pty/tools/screen.ts'
+import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import {
   CHARS_PER_TOKEN,
   DEFAULT_READ_LIMIT,
   DEFAULT_READ_MAX_TOKENS,
   MAX_READ_MAX_TOKENS,
 } from '../src/shared/constants.ts'
-import { ptyRead } from '../src/plugin/pty/tools/read.ts'
-import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
-import { ptyResize } from '../src/plugin/pty/tools/resize.ts'
-import { ptyScreen } from '../src/plugin/pty/tools/screen.ts'
-import KILL_DESCRIPTION from '../src/plugin/pty/tools/kill.txt'
-import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../src/plugin/constants.ts'
-import { resolveWebPort } from '../src/web/server/server.ts'
+import { PTY_USAGE_SKILL } from '../src/v2/skill.ts'
 import { handleUsageDocs } from '../src/web/server/handlers/usage-docs.ts'
+import { resolveWebPort } from '../src/web/server/server.ts'
 import { HUMAN_USAGE_DOCS, README_URL } from '../src/web/shared/usage-docs.ts'
 
 /**

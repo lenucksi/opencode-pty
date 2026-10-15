@@ -1,9 +1,7 @@
-import { type RefObject, useCallback, useEffect, useState } from 'react'
-
 import { api } from 'opencode-pty/web/shared/api-client'
-
-import { useDialog } from '../hooks/use-dialog.ts'
 import type { UsageDocsResponse } from 'opencode-pty/web/shared/usage-docs'
+import { type RefObject, useCallback, useEffect, useState } from 'react'
+import { useDialog } from '../hooks/use-dialog.ts'
 
 interface DocsModalProps {
   open: boolean

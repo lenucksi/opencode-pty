@@ -33,6 +33,9 @@ describe('the Socket scan is one scan, not two', () => {
   })
 
   it('CI authenticates with the repository secret, never with a literal', () => {
+    // The `${{ }}` is GitHub Actions syntax, not a template literal - the linter warning
+    // would have us splice Bun into the workflow, which is nonsense here.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions syntax, not Bun
     expect(ci).toContain('SOCKET_SECURITY_API_KEY: ${{ secrets.SOCKET_SECURITY_API_KEY }}')
     // A token written into a workflow is in the history forever. The local config
     // stays where it is; only the secret crosses into GitHub.

@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
 import { WEB_API_PARENT_SESSION_ID } from '../../../plugin/constants.ts'
 import {
   groupSessionsByParent,
-  parentSessionGroupTitle,
   type PTYSessionGroup,
+  parentSessionGroupTitle,
   sessionCommandLine,
   sessionSidebarMeta,
   sessionTooltip,
 } from '../../shared/session-meta.ts'
 import { countSessions, filterGroups, normalizeQuery } from '../../shared/session-search.ts'
-import { SessionSearch } from './session-search.tsx'
 import type { ThemePreference } from '../lib/theme.ts'
+import { SessionSearch } from './session-search.tsx'
 import { ThemeSwitch } from './theme-switch.tsx'
 
 interface SidebarProps {

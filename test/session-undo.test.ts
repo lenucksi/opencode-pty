@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { SessionStore, type PersistSessionInput } from '../src/plugin/pty/session-store.ts'
+import { type PersistSessionInput, SessionStore } from '../src/plugin/pty/session-store.ts'
 
 /**
  * Removing a session has to be reversible.

@@ -1,8 +1,8 @@
+import { expect, test as extendedTest } from './fixtures'
 import {
   getSerializedContentByXtermSerializeAddon,
   waitForTerminalRegex,
 } from './xterm-test-helpers'
-import { test as extendedTest, expect } from './fixtures'
 
 extendedTest.describe('Xterm Content Extraction - Local vs Remote Echo (Fast Typing)', () => {
   extendedTest(

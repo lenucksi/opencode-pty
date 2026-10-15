@@ -2,16 +2,16 @@ import { describe, expect, it } from 'bun:test'
 
 import type { PreferenceStorage } from '../src/web/client/lib/theme.ts'
 import {
+  clampFontSize,
   DEFAULT_SHOW_DEBUG_BAR,
   DEFAULT_TERMINAL_FONT_SIZE,
   DEFAULT_UI_PREFS,
   MAX_TERMINAL_FONT_SIZE,
   MIN_TERMINAL_FONT_SIZE,
-  UI_PREFS_STORAGE_KEY,
-  clampFontSize,
   parseUiPrefs,
   readUiPrefs,
   storeUiPrefs,
+  UI_PREFS_STORAGE_KEY,
   type UiPrefs,
 } from '../src/web/client/lib/ui-prefs.ts'
 

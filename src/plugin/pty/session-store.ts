@@ -7,12 +7,10 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { INDEX_FILE, LOG_FILE, META_FILE, PREVIOUS_LOG_FILE } from './archive-files.ts'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-
-import type { BoundedReadResult, BoundedSearchResult } from './output-manager.ts'
-import { logPtyEvent } from './plugin-log.ts'
+import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../constants.ts'
+import { INDEX_FILE, LOG_FILE, META_FILE, PREVIOUS_LOG_FILE } from './archive-files.ts'
 import { readArchive, readArchiveRaw, searchArchive } from './archive-reader.ts'
 import {
   emptyTrash,
@@ -21,8 +19,9 @@ import {
   removeArchive,
   restoreFromTrash,
 } from './archive-trash.ts'
+import type { BoundedReadResult, BoundedSearchResult } from './output-manager.ts'
+import { logPtyEvent } from './plugin-log.ts'
 import { sessionsRoot } from './state-paths.ts'
-import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../constants.ts'
 import type { PTYSessionInfo } from './types.ts'
 
 /** Everything worth keeping about a session, including who asked for it. */

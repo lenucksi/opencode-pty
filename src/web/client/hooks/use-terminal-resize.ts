@@ -1,5 +1,5 @@
-import { type RefObject, useCallback, useEffect, useRef } from 'react'
 import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
+import { type RefObject, useCallback, useEffect, useRef } from 'react'
 import type { RawTerminal } from '../components/terminal-renderer.ts'
 
 interface UseTerminalResizeOptions {

@@ -4,16 +4,17 @@ import { isFinished, type PanelSession } from './lib.ts'
 import type { PanelState } from './panel-state.ts'
 import type { Tones } from './render.ts'
 import { readScreen } from './server.ts'
+import { sessionPanelView } from './session-panel.ts'
 import {
   initialSessionPanelState,
+  noteSessionListToggled,
   noteSessionPanelInput,
   noteSessionPanelList,
   noteSessionScreen,
   noteSessionSelected,
-  selectedSession,
-  sessionPanelView,
   type SessionPanelState,
-} from './session-panel.ts'
+  selectedSession,
+} from './session-panel-state.ts'
 
 /** Durable: which row is on screen, and for which session, is worth keeping. */
 const SESSION_PANEL_KEY = 'opencode-pty.session-panel'
@@ -173,6 +174,11 @@ function claimSessionPanel(
           select(id)
           void sync()
         },
+        // Owns the row's gesture rather than rendering it, for the reason the comment
+        // above a render states: a render must not write state, so it hands the fold up
+        // and the host writes it. No `sync()` afterwards - the store change alone
+        // re-renders the panel, and a second read of the screen buys nothing.
+        onToggleList: () => noteSessionListToggled(state),
       })
     },
   })

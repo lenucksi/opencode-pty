@@ -1,31 +1,29 @@
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   PTYSessionInfo,
   ServerInfoResponse,
   WSMessageServerRawData,
 } from 'opencode-pty/web/shared/types'
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { BuildInfo } from '../../../shared/build-info.ts'
+import { api } from '../../shared/api-client.ts'
 import { sessionDetailLine, sessionTooltip, sortSessionsByTime } from '../../shared/session-meta.ts'
-
-import { useWebSocket } from '../hooks/use-web-socket.ts'
-import { useSessionManager } from '../hooks/use-session-manager.ts'
-import { useRawStream } from '../hooks/use-raw-stream.ts'
 import { useAppShortcuts } from '../hooks/use-app-shortcuts.ts'
+import { useBulkRemoval } from '../hooks/use-bulk-removal.ts'
 import { useCopyFeedback } from '../hooks/use-copy-feedback.ts'
+import { useRawStream } from '../hooks/use-raw-stream.ts'
+import { useSessionManager } from '../hooks/use-session-manager.ts'
 import { useTerminalResize } from '../hooks/use-terminal-resize.ts'
 import { useTheme } from '../hooks/use-theme.ts'
 import { useUiPrefs } from '../hooks/use-ui-prefs.ts'
+import { useWebSocket } from '../hooks/use-web-socket.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
 import type { ThemeScheme } from '../lib/theme.ts'
-
 import { DocsModal } from './docs-modal.tsx'
 import { DownloadMenu } from './download-menu.tsx'
-import { useBulkRemoval } from '../hooks/use-bulk-removal.ts'
 import { RemoveSessionsDialog, UndoToast } from './remove-sessions-dialog.tsx'
-import { Sidebar } from './sidebar.tsx'
 import { SettingsModal } from './settings-modal.tsx'
+import { Sidebar } from './sidebar.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
-import { api } from '../../shared/api-client.ts'
-import type { BuildInfo } from '../../../shared/build-info.ts'
 
 /** A session is live until its process has actually exited. */
 function isLiveStatus(status: PTYSessionInfo['status']): boolean {

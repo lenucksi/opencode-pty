@@ -10,12 +10,12 @@ import {
   formatDuration,
   headerLabel,
   isFinished,
+  type PanelSession,
+  ROW_BULLET,
   rowLabel,
   rowTone,
-  ROW_BULLET,
   sessionDurationMs,
   tail,
-  type PanelSession,
 } from './lib.ts'
 import { failedFinished, failureCount } from './panel-state.ts'
 

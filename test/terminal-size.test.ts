@@ -1,13 +1,12 @@
 import { afterAll, describe, expect, it, spyOn } from 'bun:test'
-
-import { ptyResize } from '../src/plugin/pty/tools/resize.ts'
-import { manager, PTYManager } from '../src/plugin/pty/manager.ts'
 import {
   FALLBACK_TERMINAL_COLS,
   FALLBACK_TERMINAL_ROWS,
   MAX_TERMINAL_COLS,
   MIN_TERMINAL_ROWS,
 } from '../src/plugin/constants.ts'
+import { manager, PTYManager } from '../src/plugin/pty/manager.ts'
+import { ptyResize } from '../src/plugin/pty/tools/resize.ts'
 
 /**
  * The terminal size used to be a constant nobody could see.

@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-
-import { testRender } from '@opentui/solid'
 import { RGBA } from '@opentui/core'
+import { testRender } from '@opentui/solid'
 
 import type { PanelSession } from '../src/tui/lib.ts'
 import {
@@ -9,9 +8,9 @@ import {
   dialogRows,
   dialogSize,
   outputDialogView,
-  sidebarView,
-  REMOVE_GLYPH,
   type PanelView,
+  REMOVE_GLYPH,
+  sidebarView,
 } from '../src/tui/render.ts'
 
 /**

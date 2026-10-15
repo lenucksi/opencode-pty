@@ -1,11 +1,10 @@
-import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
-
-import { describeBuild, type BuildInfo } from '../../../shared/build-info.ts'
 import type { ServerInfoResponse } from 'opencode-pty/web/shared/types'
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
+import { type BuildInfo, describeBuild } from '../../../shared/build-info.ts'
+import { useDialog } from '../hooks/use-dialog.ts'
 import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { ThemePreference } from '../lib/theme.ts'
 import { MAX_TERMINAL_FONT_SIZE, MIN_TERMINAL_FONT_SIZE } from '../lib/ui-prefs.ts'
-import { useDialog } from '../hooks/use-dialog.ts'
 import { ThemeSwitch } from './theme-switch.tsx'
 
 interface SettingsModalProps {

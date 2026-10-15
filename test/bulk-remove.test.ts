@@ -3,9 +3,9 @@ import type { BunRequest } from 'bun'
 
 import { manager } from '../src/plugin/pty/manager.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
+import { bulkRemoveSessions, restoreSessions } from '../src/web/server/handlers/sessions.ts'
 import { createApiClient } from '../src/web/shared/api-client.ts'
 import { routes } from '../src/web/shared/routes.ts'
-import { bulkRemoveSessions, restoreSessions } from '../src/web/server/handlers/sessions.ts'
 import { ManagedTestServer } from './utils.ts'
 
 /**

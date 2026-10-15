@@ -11,10 +11,10 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  RUNTIME_DIR_NAME,
   candidateOrigins,
   originsForProject,
   projectKey,
+  RUNTIME_DIR_NAME,
   readOrigins,
   removeOrigin,
   runtimeDir,

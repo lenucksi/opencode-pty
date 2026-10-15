@@ -1,5 +1,5 @@
-import { isFinished, type PanelSession } from './lib.ts'
 import { groupSessionsByParent, sortSessionsByTime } from '../web/shared/session-meta.ts'
+import { isFinished, type PanelSession } from './lib.ts'
 
 /**
  * The panel's state, and every transition it can make.

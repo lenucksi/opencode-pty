@@ -1,6 +1,6 @@
-import type { PluginClient } from '../types.ts'
 import type { PermissionAuthorizer } from '../../adapters/types.ts'
 import { V1PermissionAuthorizer } from '../../adapters/v1/permissions.ts'
+import type { PluginClient } from '../types.ts'
 
 export type { PermissionAuthorizer }
 

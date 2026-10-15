@@ -1,10 +1,10 @@
-import { logFileName, normalizeLogText, parseLogFormat } from '../../shared/log-format.ts'
+import type { BunRequest } from 'bun'
 import { WEB_API_PARENT_SESSION_ID } from '../../../plugin/constants.ts'
 import { manager } from '../../../plugin/pty/manager.ts'
 import { checkCommandPermission, checkWorkdirPermission } from '../../../plugin/pty/permissions.ts'
-import type { BunRequest } from 'bun'
-import { JsonResponse, ErrorResponse } from './responses.ts'
+import { logFileName, normalizeLogText, parseLogFormat } from '../../shared/log-format.ts'
 import type { routes } from '../../shared/routes.ts'
+import { ErrorResponse, JsonResponse } from './responses.ts'
 
 export function getSessions() {
   const sessions = manager.list()

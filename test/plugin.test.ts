@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { manager } from '../src/plugin/pty/manager.ts'
-import { PTYPlugin } from '../src/plugin.ts'
 import type { PluginContext, PluginResult } from '../src/plugin/types.ts'
+import { PTYPlugin } from '../src/plugin.ts'
 import { PTYServer } from '../src/web/server/server.ts'
 
 function createContext() {

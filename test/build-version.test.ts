@@ -3,8 +3,6 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
-
-import { describeBuild, UNKNOWN_BUILD } from '../src/shared/build-info.ts'
 import {
   BUILD_INFO_PATH,
   createGitProbe,
@@ -17,6 +15,7 @@ import {
   findPackageVersion,
   parseBuildInfo,
 } from '../src/plugin/pty/read-build-info.ts'
+import { describeBuild, UNKNOWN_BUILD } from '../src/shared/build-info.ts'
 
 /**
  * The build identity is stamped into `dist/` at build time rather than read from

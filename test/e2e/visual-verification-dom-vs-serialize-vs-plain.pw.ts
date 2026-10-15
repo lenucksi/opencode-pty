@@ -1,8 +1,8 @@
+import { expect, test as extendedTest, selectSession } from './fixtures'
 import {
   getSerializedContentByXtermSerializeAddon,
   waitForTerminalRegex,
 } from './xterm-test-helpers'
-import { test as extendedTest, expect, selectSession } from './fixtures'
 
 extendedTest.describe(
   'Xterm Content Extraction - Visual Verification (DOM vs Serialize vs Plain API)',

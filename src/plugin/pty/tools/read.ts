@@ -1,5 +1,4 @@
 import { tool } from '@opencode-ai/plugin'
-import { manager } from '../manager.ts'
 import {
   charsForTokens,
   DEFAULT_READ_LIMIT,
@@ -9,14 +8,15 @@ import {
   READ_MAX_TOKENS_ENV,
   readTokenBudget,
 } from '../../../shared/constants.ts'
-import { buildSessionNotFoundError } from '../utils.ts'
 import {
   formatLine,
   formatPtyOutputBlock,
-  TRUNCATION_MARKER,
   type OutputBlockMeta,
+  TRUNCATION_MARKER,
 } from '../formatters.ts'
+import { manager } from '../manager.ts'
 import type { PTYSessionInfo } from '../types.ts'
+import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './read.txt'
 
 const NOTIFY_ON_EXIT_REMINDER = [

@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { originsForProject } from '../src/shared/runtime.ts'
 import {
-  PTY_OPEN_CLIENT_COMMAND,
-  PTY_SHOW_SERVER_URL_COMMAND,
-  Plugin,
   getActiveServer,
   getOrCreateServer,
   handleShowServerUrlCommand,
+  Plugin,
+  PTY_OPEN_CLIENT_COMMAND,
+  PTY_SHOW_SERVER_URL_COMMAND,
   ptyTools,
   stopActiveServer,
 } from '../src/v2/index.ts'
