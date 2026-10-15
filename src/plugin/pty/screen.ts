@@ -1,4 +1,4 @@
-import type { GhosttyCell, RGB } from 'ghostty-web'
+import type { GhosttyCell, GhosttyTerminal, RGB } from 'ghostty-web'
 import { Ghostty } from 'ghostty-web'
 
 /**
@@ -215,6 +215,46 @@ function cellText(
 }
 
 /**
+ * The scrollback rows read as text, oldest first.
+ *
+ * `getScrollbackLine(offset)` gives the cells; the grapheme lookup is the per-line
+ * variant (the width of history changes with the line the row was printed on, so the
+ * row is its own coordinate system). Row width follows the terminal's width; a soft
+ * history is a welcome side effect, and stays part of the row like the screen's own
+ * `isRowWrapped` marker does not carry across the boundary.
+ */
+function scrollbackRows(terminal: GhosttyTerminal, count: number, cols: number): string[] {
+  const rows: string[] = []
+  const earliest = Math.max(0, terminal.getScrollbackLength() - count)
+  for (let offset = earliest; offset < terminal.getScrollbackLength(); offset++) {
+    const cells = terminal.getScrollbackLine(offset) ?? []
+    let line = ''
+    for (let x = 0; x < cols; x++) {
+      const cell = cells[x]
+      if (cell === undefined) {
+        line += ' '
+        continue
+      }
+      // Same rule as the screen loop: a wide cell covers its right half, so the
+      // column has to skip it rather than print a blank over the second half.
+      if (cell.width === -1) continue
+      if (cell.codepoint === 0) {
+        line += ' '
+        continue
+      }
+      if (cell.grapheme_len > 0) {
+        const full = terminal.getScrollbackGraphemeString(offset, x)
+        line += full !== '' ? full : String.fromCodePoint(cell.codepoint)
+      } else {
+        line += String.fromCodePoint(cell.codepoint)
+      }
+    }
+    rows.push(line.replace(/\s+$/, ''))
+  }
+  return rows
+}
+
+/**
  * Replay `raw` at the given geometry and describe the resulting screen.
  *
  * @param raw        Everything the session retained, in order.
@@ -227,7 +267,9 @@ export async function renderScreen(
   raw: string,
   cols: number,
   rows: number,
-  maxReplay = DEFAULT_REPLAY_WINDOW
+  maxReplay = DEFAULT_REPLAY_WINDOW,
+  /** How many scrollback rows to include BEFORE the visible screen, oldest first. */
+  scrollbackLines = 0
 ): Promise<ScreenSnapshot> {
   const ghostty = await loadGhostty()
   const replayedChars = Math.min(raw.length, maxReplay)
@@ -252,6 +294,12 @@ export async function renderScreen(
     const spans: ColorSpan[] = []
     let widestRowCols = 0
     const continuedRows: number[] = []
+
+    // History first, oldest to newest, then the screen: a reader scrolling up past
+    // the frame mirrors the terminal's own scrollback. Cursor coordinates stay
+    // screen-local, so the snapshot reports how many history rows it added.
+    const history = scrollbackLines > 0 ? scrollbackRows(terminal, scrollbackLines, cols) : []
+    lines.push(...history)
 
     for (let y = 0; y < rows; y++) {
       const cells = terminal.getLine(y) ?? []
@@ -318,6 +366,7 @@ export async function renderScreen(
         style: rawCursor.style,
       },
       alternate: terminal.isAlternateScreen(),
+      ...(history.length > 0 ? { historyRows: history.length } : {}),
       scrollback: terminal.getScrollbackLength(),
       spans,
       replayedChars,

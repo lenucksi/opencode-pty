@@ -261,12 +261,19 @@ describe('decodeScreen', () => {
   // already removed. Joining the rows is the whole of the decoding - which is the point:
   // there is no ANSI to strip and no cursor position to lose, because the emulator has
   // already applied both.
-  // Trailing blank rows are kept, trailing newline included: the blank bottom of a
-  // screen is part of what the screen shows, and trimming it would make a cleared
-  // terminal look like one that printed something.
-  it('joins the screen rows into displayable text', () => {
-    expect(decodeScreen({ id: 'pty_1', cols: 40, rows: 3, lines: ['top', 'second', ''] })).toBe(
-      'top\nsecond\n'
+  // The old rule kept even the trailing blank rows: the blank bottom of a screen is
+  // shape, and a fresh 81-row screen half-printed produced a console of blanks with a
+  // scrollbar before the screen was full - measured. The consumer trims after.
+  it('joins the screen rows into displayable text, trailing blanks dropped', () => {
+    expect(decodeScreen({ id: 'pty_1', cols: 40, rows: 3, lines: ['top', 'second'] })).toBe(
+      'top\nsecond'
+    )
+  })
+
+  // The inverse still holds: a blank row BETWEEN content belongs to the program.
+  it('keeps an inner blank row', () => {
+    expect(decodeScreen({ id: 'pty_1', cols: 40, rows: 5, lines: ['top', '', 'bottom', ''] })).toBe(
+      'top\n\nbottom'
     )
   })
 

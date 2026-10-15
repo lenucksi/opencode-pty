@@ -130,7 +130,10 @@ export async function listSessions(origin: string): Promise<PanelSession[]> {
  * the dialog has no width to ask with.
  */
 export async function readScreen(origin: string, id: string): Promise<string> {
-  const res = await fetchWithTimeout(`${origin}/api/sessions/${id}/screen`)
+  // The history the reader means by "scroll all the way up": the server prepends up to
+  // this many scrollback rows before the visible screen. Rounded to the emulator's own
+  // cap by the endpoint.
+  const res = await fetchWithTimeout(`${origin}/api/sessions/${id}/screen${'?scrollback=2000'}`)
   if (!res.ok) throw new Error(`the server answered ${res.status}`)
   return decodeScreen(await res.json())
 }

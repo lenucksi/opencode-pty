@@ -380,7 +380,15 @@ export function decodeScreen(raw: unknown): string {
   }
   // A bare array is accepted so a caller that gets the body directly is not punished
   // for it, exactly as `decodeBuffer` accepted a bare string.
-  return (rows(raw) ?? []).join('\n')
+  // Trailing blanks are the screen's SHAPE, not the program's output: a fresh run
+  // prints its first lines at the top and the screen still has its full height - the
+  // reader measured a console that scrolled through blank rows and showed a scrollbar
+  // while the screen was not even full. The stage keeps the rows; the consumer drops
+  // the blank tail.
+  const combined = rows(raw) ?? []
+  let end = combined.length
+  while (end > 0 && (combined[end - 1]?.trim() ?? '') === '') end -= 1
+  return combined.slice(0, end).join('\n')
 }
 
 /**

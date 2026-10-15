@@ -252,6 +252,16 @@ beside the built-in sidebar items rather than replacing them.
   chip (`Enter`) running out at the edge - a wider test width had hidden it. The row wraps (the
   host's own dialogs do, via `flexDrop`), the hint moved to the footer, and a narrow-width render
   asserts every label drawn inside the box.
+- **The console now scrolls the history the emulator was holding, and stops selling blank
+  rows as content.** `/screen` answered with the visible screen only, so a line printed moments
+  ago left the panel's console for good - measured, the emulator HELD 103 scrollback rows for the
+  same session the `/screen` was answering with 81 screen rows, and the web UI scrolled all the
+  way up through the full transcript. The route now takes `?scrollback=<n>` (default 0, so
+  `pty_screen` and the web's client keep their exact shape) and prepends the older rows, oldest
+  first, within the replay window; the response says how many it added. The panel asks for the
+  history. And the consumer drops the trailing blank rows a screen has BY SHAPE: a fresh 81-row
+  run half-printed produced a console full of blanks with a scrollbar the reader measured
+  scrolling through before any output filled it.
 - **The console stays where the reader scrolled it, and the texts speak one language.** A reader
   who scrolled up in a PTY console was dragged back to the bottom by the next poll, because the
   scrollbox pinned itself unconditionally. The pin is now a decision (`scroll-keeper.ts`): it holds

@@ -6,7 +6,21 @@ import {
   MIN_TERMINAL_ROWS,
 } from '../../../plugin/constants.ts'
 import { manager } from '../../../plugin/pty/manager.ts'
-import { fitScreenSize, renderScreen, type ScreenSnapshot } from '../../../plugin/pty/screen.ts'
+import {
+  DEFAULT_REPLAY_WINDOW,
+  fitScreenSize,
+  renderScreen,
+  type ScreenSnapshot,
+} from '../../../plugin/pty/screen.ts'
+
+/**
+ * The upper bound a caller may ask for as scrollback.
+ *
+ * истории rows are a second array the emulator's own cap never exceeds (it is the
+ * cap), and cell scans are linear: a bounded allow-list keeps a caller from making
+ * the render cost grow without a bound.
+ */
+const MAX_SCROLLBACK_ROWS = 2000
 import type { routes } from '../../shared/routes.ts'
 import { ErrorResponse, JsonResponse } from './responses.ts'
 
@@ -40,6 +54,12 @@ import { ErrorResponse, JsonResponse } from './responses.ts'
 export interface SessionScreenResponse extends ScreenSnapshot {
   id: string
   requested?: { cols: number; rows: number }
+  /**
+   * How many scrollback rows the snapshot PREPENDED: the reader scrolled them in ahead
+   * of the screen, so the history is one more question the response should answer -
+   * cursor coordinates are screen-local and a caller comparing rows needs this.
+   */
+  historyRows?: number
 }
 
 /**
@@ -102,9 +122,24 @@ export async function getSessionScreen(
   )
   const fitted = fitScreenSize(requestedCols, requestedRows)
 
+  // The scrollback a caller WANTS, oldest first ahead of the screen. Default is the
+  // tool's and the web's own shape: nothing prepended, the snapshot is the screen.
+  const wantScrollback = clampDimension(
+    url.searchParams.get('scrollback'),
+    0,
+    MAX_SCROLLBACK_ROWS,
+    0
+  )
+
   let snapshot: ScreenSnapshot
   try {
-    snapshot = await renderScreen(bufferData.raw, fitted.cols, fitted.rows)
+    snapshot = await renderScreen(
+      bufferData.raw,
+      fitted.cols,
+      fitted.rows,
+      DEFAULT_REPLAY_WINDOW,
+      wantScrollback
+    )
   } catch (error) {
     // The reason is in the response because the alternative is worse: an empty
     // screen is indistinguishable from a program that has printed nothing.
