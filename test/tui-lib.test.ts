@@ -11,6 +11,7 @@ import {
   isFinished,
   isPtyHealth,
   type PanelSession,
+  resolveParentTitles,
   rowLabel,
   rowTone,
   sessionDurationMs,
@@ -362,5 +363,49 @@ describe('archiveLabel', () => {
     const open = archiveLabel({ finished: 5, failed: 1, shown: 1, expanded: true })
     expect(closed?.startsWith('\u25b8')).toBe(true)
     expect(open?.startsWith('\u25be')).toBe(true)
+  })
+})
+
+describe('resolveParentTitles', () => {
+  const withParent = (id: string, parent?: string): PanelSession =>
+    session({ id, ...(parent === undefined ? {} : { parentSessionId: parent }) })
+
+  it('collects one title per parent, however many sessions carry it', () => {
+    const asked: string[] = []
+    const titles = resolveParentTitles(
+      [withParent('a', 'ses_one'), withParent('b', 'ses_one'), withParent('c', 'ses_two')],
+      (id) => {
+        asked.push(id)
+        return `title of ${id}`
+      }
+    )
+    expect(titles).toEqual({ ses_one: 'title of ses_one', ses_two: 'title of ses_two' })
+    // Asked once per parent, not once per session: a repeated lookup would be a lookup per row,
+    // on every poll.
+    expect(asked).toEqual(['ses_one', 'ses_two'])
+  })
+
+  // A conversation whose parent is gone yields no entry, and the heading then falls back to the
+  // stable session id rather than disappearing - so the absence has to stay an absence.
+  it('leaves out a parent the host cannot name', () => {
+    expect(resolveParentTitles([withParent('a', 'ses_gone')], () => undefined)).toEqual({})
+    expect(resolveParentTitles([withParent('a', 'ses_blank')], () => '   ')).toEqual({})
+  })
+
+  // A session started by hand has no parent at all, and must not be looked up as the empty id.
+  it('never asks about a session with no parent', () => {
+    const asked: string[] = []
+    const titles = resolveParentTitles([withParent('a'), withParent('b', '  ')], (id) => {
+      asked.push(id)
+      return 'x'
+    })
+    expect(titles).toEqual({})
+    expect(asked).toEqual([])
+  })
+
+  it('trims the title the host returns', () => {
+    expect(resolveParentTitles([withParent('a', 'ses_one')], () => '  Build  ')).toEqual({
+      ses_one: 'Build',
+    })
   })
 })

@@ -3,6 +3,7 @@ import { RGBA } from '@opentui/core'
 import { testRender } from '@opentui/solid'
 
 import type { PanelSession } from '../src/tui/lib.ts'
+import { groupsForDisplay } from '../src/tui/panel-state.ts'
 import {
   clearTargetCount,
   dialogRows,
@@ -35,6 +36,7 @@ interface Handlers {
   onToggle: () => void
   onToggleArchive: () => void
   onToggleGroup: (key: string) => void
+  onClearFilter: () => void
   onClear: () => void
   onOpen: (session: PanelSession) => void
   onRemove: (session: PanelSession) => void
@@ -47,33 +49,49 @@ const handlers = (): Handlers & { calls: string[] } => {
     onToggle: () => calls.push('toggle'),
     onToggleArchive: () => calls.push('archive'),
     onToggleGroup: (key) => calls.push(`group:${key}`),
+    onClearFilter: () => calls.push('clear-filter'),
     onClear: () => calls.push('clear'),
     onOpen: (s) => calls.push(`open:${s.id}`),
     onRemove: (s) => calls.push(`remove:${s.id}`),
   }
 }
 
-const view = (over: Partial<PanelView> = {}): PanelView => {
-  const sessions = over.sessions ?? []
+/**
+ * The inputs a case may state.
+ *
+ * `visible` stands in for what `visibleSessions` selected - the wiring decides that, so a case
+ * about the empty list has to be able to say "the server knows these, none of them is a row".
+ */
+interface ViewInput {
+  readonly collapsed?: boolean
+  readonly status?: string
+  readonly sessions?: readonly PanelSession[]
+  readonly visible?: readonly PanelSession[]
+  readonly titles?: Readonly<Record<string, string>>
+  readonly filter?: string
+  readonly collapsedGroups?: readonly string[]
+  readonly showFinished?: boolean
+}
+
+const view = (input: ViewInput = {}): PanelView => {
+  const sessions = input.sessions ?? []
+  const visible = input.visible ?? sessions
   return {
     tones,
-    collapsed: false,
-    // A fixed fixture default, not derived from `sessions`: the status is a separate
-    // input the real panel computes, and a test about the header should not have to
-    // state a count to see a count.
-    status: '2 sessions',
+    collapsed: input.collapsed ?? false,
+    // A fixed fixture default, not derived from `sessions`: the status is a separate input the
+    // real panel computes, and a test about the header should not have to state a count to see
+    // a count.
+    status: input.status ?? '2 sessions',
     sessions,
-    // Defaults to whatever the caller handed over, so a test that only cares about one
-    // row does not also have to assert that the row is visible. A test ABOUT the filter
-    // passes `visible` itself and says which rows it expects to survive.
-    visible: over.visible ?? sessions,
-    // Empty by default: a heading falls back to the stable session id until a test names a
-    // title, so a case about rows and not about titles does not have to invent one.
-    titles: over.titles ?? {},
-    collapsedGroups: over.collapsedGroups ?? [],
-    showFinished: over.showFinished ?? false,
+    // Derived exactly as the wiring derives it, so a case states the query and gets the groups
+    // the panel would draw rather than hand-building them.
+    groups: groupsForDisplay(visible, input.titles ?? {}, input.filter ?? ''),
+    titles: input.titles ?? {},
+    filter: input.filter ?? '',
+    collapsedGroups: input.collapsedGroups ?? [],
+    showFinished: input.showFinished ?? false,
     ...handlers(),
-    ...over,
   }
 }
 
@@ -303,6 +321,100 @@ describe('sidebarView group headings', () => {
     expect(liveLine).toBeGreaterThanOrEqual(0)
     expect(deadLine).toBeGreaterThanOrEqual(0)
     expect(liveLine).toBeLessThan(deadLine)
+  })
+})
+
+/**
+ * The filter, in the two places a reader meets it: the header chip that clears it, and the
+ * empty state that has to explain itself.
+ */
+describe('sidebarView with a filter', () => {
+  const parented = (id: string, parent: string, over: Partial<PanelSession> = {}): PanelSession =>
+    session({ id, status: 'running', parentSessionId: parent, ...over })
+
+  // A bare "nothing running" under an active filter is a different claim from the truth: it
+  // says no process is alive, when what happened is that the query excluded every one.
+  test('names the query instead of claiming nothing is running', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({
+          filter: 'kubernetes',
+          sessions: [session({ id: 'a', title: 'dev-server', status: 'running' })],
+        })
+      )
+    )
+    expect(text).toContain('nothing matches “kubernetes”')
+    expect(text).not.toContain('nothing running')
+  })
+
+  test('says nothing is running when no filter is set', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({ sessions: [session({ id: 'a', status: 'exited', exitCode: 0 })], visible: [] })
+      )
+    )
+    expect(text).toContain('nothing running')
+    expect(text).not.toContain('nothing matches')
+  })
+
+  // The shared rule: a group whose CONVERSATION matched keeps its whole group, because someone
+  // searching for a conversation wants the processes it started.
+  test('keeps a whole group when its conversation title matches', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({
+          filter: 'deploy',
+          sessions: [
+            parented('a', 'ses_build', { title: 'compile' }),
+            parented('b', 'ses_build', { title: 'link' }),
+            parented('c', 'ses_other', { title: 'unrelated' }),
+          ],
+          titles: { ses_build: 'Deployment work', ses_other: 'Something else' },
+        })
+      )
+    )
+    expect(text).toContain('Deployment work')
+    expect(text).toContain('compile')
+    expect(text).toContain('link')
+    expect(text).not.toContain('unrelated')
+    expect(text).not.toContain('Something else')
+  })
+
+  // A child match keeps only that child, so a group is never a lie about what matched.
+  test('drops the siblings a child match did not reach', async () => {
+    const text = await frame(() =>
+      sidebarView(
+        view({
+          filter: 'link',
+          sessions: [
+            parented('a', 'ses_build', { title: 'compile' }),
+            parented('b', 'ses_build', { title: 'link' }),
+          ],
+          titles: { ses_build: 'Deployment work' },
+        })
+      )
+    )
+    expect(text).toContain('link')
+    expect(text).not.toContain('compile')
+  })
+
+  // The route that needs no typing. Drawn only while a filter is set, so the header never
+  // offers a click that would clear nothing.
+  test('draws a clearable chip only while a filter is set', async () => {
+    const filtered = await frame(() =>
+      sidebarView(
+        view({
+          filter: 'build',
+          sessions: [session({ id: 'a', title: 'build', status: 'running' })],
+        })
+      )
+    )
+    expect(filtered.split('\n')[0]).toContain('build ✕')
+
+    const plain = await frame(() =>
+      sidebarView(view({ sessions: [session({ id: 'a', title: 'build', status: 'running' })] }))
+    )
+    expect(plain.split('\n')[0]).not.toContain('✕')
   })
 })
 

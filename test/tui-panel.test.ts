@@ -144,6 +144,12 @@ interface Observed {
    * the title path untested.
    */
   sessionTitles: Record<string, string>
+  /** The prompts the plugin opened, in order. */
+  prompts: { readonly title: string; readonly value?: string }[]
+  /** What the prompt resolves with. `undefined` is the dismissed dialog. */
+  answerPrompt: string | undefined
+  /** When set, the prompt throws this instead of answering. */
+  promptError?: string
 }
 
 let runtimeDir: string
@@ -265,6 +271,13 @@ function makeContext(observed: Observed): TuiContext {
         observed.confirms.push(options)
         return false
       },
+      // The host renders the prompt and handles the typing, which is why the filter needs no
+      // key handling of its own. Only the fields the plugin reads are modelled.
+      prompt: async (options: { readonly title: string; readonly value?: string }) => {
+        observed.prompts.push(options)
+        if (observed.promptError !== undefined) throw new Error(observed.promptError)
+        return observed.answerPrompt
+      },
     },
     router: {
       register: () => () => {},
@@ -355,6 +368,8 @@ function observed(onCommand?: () => Promise<void>): Observed {
     sessionCalls: [],
     stores: new Map(),
     sessionTitles: {},
+    prompts: [],
+    answerPrompt: undefined,
     ...(onCommand === undefined ? {} : { onCommand }),
   }
 }
@@ -434,6 +449,21 @@ async function clickGroupChevron(observed: Observed, heading: string): Promise<v
   const column = (lines[row] ?? '').search(/[▼▶]/)
   if (column < 0) throw new Error('the group draws no chevron to click')
   await setup.mockMouse.click(column, row)
+  await setup.renderOnce()
+}
+
+/**
+ * Click the header's filter chip, found by the glyph it carries.
+ *
+ * The chip is only drawn while a filter is set, so the column comes out of the rendered frame.
+ * Row 0 is the header. Through opentui's own dispatch, like the other clicks.
+ */
+async function clickFilterChip(observed: Observed): Promise<void> {
+  const setup = await renderSidebar(observed)
+  const header = setup.captureCharFrame().split('\n')[0] ?? ''
+  const column = header.indexOf('✕')
+  if (column < 0) throw new Error('the header draws no filter chip to click')
+  await setup.mockMouse.click(column, 0)
   await setup.renderOnce()
 }
 
@@ -528,6 +558,31 @@ const panelStore = (observed: Observed): Record<string, unknown> => {
   const state = observed.stores.get('opencode-pty.sidebar.panel')
   if (!state) throw new Error('the plugin never created its panel store')
   return state
+}
+
+/** The durable preferences, which the filter and the fold both live in. */
+const prefsOf = (observed: Observed): Record<string, unknown> => {
+  const state = observed.stores.get('opencode-pty.sidebar')
+  if (!state) throw new Error('the plugin never created its prefs store')
+  return state
+}
+
+/**
+ * Run a registered keymap command by id, the way the palette does.
+ *
+ * The layer factories are collected as they are registered, so this reaches the command the
+ * plugin actually registered rather than calling the function behind it directly.
+ */
+async function runCommand(observed: Observed, id: string): Promise<void> {
+  for (const layer of observed.layers) {
+    for (const command of layer.commands ?? []) {
+      if (command.id === id) {
+        await command.run?.()
+        return
+      }
+    }
+  }
+  throw new Error(`the plugin registered no command with id ${id}`)
 }
 
 beforeEach(() => {
@@ -730,6 +785,100 @@ describe('the PTY sidebar panel', () => {
 
       // Folded, not folded-and-unfolded: a second handler would have closed it again.
       expect(prefs.collapsedGroups).toEqual(['test-parent-session'])
+    } finally {
+      server[Symbol.dispose]()
+    }
+  })
+
+  // AC #1/#2/#8: the prompt is the HOST's, so a plugin needs no key handling at all, and the
+  // answer goes into the prefs store the collapsed flag already lives in.
+  test('the filter command asks the host for a query and keeps the answer', async () => {
+    const seen = observed()
+    seen.answerPrompt = 'build'
+    await tuiPanel.setup(makeContext(seen))
+
+    await runCommand(seen, 'opencode-pty.sidebar.filter')
+
+    expect(seen.prompts).toHaveLength(1)
+    // Prefilled with what it replaces, so the dialog shows the state it is about to change.
+    expect(seen.prompts[0]?.value).toBe('')
+    expect(prefsOf(seen).filter).toBe('build')
+  })
+
+  // `undefined` is the DISMISSED dialog. Clearing on a cancel would throw away a filter the
+  // reader never asked to change.
+  test('cancelling the filter prompt leaves the filter untouched', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    prefsOf(seen).filter = 'build'
+    seen.answerPrompt = undefined
+
+    await runCommand(seen, 'opencode-pty.sidebar.filter')
+
+    expect(prefsOf(seen).filter).toBe('build')
+  })
+
+  test('an empty answer clears the filter', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    prefsOf(seen).filter = 'build'
+    seen.answerPrompt = ''
+
+    await runCommand(seen, 'opencode-pty.sidebar.filter')
+
+    expect(prefsOf(seen).filter).toBe('')
+  })
+
+  // Best-effort, like a toast: a host that cannot show a prompt must not take the command down,
+  // and must not change the filter either.
+  test('a prompt that fails leaves the filter alone', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    prefsOf(seen).filter = 'build'
+    seen.promptError = 'no prompt on this host'
+
+    await runCommand(seen, 'opencode-pty.sidebar.filter')
+
+    expect(prefsOf(seen).filter).toBe('build')
+  })
+
+  // AC #6: clearing needs no typing. The click must also not reach the header's own toggle on
+  // the way - a clear that collapsed the section would hide the very rows it was bringing back.
+  test('the header chip clears the filter without typing', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const prefs = prefsOf(seen)
+    prefs.filter = 'build'
+    prefs.collapsed = false
+
+    await clickFilterChip(seen)
+
+    expect(prefs.filter).toBe('')
+    expect(prefs.collapsed).toBe(false)
+  })
+
+  // AC #4/#5: both numbers, and the empty state names the query rather than claiming no
+  // process is alive.
+  test('a filter narrows the body, names the query, and keeps the true total', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
+    try {
+      await spawnSession('filtered-out', 'sh', ['-c', 'sleep 30'])
+      const seen = observed()
+      await tuiPanel.setup(makeContext(seen))
+      await waitForRow(seen, 'filtered-out', 'running')
+
+      const prefs = prefsOf(seen)
+      prefs.collapsed = false
+      prefs.filter = 'nothing-matches-this'
+      const empty = await sidebarFrame(seen)
+      expect(empty).toContain('nothing matches “nothing-matches-this”')
+      expect(empty).not.toContain('nothing running')
+
+      prefs.filter = 'filtered'
+      const hit = await sidebarFrame(seen)
+      expect(hit).toContain('filtered-out')
+      // The header's numerator is what the body draws; the denominator is the whole list.
+      expect(hit).toContain('1 of 1')
     } finally {
       server[Symbol.dispose]()
     }

@@ -1,5 +1,11 @@
-import { groupSessionsByParent, sortSessionsByTime } from '../web/shared/session-meta.ts'
-import { isFinished, type PanelSession } from './lib.ts'
+import { filterGroups, normalizeQuery } from '../web/shared/session-search.ts'
+import {
+  groupSessionsByParent,
+  parentSessionGroupTitle,
+  type PTYSessionGroup,
+  sortSessionsByTime,
+} from '../web/shared/session-meta.ts'
+import { isFinished, type PanelSession, truncateText } from './lib.ts'
 
 /**
  * The panel's state, and every transition it can make.
@@ -203,14 +209,35 @@ export interface PanelGroup {
  *
  * The grouping applies to whatever `visibleSessions` selected - so the failed finished
  * runs land in their parent conversation too, rather than in one flat pile at the bottom.
+ *
+ * The QUERY is applied here as well, through the shared `filterGroups`, so the sidebar and
+ * the browser cannot disagree about what matches: a group survives when its own title
+ * matches (someone searching for a conversation wants that whole group) or when at least one
+ * child does, and each group carries only the children that survived. A group that kept
+ * nothing is gone, not drawn empty.
  */
-export function groupsForDisplay(sessions: readonly PanelSession[]): PanelGroup[] {
-  const groups: PanelGroup[] = groupSessionsByParent(sessions).map((group) => ({
-    key: group.key,
-    ...(group.parentSessionId === undefined ? {} : { parentSessionId: group.parentSessionId }),
-    ...(group.parentAgent === undefined ? {} : { parentAgent: group.parentAgent }),
-    sessions: group.sessions,
-    hasRunning: group.sessions.some(isRunning),
+export function groupsForDisplay(
+  sessions: readonly PanelSession[],
+  titles: Readonly<Record<string, string>> = {},
+  query = ''
+): PanelGroup[] {
+  const grouped: PTYSessionGroup<PanelSession>[] = groupSessionsByParent(sessions)
+  const survivors = filterGroups(
+    grouped,
+    // The same heading the group is drawn with, so a title match means what the reader sees.
+    (group) => parentSessionGroupTitle(group, titles),
+    query
+  )
+  const groups: PanelGroup[] = survivors.map((entry) => ({
+    key: entry.group.key,
+    ...(entry.group.parentSessionId === undefined
+      ? {}
+      : { parentSessionId: entry.group.parentSessionId }),
+    ...(entry.group.parentAgent === undefined ? {} : { parentAgent: entry.group.parentAgent }),
+    sessions: entry.sessions,
+    // From the SURVIVORS: a group whose only running session the filter removed is not a group
+    // holding a running session, and must not claim the top of the list.
+    hasRunning: entry.sessions.some(isRunning),
   }))
   // Two stable halves, relative order untouched inside each - so a group that has been
   // above another one stays above it.
@@ -249,6 +276,48 @@ export function isGroupOpen(
 /** How many sessions, in words. One is not "1 sessions". */
 export function sessionCountLabel(count: number): string {
   return count === 1 ? '1 session' : `${count} sessions`
+}
+
+/**
+ * The header's count while a filter is active: what is shown, then the true total.
+ *
+ * Both numbers, because either alone is a half-truth: the total would hide that the filter
+ * narrowed anything, and the shown count alone would look like a smaller archive. `shown` is
+ * counted over the same set the body draws, so `0 of 200` and "nothing matches" agree instead
+ * of contradicting each other - a numerator over the whole archive would name rows the reader
+ * can see nowhere.
+ */
+export function sessionCountForHeader(total: number, shown: number, query: string): string {
+  if (normalizeQuery(query) === null) return sessionCountLabel(total)
+  return `${shown} of ${total}`
+}
+
+/**
+ * What the body says when it has no rows.
+ *
+ * Under an active filter a bare "nothing running" is a different claim from the truth - it
+ * says no process is alive when what happened is that the query excluded them all - so the
+ * query is named. Echoes what was typed (trimmed), not the normalised needle, so the reader
+ * recognises their own words.
+ */
+export function emptyListLabel(query: string): string {
+  if (normalizeQuery(query) === null) return '   nothing running'
+  return `   nothing matches “${query.trim()}”`
+}
+
+/** How much of the query the header chip shows before it clips. */
+export const FILTER_CHIP_MAX = 14
+
+/**
+ * The header's filter chip, or '' when nothing is filtered.
+ *
+ * Empty rather than a placeholder when no filter is set: a zero-width element presents no hit
+ * target, so the header never offers a click that would clear nothing - the same rule the
+ * clear-finished control follows.
+ */
+export function filterChipLabel(query: string): string {
+  if (normalizeQuery(query) === null) return ''
+  return `${truncateText(query.trim(), FILTER_CHIP_MAX)} ✕`
 }
 
 /** Nothing is listening and nobody asked for a server. */

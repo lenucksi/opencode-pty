@@ -2,10 +2,13 @@ import { describe, expect, test } from 'bun:test'
 
 import type { PanelSession } from '../src/tui/lib.ts'
 import {
+  emptyListLabel,
   endedBadly,
+  FILTER_CHIP_MAX,
   FINISHED_FAILURE_LIMIT,
   failedFinished,
   failureCount,
+  filterChipLabel,
   GROUP_AUTO_OPEN_LIMIT,
   groupsForDisplay,
   IDLE_STATUS,
@@ -22,6 +25,7 @@ import {
   noteStartError,
   noteUnreachable,
   orderForDisplay,
+  sessionCountForHeader,
   sessionCountLabel,
   statusWhenUnavailable,
   visibleSessions,
@@ -580,5 +584,119 @@ describe('isGroupOpen', () => {
   test('folding one group leaves the others open', () => {
     expect(isGroupOpen(3, 'ses_b', ['ses_a'])).toBe(true)
     expect(isGroupOpen(3, 'ses_gone', ['ses_a'])).toBe(true)
+  })
+})
+
+describe('groupsForDisplay with a query', () => {
+  const ME = 'session-a'
+  const OTHER = 'session-b'
+  const at = (minutes: number): string =>
+    new Date(Date.parse('2026-01-01T12:00:00Z') + minutes * 60_000).toISOString()
+  const titled = (id: string, parent: string, title: string, over: Partial<PanelSession> = {}) =>
+    session({ id, parentSessionId: parent, status: 'running', title, ...over })
+
+  test('keeps every group and row when there is no query', () => {
+    const groups = groupsForDisplay([titled('a1', ME, 'one'), titled('b1', OTHER, 'two')])
+    expect(groups).toHaveLength(2)
+    expect(groups.flatMap((group) => group.sessions)).toHaveLength(2)
+  })
+
+  test('keeps only the rows whose fields match', () => {
+    const groups = groupsForDisplay(
+      [titled('a1', ME, 'compile'), titled('a2', ME, 'link'), titled('b1', OTHER, 'deploy')],
+      {},
+      'link'
+    )
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.sessions.map((s) => s.id)).toEqual(['a2'])
+  })
+
+  // The shared rule, and the reason the heading is passed in: someone searching for a
+  // conversation wants the processes it started, not only the row that matched.
+  test('keeps a whole group whose heading matched', () => {
+    const groups = groupsForDisplay(
+      [titled('a1', ME, 'compile'), titled('a2', ME, 'link')],
+      { [ME]: 'Deployment work' },
+      'deployment'
+    )
+    expect(groups[0]?.sessions.map((s) => s.id)).toEqual(['a1', 'a2'])
+  })
+
+  test('a group left with nothing is gone, not drawn empty', () => {
+    expect(groupsForDisplay([titled('a1', ME, 'one')], {}, 'nothing-matches-this')).toEqual([])
+  })
+
+  // The order keys on the SURVIVORS. `hasRunning` read from the unfiltered group would put
+  // ME in the live half even though the query removed its only running row, and ME's survivor
+  // is the newer one - so the shared order alone would then draw ME first.
+  test('a group whose running row was filtered out no longer counts as running', () => {
+    const groups = groupsForDisplay(
+      [
+        session({
+          id: 'me-live',
+          parentSessionId: ME,
+          status: 'running',
+          title: 'excluded',
+          createdAt: at(1),
+        }),
+        session({
+          id: 'me-dead',
+          parentSessionId: ME,
+          status: 'exited',
+          exitCode: 1,
+          title: 'survivor',
+          createdAt: at(10),
+        }),
+        titled('other-live', OTHER, 'survivor', { createdAt: at(2) }),
+      ],
+      {},
+      'survivor'
+    )
+    expect(groups.map((group) => group.key)).toEqual([OTHER, ME])
+    expect(groups[1]?.hasRunning).toBe(false)
+  })
+})
+
+describe('sessionCountForHeader', () => {
+  test('is the plain total with no filter', () => {
+    expect(sessionCountForHeader(200, 200, '')).toBe('200 sessions')
+    expect(sessionCountForHeader(1, 1, '   ')).toBe('1 session')
+  })
+
+  // Both numbers, because either alone is a half-truth: the total would hide that the filter
+  // narrowed anything, and the shown count alone would read as a smaller archive.
+  test('names both numbers while a filter is active', () => {
+    expect(sessionCountForHeader(200, 2, 'build')).toBe('2 of 200')
+    expect(sessionCountForHeader(200, 0, 'build')).toBe('0 of 200')
+  })
+})
+
+describe('emptyListLabel', () => {
+  test('says nothing is running when no filter is set', () => {
+    expect(emptyListLabel('')).toBe('   nothing running')
+    expect(emptyListLabel('   ')).toBe('   nothing running')
+  })
+
+  // A bare "nothing running" under a filter claims no process is alive, which is a different
+  // statement from the query having excluded them all. Echoes what was typed, not the needle.
+  test('names the query while a filter is active', () => {
+    expect(emptyListLabel('Build')).toBe('   nothing matches “Build”')
+    expect(emptyListLabel('  build  ')).toBe('   nothing matches “build”')
+  })
+})
+
+describe('filterChipLabel', () => {
+  test('is empty without a filter, so the header offers no click that clears nothing', () => {
+    expect(filterChipLabel('')).toBe('')
+    expect(filterChipLabel('  ')).toBe('')
+  })
+
+  test('shows the query with the click that clears it', () => {
+    expect(filterChipLabel(' build ')).toBe('build ✕')
+  })
+
+  // Clipped, or a long query would push the count off a ~40-column header.
+  test('clips a long query', () => {
+    expect(filterChipLabel('x'.repeat(40))).toBe(`${'x'.repeat(FILTER_CHIP_MAX - 1)}… ✕`)
   })
 })

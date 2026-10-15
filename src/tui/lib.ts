@@ -108,6 +108,30 @@ function truncate(value: string, max: number): string {
 }
 
 /**
+ * The parent conversations' titles, by id, for the group headings.
+ *
+ * Takes the lookup rather than a host context, so it stays pure: the wiring owns the one call
+ * that has host state behind it, and this owns the loop. A conversation whose parent is gone
+ * yields no entry - the shared `parentSessionGroupTitle` then falls back to the stable session
+ * id, so a heading never disappears. Each id is asked for once, however many sessions carry it.
+ */
+export function resolveParentTitles(
+  sessions: readonly PanelSession[],
+  titleOf: (id: string) => string | undefined
+): Record<string, string> {
+  const titles: Record<string, string> = {}
+  const seen = new Set<string>()
+  for (const session of sessions) {
+    const id = session.parentSessionId?.trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    const title = titleOf(id)?.trim()
+    if (title) titles[id] = title
+  }
+  return titles
+}
+
+/**
  * A row's text WITHOUT its bullet, so the caller can colour the bullet
  * separately - the built-in sidebar items style the glyph and leave the label
  * in the normal text colour.

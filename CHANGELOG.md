@@ -49,6 +49,20 @@ beside the built-in sidebar items rather than replacing them.
 - Opening the archive does not start a server. Expanding the panel is the only trigger
   that does, and the sessions the archive shows are already in the panel state, so the
   expansion needs no refresh at all.
+- **The sidebar has a filter, driven by the host's own prompt.** `/pty-filter` asks for a
+  query through `ui.dialog.prompt` and stores it beside the collapsed flag, so the plugin
+  needs no text field and no key handling of its own. Matching is the SHARED rule
+  (`filterGroups`/`sessionMatches`) rather than a second matcher that would drift:
+  case-insensitive, over the conversation heading and every field a row shows, with a heading
+  match keeping its whole group. To let the panel use it, those functions are now constrained
+  on the fields they READ rather than on `PTYSessionInfo` - the same move `TimeOrdered` was -
+  because the panel carries a trimmed shape across a process boundary and its `args` is
+  optional, so the haystack tolerates a session with no command line at all. The header reads
+  `N of 200` while a filter is active, the query appears beside it as a clickable chip (the
+  way to clear it that needs no typing), and an empty body names the query instead of
+  claiming nothing is running. A dismissed prompt leaves the filter alone; an empty answer
+  clears it. The numerator counts what the body draws, so `0 of 200` and "nothing matches"
+  cannot contradict each other.
 - **The sidebar groups the running sessions by the conversation that started them.** The
   list was global: a conversation that had started no PTY still saw the whole machine's
   sessions, and without the parent id by heart there was no way to tell whose process a row

@@ -1,10 +1,11 @@
-import { appendFileSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
 import { Plugin } from '@opencode/plugin/tui'
-import { runtimeDir } from '../shared/runtime.ts'
+import { countSessions } from '../web/shared/session-search.ts'
 import { createActions } from './actions.ts'
-import type { PanelSession } from './lib.ts'
+import { debug } from './debug.ts'
+import { registerFilterCommand } from './filter-command.ts'
+import { type PanelSession, resolveParentTitles } from './lib.ts'
 import {
+  groupsForDisplay,
   initialPanelState,
   MAX_START_FAILURES,
   noteListSuccess,
@@ -12,12 +13,14 @@ import {
   noteStartError,
   noteUnreachable,
   type PanelState,
+  sessionCountForHeader,
   statusWhenUnavailable,
   visibleSessions,
 } from './panel-state.ts'
 import { type PanelView, sidebarFooterView, sidebarView } from './render.ts'
 import { findProjectOrigin, isHealthy, listSessions } from './server.ts'
 import { createSessionPanelHost } from './session-panel-host.ts'
+import { initialSidebarPrefs, SIDEBAR_PREFS_KEY, setFilter, toggleGroup } from './sidebar-prefs.ts'
 
 /**
  * The PTY sidebar: this project's PTY sessions, listed where the built-in sidebar
@@ -59,9 +62,6 @@ const BOOTSTRAP_TITLE = 'opencode-pty sidebar bootstrap'
 const BOOTSTRAP_ATTEMPTS = 20
 const BOOTSTRAP_INTERVAL_MS = 300
 
-/** Durable: the collapsed state is a user preference, like the built-in items'. */
-const PREFS_KEY = 'opencode-pty.sidebar'
-
 /**
  * Ephemeral: the list is this process's view of a server that can restart on a new
  * port, and a persisted copy would come back stale on the next start - which looks
@@ -70,46 +70,14 @@ const PREFS_KEY = 'opencode-pty.sidebar'
  */
 const PANEL_KEY = 'opencode-pty.sidebar.panel'
 
-/**
- * A TUI plugin has no console, and its wiring cannot be driven headlessly by the
- * test suite, so a small event log is the only way to diagnose interaction
- * problems. Off by default: it appends unboundedly, and a plugin that quietly grows
- * a file forever is not acceptable. `PTY_TUI_DEBUG=1` turns it on.
- */
-const DEBUG_ENV = 'PTY_TUI_DEBUG'
-
-function debugEnabled(): boolean {
-  const value = process.env[DEBUG_ENV]
-  return typeof value === 'string' && value !== '' && value !== '0'
-}
-
-function debug(event: string, detail?: unknown): void {
-  if (!debugEnabled()) return
-  try {
-    // The runtime dir, so this lands beside the origin records: per-user and
-    // already 0700, rather than a world-readable path in /tmp.
-    const dir = runtimeDir()
-    mkdirSync(dir, { recursive: true, mode: 0o700 })
-    const suffix = detail === undefined ? '' : ` ${JSON.stringify(detail)}`
-    appendFileSync(join(dir, 'tui-debug.log'), `${new Date().toISOString()} ${event}${suffix}\n`, {
-      mode: 0o600,
-    })
-  } catch (_) {
-    /* logging must never break the panel */
-  }
-}
-
 export default Plugin.define({
   id: 'opencode-pty',
   setup(context: Plugin.Context) {
     const [panel, setPanel] = context.storage.memory<PanelState>(PANEL_KEY, {
       initial: initialPanelState(),
     })
-    const [prefs, setPrefs] = context.storage.store(PREFS_KEY, {
-      // All durable, and all preferences rather than session state: which parent
-      // conversation a reader has folded away is their choice, like the archive
-      // expansion and the collapsed state, and it should survive a restart the same way.
-      initial: { collapsed: true, showFinished: false, collapsedGroups: [] as string[] },
+    const [prefs, setPrefs] = context.storage.store(SIDEBAR_PREFS_KEY, {
+      initial: initialSidebarPrefs(),
     })
 
     let disposed = false
@@ -317,57 +285,78 @@ export default Plugin.define({
     /**
      * Fold one parent conversation's rows shut, or open them again.
      *
-     * A durable preference beside the collapsed flag, and for the same reason: what to look
-     * at is the reader's choice, not state the server owns. Keyed by the parent session id,
-     * so a key left over from a conversation that is gone simply never matches a group.
+     * The transition itself is `sidebar-prefs`'s; this only wakes the store, which is what the
+     * host needs to persist and re-render.
      */
     const onToggleGroup = (key: string): void => {
-      const folded = prefs.collapsedGroups.includes(key)
-      setPrefs((draft) => {
-        draft.collapsedGroups = folded
-          ? draft.collapsedGroups.filter((entry) => entry !== key)
-          : [...draft.collapsedGroups, key]
-      })
-      debug('group.toggle', { key, folded: !folded })
+      setPrefs((draft) => toggleGroup(draft, key))
+      debug('group.toggle', { key })
+    }
+
+    /**
+     * Clear the filter, from the header's chip.
+     *
+     * The route that needs no typing, and the reason the chip exists: a reader who cannot see
+     * the rows the query excluded should not have to retype anything to get them back. An empty
+     * query is not a separate state - the shared matcher treats it as no query at all.
+     */
+    const onClearFilter = (): void => {
+      if (prefs.filter === '') return
+      setPrefs((draft) => setFilter(draft, ''))
+      debug('filter.cleared')
     }
 
     /**
      * The parent conversations' titles, for the group headings.
      *
-     * A synchronous lookup on the host rather than a request: the panel already holds a
-     * context, and `data.session.get` answers from the list the TUI keeps. A conversation
-     * whose parent is gone yields no entry - the shared `parentSessionGroupTitle` then
-     * falls back to the stable session id, so the heading never disappears.
+     * A synchronous lookup on the host rather than a request: the panel already holds a context,
+     * and `data.session.get` answers from the list the TUI keeps. The loop itself is in `lib.ts`,
+     * where it is pure and tested.
      */
-    const parentTitles = (sessions: readonly PanelSession[]): Record<string, string> => {
-      const titles: Record<string, string> = {}
-      const seen = new Set<string>()
-      for (const session of sessions) {
-        const id = session.parentSessionId?.trim()
-        if (!id || seen.has(id)) continue
-        seen.add(id)
-        const title = context.data.session.get(id)?.title?.trim()
-        if (title) titles[id] = title
-      }
-      return titles
-    }
+    const parentTitles = (sessions: readonly PanelSession[]): Record<string, string> =>
+      resolveParentTitles(sessions, (id) => context.data.session.get(id)?.title)
 
-    const view = (): PanelView => ({
-      tones: tones(),
-      collapsed: prefs.collapsed,
-      status: panel.status,
-      sessions: panel.sessions,
-      visible: visibleSessions(panel.sessions, prefs.showFinished),
-      titles: parentTitles(panel.sessions),
-      collapsedGroups: prefs.collapsedGroups,
-      showFinished: prefs.showFinished,
-      onToggle,
-      onToggleArchive,
-      onToggleGroup,
-      onClear: actions.onClear,
-      onOpen,
-      onRemove: actions.confirmRemove,
+    registerFilterCommand(context, {
+      current: () => prefs.filter,
+      set: (query) => setPrefs((draft) => setFilter(draft, query)),
+      debug,
     })
+
+    const view = (): PanelView => {
+      const titles = parentTitles(panel.sessions)
+      const visible = visibleSessions(panel.sessions, prefs.showFinished)
+      const groups = groupsForDisplay(visible, titles, prefs.filter)
+      return {
+        tones: tones(),
+        collapsed: prefs.collapsed,
+        // `origin !== null` is exactly "the last list landed" - the non-count statuses
+        // (idle, starting, unreachable, a named cause) all clear it - so the count is
+        // substituted only where `panel.status` IS a count.
+        status:
+          panel.origin === null
+            ? panel.status
+            : sessionCountForHeader(
+                panel.sessions.length,
+                // Counted over the groups the body draws, so the numerator and "nothing
+                // matches" agree instead of contradicting each other.
+                countSessions(groups),
+                prefs.filter
+              ),
+        sessions: panel.sessions,
+        groups,
+        titles,
+        filter: prefs.filter,
+        collapsedGroups: prefs.collapsedGroups,
+        showFinished: prefs.showFinished,
+        onToggle,
+        onToggleArchive,
+        onToggleGroup,
+        onClearFilter,
+        onClear: actions.onClear,
+        onOpen,
+        onRemove: actions.confirmRemove,
+      }
+    }
 
     context.ui.slot({
       // Additive: the panel sits ALONGSIDE the built-in sidebar items rather than

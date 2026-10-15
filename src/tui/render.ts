@@ -20,10 +20,11 @@ import {
   truncateText,
 } from './lib.ts'
 import {
+  emptyListLabel,
   failedFinished,
   failureCount,
+  filterChipLabel,
   GROUP_AUTO_OPEN_LIMIT,
-  groupsForDisplay,
   isGroupOpen,
   type PanelGroup,
   sessionCountLabel,
@@ -68,13 +69,19 @@ export interface PanelView {
   /**
    * Every session the server reported, in display order.
    *
-   * The counts and the clear control read THIS, not `visible`: a count that described
-   * the visible rows would report 3 while the archive holds 200, and a clear that acted
+   * The counts and the clear control read THIS, not `groups`: a count that described the
+   * visible rows would report 3 while the archive holds 200, and a clear that acted
    * on the visible rows would silently keep the other 197.
    */
   readonly sessions: readonly PanelSession[]
-  /** The rows to draw: every running session, plus the failed ones when expanded. */
-  readonly visible: readonly PanelSession[]
+  /**
+   * The groups to draw, already filtered and ordered by the wiring.
+   *
+   * Built by `groupsForDisplay` over what `visibleSessions` selected, so a group holding
+   * nothing running appears only while the archive expansion is open, and one the query
+   * emptied is gone rather than drawn as an empty heading.
+   */
+  readonly groups: readonly PanelGroup[]
   /**
    * The parent conversations' titles, by id, for the group headings.
    *
@@ -83,12 +90,16 @@ export interface PanelView {
    * fall back through `parentSessionGroupTitle` instead of vanishing.
    */
   readonly titles: Readonly<Record<string, string>>
+  /** The active filter, echoed where an empty list has to explain itself. */
+  readonly filter: string
   /** The group keys the reader has folded shut. */
   readonly collapsedGroups: readonly string[]
   /** Whether the footer has asked for the failed finished rows. */
   readonly showFinished: boolean
   /** Fold or unfold one group's rows. */
   readonly onToggleGroup: (key: string) => void
+  /** Clear the active filter. */
+  readonly onClearFilter: (event: MouseEvent) => void
   /** Expand/collapse the header. */
   readonly onToggle: (event: MouseEvent) => void
   /** Show or hide the failed finished rows. */
@@ -180,6 +191,26 @@ function headerFor(view: PanelView) {
       }),
       jsx('text', {
         fg: view.tones.muted,
+        // The active filter, and the way to clear it that needs no typing. `onMouseDown` ONLY,
+        // for the same reason as its neighbours: a click delivers both events, so registering
+        // the clear on each would run it twice. Stopped so the press does not reach the header
+        // toggle and collapse the section on the way.
+        onMouseDown: (event: MouseEvent) => {
+          event.stopPropagation()
+          view.onClearFilter(event)
+        },
+        // Empty when nothing is filtered: a zero-width element presents no hit target, so the
+        // header never offers a click that would clear nothing - the rule the clear control
+        // above follows too.
+        // A leading space only while it is drawn, so the segment does not open a gap for
+        // nothing when no filter is set.
+        children: (): string => {
+          const chip = filterChipLabel(view.filter)
+          return chip === '' ? '' : `  ${chip}`
+        },
+      }),
+      jsx('text', {
+        fg: view.tones.muted,
         onMouseDown: (event: MouseEvent) => {
           // Without this the click would also collapse the panel, hiding the very
           // list it is cleaning.
@@ -255,16 +286,16 @@ function listFor(view: PanelView) {
     width: '100%',
     children: (): unknown[] => {
       if (view.collapsed) return []
-      if (view.visible.length === 0) {
-        // Says what is true rather than showing an empty box: nothing is running. The
-        // footer carries the archive count, so this line does not repeat it.
-        return [jsx('text', { fg: view.tones.muted, children: '   nothing running' })]
+      if (view.groups.length === 0) {
+        // Says what is true rather than showing an empty box, and names the query when one is
+        // active: "nothing running" under a filter would claim no process is alive, which is a
+        // different thing from the query having excluded them all.
+        return [jsx('text', { fg: view.tones.muted, children: emptyListLabel(view.filter) })]
       }
-      // One heading per parent conversation, then its rows while it is unfolded. The
-      // grouping applies to the VISIBLE set, so a group holding nothing running appears
-      // only while the archive expansion is open - which is what keeps a 200-session
-      // archive from becoming a wall of headings in a 40-column sidebar.
-      return groupsForDisplay(view.visible).flatMap((group) => {
+      // One heading per parent conversation, then its rows while it is unfolded. The groups
+      // arrive already ordered and filtered, so the fold decision here and the heading's
+      // chevron read the same count.
+      return view.groups.flatMap((group) => {
         const open = isGroupOpen(group.sessions.length, group.key, view.collapsedGroups)
         return [
           groupHeaderFor(view, group, open),

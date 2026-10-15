@@ -263,6 +263,16 @@ sits under `Ungrouped`. The archive in the footer stays a single count rather th
 groups: 200 sessions across 20 conversations would be a wall of headings in a ~40-column
 sidebar.
 
+`/pty-filter` narrows the list. The host's own prompt does the typing — the plugin draws no
+text field and handles no keys of its own — so the query is asked for from the palette or as
+a slash command and is stored with the other preferences. Matching goes through the same
+shared matcher the web sidebar uses: case-insensitively, against the conversation heading and
+every field a row already shows, and a conversation whose heading matches keeps its whole
+group. While a filter is set the header reads `N of 200`, so the true total stays visible, the
+query sits beside it as a chip you can click to clear, and an empty list names the query
+instead of claiming nothing is running. A dismissed prompt leaves the filter as it was; an
+empty answer clears it.
+
 The panel needs the PTY server, and starts it when you expand the section. It
 does **not** start it on OpenCode's startup: starting it creates and deletes a
 session, which does not belong on a load path. If the PTY plugin is not
