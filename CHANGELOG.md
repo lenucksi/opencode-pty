@@ -239,6 +239,21 @@ beside the built-in sidebar items rather than replacing them.
 
 ### Fixed
 
+- **The send dialog survived the gesture that opened it, and grew the keys it was missing.** The
+  dialog asked for on the panel header's mouse-down was dead on arrival: a click delivers a
+  mouse-down and a mouse-up, and by release time the host's dialog backdrop sat under the pointer,
+  whose mouse-up closes the dialog - so the field only stayed open while the button was held.
+  Reported by a reader, reproduced from the host's own backdrop handler
+  (`packages/tui/src/ui/dialog.tsx` in the opencode checkout). The opener now fires on mouse-up -
+  mousedown-only stays for the togglers, and a one-shot open belongs to the release. The dialog
+  itself is now the plugin's own rather than the SDK prompt, because the SDK one draws only a title
+  and a field: it has a `✕ close` the pointer can click, `enter submit · esc close` for the
+  keyboard, and a row of key chips (`Ctrl+C`, `Ctrl+D`, `Ctrl+Z`, `Esc`, `Tab`, `Enter`) that send
+  their control byte at once, without the typed line - `writeInput` posts bytes, so the chips are
+  data, and the ending key is data the line discipline reads as enter. The dialog settles once and
+  closes after, so a dismissal and a submission cannot interleave; the action keeps a blank-line
+  guard at the seam because a whitespace answer is neither a key nor a command.
+
 - **A row clicked in the sidebar now shows that process, even when its conversation is another
   project's.** The sidebar lists PTYs from every project, while a panel belongs to ONE session and
   listed only that session's processes - so a row whose conversation this project has never opened

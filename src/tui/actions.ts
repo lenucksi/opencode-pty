@@ -12,6 +12,7 @@ import {
 import { dialogRows, dialogSize, outputDialogView } from './output-dialog.ts'
 import type { Tones } from './tones.ts'
 import { cleanupSession, readScreen, writeInput } from './server.ts'
+import { toLinePayload, type SendChoice, type SendDialogRequest } from './send-dialog.ts'
 
 /**
  * What a person can do to a session from the panel, and what each one costs.
@@ -51,6 +52,13 @@ export interface ActionDeps {
    * rename to miss.
    */
   readonly tones: () => Tones
+  /**
+   * The reader's answer to a send dialog: what they typed, which key they clicked, or
+   * nothing. The dialog is the plugin's own (`openSendDialog`), so the choice arrives
+   * at a seam the action reads rather than as a string the host shaped - which is why
+   * the queries who cannot reach a dialog (tests, a future batch mode) can answer here.
+   */
+  readonly sendDialog: (request: SendDialogRequest) => Promise<SendChoice | undefined>
 }
 
 export interface Actions {
@@ -148,15 +156,22 @@ export function createSendInput(deps: ActionDeps) {
     let sent = false
     try {
       const outcome = await withOrigin(deps, async (origin) => {
-        const typed = await deps.context.ui.dialog.prompt({
+        // The plugin's own dialog rather than `ui.dialog.prompt`: the reader asked for
+        // keys a line cannot be (ctrl-c, enter) inside the same surface, with a close
+        // they can click. The dialog settles first and closes after, so a dismissal and
+        // a submission cannot interleave - see `openSendDialog`.
+        const choice = await deps.sendDialog({
+          tones: deps.tones(),
           title: `Send to ${label}`,
-          description: 'One line. It reaches the program as if typed, plus Enter.',
-          placeholder: 'q',
+          description: 'One line reaches the program as if typed, plus Enter; keys send at once.',
         })
-        if (typed === undefined) return
-        if (typed.trim().length === 0) return
+        if (choice === undefined) return
+        // A whitespace-only line is not a key press and not a command: the dialog refuses
+        // one, and this guard holds SHOULD something open the seam with one anyway -
+        // sending it would put a blank line into a program that may act on it.
+        if (choice.kind === 'line' && choice.line.trim().length === 0) return
 
-        const data = typed.endsWith('\n') ? typed : `${typed}\n`
+        const data = choice.kind === 'line' ? toLinePayload(choice.line) : choice.bytes
         await writeInput(origin, session.id, data)
         sent = true
         deps.debug('input.sent', { id: session.id, chars: data.length })

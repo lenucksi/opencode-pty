@@ -1,6 +1,7 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { countSessions } from '../web/shared/session-search.ts'
 import { createActions } from './actions.ts'
+import { openSendDialog } from './send-dialog.ts'
 import { debug } from './debug.ts'
 import { registerFilterCommand } from './filter-command.ts'
 import { type PanelSession, resolveParentTitles } from './lib.ts'
@@ -225,6 +226,7 @@ export default Plugin.define({
       findOrigin: () => originFinder.find(false),
       debug,
       tones,
+      sendDialog: (request) => openSendDialog(context, request),
     })
 
     const sessionPanelHost = createSessionPanelHost({

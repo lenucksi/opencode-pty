@@ -140,7 +140,13 @@ function panelHeader(view: SessionPanelView, chosen: PanelSession | null) {
         // Only for a process that can still be written to: a control opening an input field
         // whose answer the server refuses is worse than no control at all.
         children: (): string => (chosen !== null && !isFinished(chosen) ? '⌨ send' : ''),
-        onMouseDown: (event: MouseEvent) => {
+        // On RELEASE, and that is load-bearing: a click delivers a mouse-down and a
+        // mouse-up, and a dialog asked for on the down is closed by that same gesture's
+        // up - by release time the host's dialog backdrop sits under the pointer and its
+        // mouse-up handler dismisses it, which reads as a prompt that dies unless the
+        // button is held. The toggles above stay on mousedown because they are toggles;
+        // this opens once, and once is what the release belongs to.
+        onMouseUp: (event: MouseEvent) => {
           event.stopPropagation()
           if (chosen !== null && !isFinished(chosen)) view.onSend(chosen)
         },

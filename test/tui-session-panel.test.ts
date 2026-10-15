@@ -329,6 +329,7 @@ describe('sessionPanelView', () => {
 
   // The selection is marked in the text as well as by colour: a reader who cannot tell
   // the tones apart still has to see which row is on screen.
+
   test('marks the selected row in the text', async () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(
@@ -625,7 +626,14 @@ describe('sessionPanelView', () => {
     const rendered = await setup(element)
     const column = rendered.captureCharFrame().split('\n')[0]?.indexOf('⌨') ?? -1
     if (column < 0) throw new Error('the panel header draws no send control to click')
-    await rendered.mockMouse.click(column, 0)
+    // The ORDER is what keeps the dialog alive in production: asked for on the down,
+    // the dialog dies on that same gesture's up - the backdrop under the pointer
+    // receives the release and closes. So the up, not the down, may be what requests
+    // the input, and this asserts the order rather than only reachability.
+    await rendered.mockMouse.pressDown(column, 0)
+    await rendered.renderOnce()
+    expect(sent).toEqual([])
+    await rendered.mockMouse.release(column, 0)
     await rendered.renderOnce()
     expect(sent).toEqual(['pty_9'])
   })
