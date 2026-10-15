@@ -164,6 +164,13 @@ interface Observed {
   answerPrompt: string | undefined
   /** When set, the prompt throws this instead of answering. */
   promptError?: string
+  /**
+   * What the server half's RPC answers with the address, when it has one.
+   *
+   * Unset models a host whose RPC has no server running (or none at all), which must fall through
+   * to the origin record rather than breaking the poll.
+   */
+  rpcOrigin?: string
 }
 
 let runtimeDir: string
@@ -240,6 +247,14 @@ function makeContext(observed: Observed): TuiContext {
         observed.sessionCalls.push('remove')
       },
     },
+    // The call the panel makes FIRST, before any record is consulted. A host without RPC, or one
+    // whose server is not up, rejects - which is an answer, not a failure.
+    rpc: () => ({
+      origin: async (): Promise<{ url: string }> => {
+        if (observed.rpcOrigin === undefined) throw new Error('not_running')
+        return { url: observed.rpcOrigin }
+      },
+    }),
   }
 
   const ui = {
@@ -739,6 +754,51 @@ describe('the PTY sidebar panel', () => {
     } finally {
       server[Symbol.dispose]()
       rmSync(appDir, { recursive: true, force: true })
+    }
+  })
+
+  // The shape ONE `opencode serve --service` produces, measured on the author's machine: the PTY
+  // server lives in that long-lived process and is filed under the directory IT was started in,
+  // while the panel sits in a session elsewhere and the app default is elsewhere again. Neither
+  // key the panel can name matches, and it read "not running" - with the footer gone, because it
+  // had no sessions to report on at all.
+  test('finds a server filed under a directory neither key names', async () => {
+    const serviceDir = realpathSync(mkdtempSync(join(tmpdir(), 'pty-tui-service-')))
+    const appDir = realpathSync(mkdtempSync(join(tmpdir(), 'pty-tui-app2-')))
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: serviceDir })
+    try {
+      await spawnSession('unattributed-session', 'sh', ['-c', 'exit 1'])
+      const seen = observed()
+      // The session is in `project`, the app default elsewhere, the record under a third.
+      seen.defaultDirectory = appDir
+      await tuiPanel.setup(makeContext(seen))
+
+      const row = await waitForRow(seen, 'unattributed-session', 'exited')
+      if (!row) throw new Error('the panel never listed a server filed under a third directory')
+      expect(panelStore(seen).status).toMatch(/^\d+ sessions?$/)
+    } finally {
+      server[Symbol.dispose]()
+      rmSync(serviceDir, { recursive: true, force: true })
+      rmSync(appDir, { recursive: true, force: true })
+    }
+  })
+
+  // The route that needs no key at all, and the reason it exists. This server publishes NO record
+  // (it was never given a directory to file one under), so a panel that only reads records can
+  // never find it - and a panel that asks can, because the answer comes from the live server.
+  test('finds a server that published no record at all, by asking', async () => {
+    const server = await PTYServer.createServer({ hostname: '127.0.0.1' })
+    try {
+      await spawnSession('unfiled-session', 'sh', ['-c', 'exit 1'])
+      const seen = observed()
+      seen.rpcOrigin = `http://127.0.0.1:${server.server.port}`
+      await tuiPanel.setup(makeContext(seen))
+
+      const row = await waitForRow(seen, 'unfiled-session', 'exited')
+      if (!row) throw new Error('the panel never asked the server half where it is')
+      expect(panelStore(seen).status).toMatch(/^\d+ sessions?$/)
+    } finally {
+      server[Symbol.dispose]()
     }
   })
 

@@ -173,6 +173,16 @@ export interface PluginContextV2 {
     /** Resolves the session title, which the sidebar uses as the group label. */
     readonly get?: Plugin.Context['session']['get']
   }
+  /**
+   * The host's RPC domain, when the build has one.
+   *
+   * This is how the TUI half asks where this server listens instead of deriving it: one
+   * `opencode serve --service` hosts the plugin for every project, so the origin record is filed
+   * under a directory no panel can compute from its own session. Typed from `@opencode/plugin`
+   * so the shape is the real one; optional, because a host without RPC still loads and then the
+   * panel falls back to the record.
+   */
+  readonly rpc?: Plugin.Context['rpc']
 }
 
 export interface PluginV2 {

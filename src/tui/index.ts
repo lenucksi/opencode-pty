@@ -18,7 +18,8 @@ import {
   visibleSessions,
 } from './panel-state.ts'
 import { type PanelView, sidebarFooterView, sidebarView } from './render.ts'
-import { findAnyProjectOrigin, isHealthy, listSessions } from './server.ts'
+import { isHealthy, listSessions } from './server.ts'
+import { createOriginFinder, projectKeys } from './origin.ts'
 import { createSessionPanelHost } from './session-panel-host.ts'
 import {
   fillMissingPrefs,
@@ -27,6 +28,7 @@ import {
   setFilter,
   toggleGroup,
 } from './sidebar-prefs.ts'
+import { PtyServerRpc } from '../v2/rpc.ts'
 
 /**
  * The PTY sidebar: this project's PTY sessions, listed where the built-in sidebar
@@ -64,10 +66,6 @@ import {
  */
 
 const POLL_MS = 2500
-const BOOTSTRAP_TITLE = 'opencode-pty sidebar bootstrap'
-const BOOTSTRAP_ATTEMPTS = 20
-const BOOTSTRAP_INTERVAL_MS = 300
-
 /**
  * Ephemeral: the list is this process's view of a server that can restart on a new
  * port, and a persisted copy would come back stale on the next start - which looks
@@ -106,29 +104,6 @@ export default Plugin.define({
     }
 
     /**
-     * The locations this panel's server may have filed its record under, most specific first.
-     *
-     * The SESSION's location is what the host hands a plugin, and the app's DEFAULT location is
-     * where an `autostart` server publishes - see `findAnyProjectOrigin` for why both are tried.
-     * Best-effort on the fallback: a host that cannot name its default just means one fewer key,
-     * which must not take the poll down.
-     */
-    const originKeys = (): string[] => {
-      const session = context.location?.directory
-      let fallback: string | undefined
-      try {
-        fallback = context.data.location.default().directory
-      } catch (error) {
-        debug('origin.default.failed', { error: String(error) })
-      }
-      const keys = session && session !== fallback ? [session, fallback] : [fallback]
-      return keys.filter((key): key is string => typeof key === 'string' && key.length > 0)
-    }
-
-    /** The origin this app's server published, under either of the keys above. */
-    const findOrigin = (): Promise<string | null> => findAnyProjectOrigin(originKeys())
-
-    /**
      * The theme slots this plugin draws with, named rather than typed.
      *
      * One place, because the sidebar, its dialog and the session panel all need them,
@@ -144,43 +119,34 @@ export default Plugin.define({
     })
 
     /**
-     * Start the server by running this plugin's own command in a throwaway session,
-     * then read the origin it published.
+     * The app's default location, which is where a server that `autostart` started files its
+     * record.
      *
-     * The session is scratch space: the command posts the URL as a chat message,
-     * and a permanent "sidebar bootstrap" row in the user's session list would be
-     * worse than the transcript noise it avoids.
+     * Best-effort: a host that cannot name its default means one fewer key to try, which must not
+     * take the poll down.
      */
-    const startServer = async (): Promise<string | null> => {
-      let sessionID: string | null = null
-      let failure: unknown = null
+    const defaultLocation = (): string | undefined => {
       try {
-        sessionID = (await context.client.session.create({ title: BOOTSTRAP_TITLE })).id
-        await context.client.session.command({ sessionID, name: 'pty-show-server-url', text: '' })
+        return context.data.location.default().directory
       } catch (error) {
-        failure = error
+        debug('origin.default.failed', { error: String(error) })
+        return undefined
       }
-      if (sessionID !== null) {
-        await context.client.session.remove({ sessionID }).catch((error: unknown) => {
-          debug('start.cleanup.failed', { sessionID, error: String(error) })
-        })
-      }
-      if (failure !== null) {
-        setPanel((draft) => noteStartError(draft, failure))
-        return null
-      }
-      // The server publishes its record after binding, so this is a poll rather than
-      // a single check. Bounded: a server that never comes up must not spin.
-      for (let attempt = 0; attempt < BOOTSTRAP_ATTEMPTS; attempt++) {
-        await Bun.sleep(BOOTSTRAP_INTERVAL_MS)
-        const origin = await findOrigin()
-        if (origin !== null) {
-          debug('start.done', { origin, attempt })
-          return origin
-        }
-      }
-      return null
     }
+
+    /**
+     * Where this app's PTY server is - asked over RPC, then looked up by project, then guessed,
+     * and started only when the user asked for it. `origin.ts` owns the order and the reasons.
+     */
+    const originFinder = createOriginFinder({
+      client: context.client,
+      // The raw call: it throws on a host without RPC and rejects `not_running` when none
+      // listens, and both of those mean "look somewhere else".
+      ask: () => context.client.rpc(PtyServerRpc).origin({}),
+      keys: () => projectKeys(context.location?.directory, defaultLocation()),
+      onStartError: (error) => setPanel((draft) => noteStartError(draft, error)),
+      debug,
+    })
 
     const runRefresh = async (mayStart: boolean): Promise<void> => {
       if (mayStart && panel.startFailures >= MAX_START_FAILURES) {
@@ -198,7 +164,7 @@ export default Plugin.define({
         origin = null
       }
       if (origin === null) {
-        origin = (await findOrigin()) ?? (mayStart ? await startServer() : null)
+        origin = await originFinder.find(mayStart)
       }
       if (origin === null) {
         setPanel((draft) => noteNoServer(draft, mayStart))
@@ -255,7 +221,8 @@ export default Plugin.define({
       update: setPanel,
       refresh,
       notify,
-      findOrigin,
+      // No start right: the actions act on a session that came from a list, so a server exists.
+      findOrigin: () => originFinder.find(false),
       debug,
       tones,
     })

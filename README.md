@@ -279,10 +279,14 @@ session, which does not belong on a load path. If the PTY plugin is not
 registered in the project's `opencode.jsonc`, the header says so rather than
 offering a retry that cannot work.
 
-The server publishes its address for the app's own location, so the panel looks
-up the session's location first and the app default second — a session moved with
-`/cd` into a project below the one opencode was launched in therefore still finds
-its server, instead of reporting *not running* beside one that answers.
+The panel asks this plugin's own server half where it is listening — over the
+host's plugin RPC (`@opencode/plugin/rpc`), so the answer is read from the live
+server and needs no project key — and only then falls back to the address the
+server published for a project. That order matters when one
+`opencode serve --service` hosts the plugin for several projects: the published
+record is filed under the directory that process was started in, which a panel
+cannot derive from its own session, and deriving it alone meant reading *not
+running* beside a server that answered.
 
 ### Requirements
 

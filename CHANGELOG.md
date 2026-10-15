@@ -239,6 +239,19 @@ beside the built-in sidebar items rather than replacing them.
 
 ### Fixed
 
+- **The sidebar asks the server half where it is listening, instead of deriving it.** The origin
+  record is filed under the location the server was STARTED for, and one long-lived
+  `opencode serve --service` makes that unknowable: it hosts the plugin for every project the
+  user opens, so the record sits under the directory that process was started in while the panel
+  sits in a session somewhere else. Measured while chasing it - the record said `/var/home/j`
+  while the panel was in `.../homelab/openwrt-installer-lab`, with 376 sessions (48 of them
+  failed) behind a server that answered `/health`, and the panel read "not running". A plugin can
+  register an RPC method its TUI half calls (`@opencode/plugin/rpc`, `context.client.rpc`), so
+  this plugin now answers one question - where is the server - read off the live server object.
+  That needs no key and cannot be stale. The record is still tried next, since that is what a host
+  without RPC has, and a panel that can name neither still takes any healthy record, logged,
+  because a list from another instance beats no list at all. Starting a server stays where it was:
+  only a user who expanded the panel causes one.
 - **A sidebar store written before a field existed took the whole section down.** The host's
   `store` persists an object and hands it back exactly as it was: `initial` is used only when
   nothing was stored, and is never merged into what comes back. So every preference added after

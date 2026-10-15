@@ -1,4 +1,4 @@
-import { candidateOrigins, originsForProject } from '../shared/runtime.ts'
+import { candidateOrigins, originsForProject, readOrigins } from '../shared/runtime.ts'
 import { decodeScreen, isPtyHealth, type PanelSession } from './lib.ts'
 
 /**
@@ -77,6 +77,29 @@ export async function findAnyProjectOrigin(
   for (const directory of directories) {
     const origin = await findProjectOrigin(directory)
     if (origin !== null) return origin
+  }
+  return null
+}
+
+/**
+ * The first healthy origin among EVERY record this user has, ignoring the project key.
+ *
+ * A last resort, and it exists because the key cannot always be derived: one long-lived
+ * `opencode serve --service` hosts this plugin for several projects at once, so the record is
+ * filed under the location THAT process was started in - a directory no panel can compute from
+ * its own session. The project keys are tried first, so this only fires when there is nothing to
+ * attribute; and when it does, there is one server and it answers `/health`.
+ *
+ * The trade-off is stated rather than hidden: the records are per-user and 0700, so "every
+ * record" is every server this user started. With two of them, a panel that could not find its
+ * own may show the other one's list - which is still a better answer than "not running" beside a
+ * server that answers, but it is not the same as being right.
+ */
+export async function findAnyHealthyOrigin(): Promise<string | null> {
+  for (const record of readOrigins()) {
+    for (const candidate of candidateOrigins(record)) {
+      if (await isHealthy(candidate)) return candidate
+    }
   }
   return null
 }
