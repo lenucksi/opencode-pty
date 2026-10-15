@@ -239,6 +239,15 @@ beside the built-in sidebar items rather than replacing them.
 
 ### Fixed
 
+- **A sidebar store written before a field existed took the whole section down.** The host's
+  `store` persists an object and hands it back exactly as it was: `initial` is used only when
+  nothing was stored, and is never merged into what comes back. So every preference added after
+  a reader's first run is `undefined` until something writes it - and `filter` was read as a
+  string, reached `normalizeQuery`, and threw `undefined is not an object (evaluating
+  'query.trim')` inside the `sidebar.content` slot on every render, which is why dismissing the
+  crash panel brought it straight back. The preferences are now repaired once per setup
+  (`fillMissingPrefs`), which also replaces a stored value of the wrong type, and covers
+  `collapsedGroups` from the same kind of store.
 - **The sidebar reported "not running" next to a healthy server, so its footer stayed empty.**
   A PTY server files ONE origin record, under the location it was STARTED for, while the host
   hands a plugin the SESSION's location (`packages/tui/src/routes/session/index.tsx` sets it

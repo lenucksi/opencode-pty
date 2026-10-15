@@ -31,6 +31,27 @@ export function initialSidebarPrefs(): SidebarPrefs {
 }
 
 /**
+ * Fill in the preferences a store written by an OLDER build does not carry.
+ *
+ * The host's `store` persists an object and restores it as it was: `initial` is used only when
+ * nothing was stored, and is never merged into what comes back. So every field added after a
+ * reader's first run is `undefined` until something writes it - and reading one is not a missing
+ * value but a crash: `filter` reached `normalizeQuery`, which calls `query.trim()`, and took the
+ * whole `sidebar.content` slot down with "undefined is not an object". Repaired once per setup,
+ * so no field added later has to remember this.
+ *
+ * `Partial` rather than `SidebarPrefs` on purpose: the type describes what this build writes,
+ * not what a store from a previous one contains.
+ */
+export function fillMissingPrefs(prefs: Partial<SidebarPrefs>): void {
+  const defaults = initialSidebarPrefs()
+  if (typeof prefs.collapsed !== 'boolean') prefs.collapsed = defaults.collapsed
+  if (typeof prefs.showFinished !== 'boolean') prefs.showFinished = defaults.showFinished
+  if (!Array.isArray(prefs.collapsedGroups)) prefs.collapsedGroups = defaults.collapsedGroups
+  if (typeof prefs.filter !== 'string') prefs.filter = defaults.filter
+}
+
+/**
  * Fold one parent conversation's rows shut, or open them again.
  *
  * Keyed by the parent session id, so a key left over from a conversation that is gone simply

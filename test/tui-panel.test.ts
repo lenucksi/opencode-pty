@@ -151,6 +151,13 @@ interface Observed {
    * hands a plugin, and the two part company as soon as a session is moved.
    */
   defaultDirectory?: string
+  /**
+   * Durable stores to restore instead of `initial`, by key.
+   *
+   * The host persists an object and hands it back as it was, so a store written by an older
+   * build is missing whatever was added since. A case that wants that has to say so.
+   */
+  persisted?: Record<string, Record<string, unknown>>
   /** The prompts the plugin opened, in order. */
   prompts: { readonly title: string; readonly value?: string }[]
   /** What the prompt resolves with. `undefined` is the dismissed dialog. */
@@ -200,11 +207,18 @@ function panelTheme(): TuiContext['theme'] {
 function makeContext(observed: Observed): TuiContext {
   // A store is modelled as the object plus a mutator that applies the draft. That
   // is exactly what the panel reads; see the file header for what it cannot model.
+  //
+  // `persisted` models the one thing the host does that a naive fixture hides: a durable store
+  // comes back exactly as it was persisted, and `initial` is NOT merged into it. Without that,
+  // every case would be handed a complete object and a field added after a reader's first run
+  // could never be seen missing - which is how a missing `filter` reached a `.trim()`.
   const store = <Value extends object>(key: string, options: { initial: Value }) => {
-    observed.stores.set(key, options.initial as Record<string, unknown>)
+    const restored = observed.persisted?.[key]
+    const value = (restored ?? options.initial) as Value
+    observed.stores.set(key, value as Record<string, unknown>)
     const pair: readonly [Value, (mutation: (draft: Value) => void) => void] = [
-      options.initial,
-      (mutation) => mutation(options.initial),
+      value,
+      (mutation) => mutation(value),
     ]
     return pair
   }
@@ -747,6 +761,29 @@ describe('the PTY sidebar panel', () => {
     } finally {
       server[Symbol.dispose]()
     }
+  })
+
+  // The crash a reader reported: a prefs store written before `filter` and `collapsedGroups`
+  // existed comes back without those keys, the host does NOT merge `initial` into it, and the
+  // first read of one took the whole section down - "openode-pty crashed in slot
+  // sidebar.content: undefined is not an object (evaluating 'query.trim')". Every render threw,
+  // so dismissing the panel brought it straight back.
+  test('repairs a prefs store written before a field existed', async () => {
+    const seen = observed()
+    // Exactly what a build from before those two fields left behind.
+    seen.persisted = { 'opencode-pty.sidebar': { collapsed: false, showFinished: false } }
+    await tuiPanel.setup(makeContext(seen))
+
+    // The render that used to throw now draws the truth. First, because this is the failure a
+    // reader saw: the section did not misreport, it did not draw at all.
+    const frame = await sidebarFrame(seen)
+    expect(frame).toContain('PTY')
+    expect(frame).toContain('nothing running')
+
+    // And the values it reads are filled in, rather than handed to a `.trim()` as undefined.
+    const prefs = prefsOf(seen)
+    expect(prefs.filter).toBe('')
+    expect(prefs.collapsedGroups).toEqual([])
   })
 
   // A click delivers BOTH a mouse-down and a mouse-up, so a toggle registered on each

@@ -20,7 +20,13 @@ import {
 import { type PanelView, sidebarFooterView, sidebarView } from './render.ts'
 import { findAnyProjectOrigin, isHealthy, listSessions } from './server.ts'
 import { createSessionPanelHost } from './session-panel-host.ts'
-import { initialSidebarPrefs, SIDEBAR_PREFS_KEY, setFilter, toggleGroup } from './sidebar-prefs.ts'
+import {
+  fillMissingPrefs,
+  initialSidebarPrefs,
+  SIDEBAR_PREFS_KEY,
+  setFilter,
+  toggleGroup,
+} from './sidebar-prefs.ts'
 
 /**
  * The PTY sidebar: this project's PTY sessions, listed where the built-in sidebar
@@ -79,6 +85,12 @@ export default Plugin.define({
     const [prefs, setPrefs] = context.storage.store(SIDEBAR_PREFS_KEY, {
       initial: initialSidebarPrefs(),
     })
+    // A store written by an earlier build carries only the keys that existed then, and the host
+    // restores it AS IT WAS rather than merging `initial` into it. Repaired before anything reads
+    // a preference: a missing `filter` is not a missing value but a crash - it reached
+    // `normalizeQuery`, `query.trim()` threw, and the whole `sidebar.content` slot went down on
+    // every render.
+    setPrefs((draft) => fillMissingPrefs(draft))
 
     let disposed = false
     let refreshing = false
