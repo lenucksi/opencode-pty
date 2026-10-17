@@ -122,6 +122,10 @@ Permissions: respects OpenCode's `permission.bash`. `"ask"` is treated as `"deny
 
 ## Web UI & TUI panel
 
+![opencode-pty Web UI](docs/media/web-ui-demo.gif)
+
+![opencode-pty TUI panel](docs/media/tui-demo.gif)
+
 - **Web UI**: React/xterm, real-time WebSocket streaming, mouse selection, themes,
   download, session groups, coloured output. Start with `/pty-open-background-spy`.
 - **TUI panel**: a PTY section in OpenCode's sidebar (2.0.23+) and a per-conversation
