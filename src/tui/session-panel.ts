@@ -12,6 +12,7 @@ import {
   rowTone,
   sessionDurationMs,
 } from './lib.ts'
+import { screenNodes } from './screen-nodes.ts'
 import type { Tones } from './tones.ts'
 import type { ScrollCanvas } from './scroll-keeper.ts'
 import { type SessionPanelState, selectedLive, visibleRows } from './session-panel-state.ts'
@@ -249,7 +250,7 @@ function statusBar(view: SessionPanelView, chosen: () => PanelSession | null): u
         picked.cols === undefined || picked.rows === undefined
           ? ''
           : `  ${picked.cols}x${picked.rows}`
-      const rows = view.state.screen === '' ? 0 : view.state.screen.split('\n').length
+      const rows = view.state.screen.text === '' ? 0 : view.state.screen.text.split('\n').length
       return [
         `${picked.id}  ${picked.status ?? '?'}${size}`,
         `lines ${picked.lineCount ?? '?'}  screen ${rows} rows`,
@@ -303,7 +304,11 @@ function framedScreen(view: SessionPanelView): unknown {
       // from the reader's position whether the next poll may drag the view, and the
       // view itself stays a pure function of what it is told.
       ref: (value: ScrollCanvas) => view.onConsoleCanvas?.(value),
-      children: jsx('text', { children: (): string => view.state.screen }),
+      children: jsx('box', {
+        flexDirection: 'column',
+        width: '100%',
+        children: (): unknown[] => screenNodes(view.state.screen),
+      }),
     }),
   })
 }

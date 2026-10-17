@@ -1,5 +1,5 @@
 import { candidateOrigins, originsForProject, readOrigins } from '../shared/runtime.ts'
-import { decodeScreen, isPtyHealth, type PanelSession } from './lib.ts'
+import { decodeScreen, isPtyHealth, type PanelSession, type ScreenContent } from './lib.ts'
 
 /**
  * Everything the panel needs from the PTY server, over HTTP.
@@ -129,7 +129,7 @@ export async function listSessions(origin: string): Promise<PanelSession[]> {
  * believes it has. Asking for a different size would answer a different question, and
  * the dialog has no width to ask with.
  */
-export async function readScreen(origin: string, id: string): Promise<string> {
+export async function readScreen(origin: string, id: string): Promise<ScreenContent> {
   // The history the reader means by "scroll all the way up": the server prepends up to
   // this many scrollback rows before the visible screen. Rounded to the emulator's own
   // cap by the endpoint.

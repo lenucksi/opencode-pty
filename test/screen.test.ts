@@ -233,6 +233,52 @@ describe('renderScreen colour spans', () => {
   })
 })
 
+describe('renderScreen styled lines', () => {
+  // The panel has no terminal, so it cannot turn a cell column back into a character
+  // (a wide character is one character and two cells). `styledLines` is the same runs
+  // already resolved to text, which is what a renderer without an emulator needs.
+  it('is one entry per visible row', async () => {
+    const screen = await renderScreen('alpha\r\nbeta\r\n', 20, 4)
+
+    expect(screen.styledLines).toHaveLength(4)
+  })
+
+  it('carries the characters and the colour of a run', async () => {
+    const screen = await renderScreen('\x1b[31mred\x1b[0m plain', 20, 3)
+    const row = screen.styledLines[0] ?? []
+
+    expect(row[0]?.text).toBe('red')
+    expect(row[0]?.fg).toMatch(/^#[0-9a-f]{6}$/)
+    // The default-styled stretch is a run too, so a renderer places one node per run
+    // rather than one per row.
+    expect(row[1]?.text).toBe(' plain')
+    expect(row[1]?.fg).toBeUndefined()
+  })
+
+  it('keeps the spaces a background sits on, which `lines` trims away', async () => {
+    const screen = await renderScreen('\x1b[44mtext   \x1b[0m', 20, 3)
+    const row = screen.styledLines[0] ?? []
+
+    // The blue run reaches three columns past the 'text', and the panel has to paint
+    // them or the boot menu's box loses its padding.
+    expect(row[0]?.text).toBe('text   ')
+    expect(row[0]?.bg).toMatch(/^#[0-9a-f]{6}$/)
+  })
+
+  it('drops trailing blank runs that have no background to show', async () => {
+    const screen = await renderScreen('plain   \r\n', 20, 3)
+    const row = screen.styledLines[0] ?? []
+
+    expect(row).toEqual([{ text: 'plain' }])
+  })
+
+  it('is empty for a row with nothing on it', async () => {
+    const screen = await renderScreen('x\r\n', 20, 3)
+
+    expect(screen.styledLines[1]).toEqual([])
+  })
+})
+
 describe('renderScreen geometry', () => {
   it('renders at the requested size rather than a fixed one', async () => {
     const narrow = await renderScreen('x', 10, 3)

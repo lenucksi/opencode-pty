@@ -11,7 +11,7 @@
  * but writes none of it.
  */
 
-import type { PanelSession } from './lib.ts'
+import { type PanelSession, screenContent, type ScreenContent } from './lib.ts'
 import { orderForDisplay } from './panel-state.ts'
 
 export interface SessionPanelState {
@@ -39,8 +39,14 @@ export interface SessionPanelState {
   sessions: PanelSession[]
   /** Which one is on screen, or null when the list is empty. */
   selected: string | null
-  /** Its rendered screen, or a line saying why there is none. */
-  screen: string
+  /**
+   * Its rendered screen, or a line saying why there is none.
+   *
+   * Text plus the colour runs, because a TUI has no terminal of its own: the
+   * screen arrives as characters and the styles that go with them, and the panel
+   * paints both. See `decodeScreen`.
+   */
+  screen: ScreenContent
   /** When the screen was read, so the run timer can be computed from it. */
   now: number
   /**
@@ -60,7 +66,7 @@ export function initialSessionPanelState(): SessionPanelState {
     scope: null,
     sessions: [],
     selected: null,
-    screen: '',
+    screen: screenContent(''),
     now: Date.now(),
     listExpanded: false,
   }
@@ -172,7 +178,7 @@ export function noteSessionPanelList(
   // a question the ordering has already answered - and provably so: with the lookup
   // removed, the same rows come out in the same order.
   state.selected = mine[0]?.id ?? null
-  if (state.selected === null) state.screen = NO_SELECTION_SCREEN
+  if (state.selected === null) state.screen = screenContent(NO_SELECTION_SCREEN)
 }
 
 /** The row the panel is showing, or null when there is no selection. */
@@ -201,11 +207,15 @@ export function selectedLive(
 export function noteSessionSelected(state: SessionPanelState, id: string): void {
   if (state.selected === id) return
   state.selected = id
-  state.screen = LOADING_SCREEN
+  state.screen = screenContent(LOADING_SCREEN)
 }
 
 /** A screen read landed, or failed and says so. */
-export function noteSessionScreen(state: SessionPanelState, screen: string, now: number): void {
+export function noteSessionScreen(
+  state: SessionPanelState,
+  screen: ScreenContent,
+  now: number
+): void {
   if (state.selected === null) return
   state.screen = screen
   state.now = now

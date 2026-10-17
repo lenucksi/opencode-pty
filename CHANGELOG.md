@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+**The TUI session panel draws the colours the program used**
+
+The panel rendered a session's screen as plain text, so a program that paints - the
+UEFI boot menu, `ls --color`, `htop` - arrived in black and white while the same
+session was coloured in the web UI. The colour was never missing on the wire: the
+server's screen render already resolved every cell's foreground, background and
+attributes. It was dropped twice on the way to the panel - once when the decoder
+kept only the rows, and once when the renderer drew one plain string.
+
+The response now carries `styledLines`: the same runs as `spans`, but as text, so a
+consumer without a terminal of its own can place the characters (a wide character is
+one character and two cells, which is why cell coordinates alone were not enough).
+The panel draws one `<text>` per run in a row box. Background padding survives - the
+boot menu's blue box is a run of spaces carrying a background - while plain trailing
+padding is still trimmed.
+
 ## [0.7.0] - 2026-10-17
 
 ### Added
