@@ -2,7 +2,7 @@
 
 ## How It Works
 
-1. **Spawn**: Creates a PTY using [bun-pty](https://github.com/nicksrandall/bun-pty), runs command in background
+1. **Spawn**: Creates a PTY using [bun-pty](https://github.com/sursaone/bun-pty), runs command in background
 2. **Buffer**: Output is captured into a rolling line buffer (ring buffer)
 3. **Read**: Agent can read buffer anytime with offset/limit pagination
 4. **Filter**: Optional regex pattern filters lines before pagination

@@ -174,7 +174,8 @@ Contributions welcome. Open an issue or PR. See [`CONTRIBUTING.md`](CONTRIBUTING
 ## Credits
 
 - [OpenCode](https://opencode.ai) — the coding assistant this plugin extends
-- [bun-pty](https://github.com/nicksrandall/bun-pty) — cross-platform PTY for Bun
+- [bun-pty](https://github.com/sursaone/bun-pty) — cross-platform PTY for Bun
+- [shekohex/opencode-pty](https://github.com/shekohex/opencode-pty) — the upstream project this fork is based on; thanks for the original work
 
 ---
 
