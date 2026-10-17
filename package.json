@@ -3,7 +3,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "module": "dist/index.js",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "OpenCode plugin for interactive PTY management - run background processes, send input, read output with regex filtering",
   "author": "shekohex",
   "keywords": [
@@ -125,8 +125,8 @@
     "opencode": ">=1.18.31"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.19.0",
-    "@opencode-ai/sdk": "^1.19.0",
+    "@opencode-ai/plugin": "^1.19.3",
+    "@opencode-ai/sdk": "^1.19.3",
     "@opencode/plugin": "^2.0.29",
     "bun-pty": "^0.5.1",
     "ghostty-web": "github:anomalyco/ghostty-web#6e24d040458ddd7aae81572fe2901deec32f9fe7",
