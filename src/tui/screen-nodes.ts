@@ -29,10 +29,11 @@ export function screenNodes(screen: ScreenContent): unknown[] {
     const runs = screen.runs[index]
     const cells: unknown[] =
       runs === undefined || runs.length === 0
-        ? [jsx('text', { wrapMode: 'none', children: line })]
+        ? [jsx('text', { wrapMode: 'none', flexShrink: 0, children: line })]
         : runs.map((run) =>
             jsx('text', {
               wrapMode: 'none',
+              flexShrink: 0,
               fg: run.fg,
               bg: run.bg,
               attributes: runAttributes(run),
