@@ -104,7 +104,18 @@ test('record README demo', async ({ page }) => {
   await waitForTerminalRegex(page, /watch mode active/, undefined, 30_000)
   await page.waitForTimeout(BEAT)
 
-  // --- Scene 3: switch to the other session, then back ---
+  // --- Scene 3: scrollback — the buffer keeps history you can scroll through ---
+  await openTerminal(page, 'build')
+  await waitForTerminalRegex(page, /watch mode active/, undefined, 15_000)
+  await page.waitForTimeout(BEAT)
+  const scrollBox = page.locator('.terminal.xterm')
+  await scrollBox.hover()
+  await page.mouse.wheel(0, -600)
+  await page.waitForTimeout(BEAT * 2)
+  await page.mouse.wheel(0, 600)
+  await page.waitForTimeout(BEAT)
+
+  // --- Scene 4: switch to the other session, then back ---
   await openTerminal(page, 'api')
   await page.waitForTimeout(BEAT * 2)
 
@@ -112,7 +123,7 @@ test('record README demo', async ({ page }) => {
   await waitForTerminalRegex(page, /watch mode active/, undefined, 15_000)
   await page.waitForTimeout(BEAT)
 
-  // --- Scene 4: mouse selection and copy ---
+  // --- Scene 5: mouse selection and copy ---
   const terminalBox = await page.locator('.terminal.xterm').boundingBox()
   if (!terminalBox) {
     throw new Error('terminal is not visible')
@@ -138,7 +149,18 @@ test('record README demo', async ({ page }) => {
   await selectTheme(page, 'Dark')
   await page.waitForTimeout(BEAT)
 
-  // --- Scene 6: a session finishes and moves to the finished section ---
+  // --- Scene 6: settings — the server's archive policy, enforced on the shared store ---
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await page.waitForSelector('.settings-dialog', { timeout: 5_000 })
+  await page.waitForTimeout(BEAT)
+  const retention = page.getByTestId('settings-retention')
+  await retention.scrollIntoViewIfNeeded()
+  await page.waitForTimeout(BEAT * 2)
+  // close the dialog
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(BEAT)
+
+  // --- Scene 7: a session finishes and moves to the finished section ---
   const sessions = await api.sessions.list()
   const migrate = sessions.find((session) => session.description === 'migrate')
   if (!migrate) {
@@ -155,7 +177,7 @@ test('record README demo', async ({ page }) => {
   await expect(finishedItem).toHaveCount(1, { timeout: 15_000 })
   await page.waitForTimeout(BEAT * 2)
 
-  // --- Scene 7: back to the streaming server session ---
+  // --- Scene 8: back to the streaming server session ---
   await openTerminal(page, 'api')
   await page.waitForTimeout(BEAT * 2)
 
