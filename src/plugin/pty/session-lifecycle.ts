@@ -154,11 +154,29 @@ export class SessionLifecycleManager {
       process: null, // will be set
       cols,
       rows,
+      raw: opts.raw,
     }
   }
 
   private spawnProcess(session: PTYSession): void {
-    const ptyProcess: IPty = spawn(session.command, session.args, {
+    // Raw mode has to be set on the PTY slave BEFORE the command starts, and
+    // bun-pty exposes no way to do that from here. So the command is run through
+    // a shell that turns the line discipline off first and then replaces itself
+    // with the real program, inheriting the raw settings.
+    //
+    // Why it matters: with the default cooked discipline the kernel applies
+    // ICRNL, so a `\r` written to the master is delivered to the program as
+    // `\n`. A serial console (GRUB, a boot menu) expects `\r` for Enter and
+    // ignores `\n` - which is exactly "cursor keys work, Enter does nothing".
+    // `-echo` also keeps the terminal from double-printing what the program
+    // already echoes. `--` guards a command whose name begins with `-`, and the
+    // permission/executable checks already ran on the original command, so this
+    // wrapper never changes what was authorised.
+    const command = session.raw ? 'sh' : session.command
+    const args = session.raw
+      ? ['-c', 'stty raw -echo 2>/dev/null; exec "$@"', '--', session.command, ...session.args]
+      : session.args
+    const ptyProcess: IPty = spawn(command, args, {
       name: 'xterm-256color',
       cols: session.cols,
       rows: session.rows,
@@ -332,6 +350,7 @@ export class SessionLifecycleManager {
       charCount: session.buffer.charLength,
       cols: session.cols,
       rows: session.rows,
+      ...(session.raw === true ? { raw: true } : {}),
     }
   }
 }

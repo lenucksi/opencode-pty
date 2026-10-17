@@ -68,6 +68,17 @@ export interface PTYSession {
    */
   cols: number
   rows: number
+  /**
+   * Spawned with the PTY slave's line discipline disabled (`stty raw -echo`).
+   *
+   * Opt-in and only for programs that speak a raw byte protocol themselves - a
+   * serial console, a boot menu, anything interactive that is not a shell. In
+   * raw mode the kernel applies no ICRNL, so a `\r` written to the master
+   * reaches the program as `\r` instead of being turned into `\n`; that
+   * translation is why Enter went missing on a libvirt serial console. Echo and
+   * line editing are off too, so a shell would be unusable this way.
+   */
+  raw?: boolean
 }
 
 export interface PTYSessionInfo {
@@ -109,6 +120,8 @@ export interface PTYSessionInfo {
    */
   cols: number
   rows: number
+  /** True when the session runs with the line discipline disabled. See `PTYSession.raw`. */
+  raw?: boolean
   /**
    * Characters currently retained in the buffer.
    *
@@ -141,6 +154,13 @@ export interface SpawnOptions {
   cols?: number
   /** Terminal rows to start with; defaults to the last size a client reported. */
   rows?: number
+  /**
+   * Disable the PTY slave's line discipline (`stty raw -echo`) before the
+   * command runs. Needed for a serial console (e.g. `virsh console`) or any
+   * program that expects a `\r` to stay a `\r`: cooked mode turns it into `\n`
+   * and the program never sees Enter. Not for shells.
+   */
+  raw?: boolean
 }
 
 export interface ReadResult {

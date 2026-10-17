@@ -18,6 +18,7 @@ export async function createSession(req: Request) {
     description?: string
     workdir?: string
     timeoutSeconds?: number
+    raw?: boolean
   }
 
   try {
@@ -44,6 +45,7 @@ export async function createSession(req: Request) {
       description: body.description,
       workdir: body.workdir,
       timeoutSeconds: body.timeoutSeconds,
+      raw: body.raw,
       parentSessionId: WEB_API_PARENT_SESSION_ID,
     })
     return new JsonResponse(session)

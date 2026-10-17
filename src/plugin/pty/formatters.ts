@@ -7,12 +7,13 @@ export function formatSessionInfo(session: PTYSessionInfo): string[] {
   const exitSignal = session.exitSignal ? ` | signal: ${session.exitSignal}` : ''
   const timeoutInfo =
     session.timeoutSeconds !== undefined ? ` | timeout: ${session.timeoutSeconds}s` : ''
+  const rawInfo = session.raw === true ? ' | raw' : ''
   return [
     `[${session.id}] ${session.title}`,
     `  Command: ${session.command} ${session.args.join(' ')}`,
     `  Status: ${session.status}${timedOutInfo}${exitInfo}${exitSignal}`,
     `  PID: ${session.pid}${timeoutInfo}`,
-    `  Lines: ${session.lineCount} | Chars: ${session.charCount} | Size: ${session.cols}x${session.rows}`,
+    `  Lines: ${session.lineCount} | Chars: ${session.charCount} | Size: ${session.cols}x${session.rows}${rawInfo}`,
     `  Workdir: ${session.workdir}`,
     `  Started: ${session.createdAt}`,
     ...(session.endedAt === undefined

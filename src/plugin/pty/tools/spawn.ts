@@ -69,6 +69,12 @@ export const ptySpawn = tool({
       .number()
       .optional()
       .describe('Terminal height in rows. Defaults like `cols`.'),
+    raw: tool.schema
+      .boolean()
+      .optional()
+      .describe(
+        'Run with the PTY line discipline disabled (stty raw -echo). Use for a serial console (e.g. `virsh console`) or any program that wants a `\\r` to stay a `\\r`: cooked mode turns Enter into `\\n` and the program ignores it. Not for shells - it disables echo and line editing. Defaults to false.'
+      ),
   },
   async execute(args, ctx) {
     await checkCommandPermission(args.command, args.args ?? [])
@@ -117,6 +123,7 @@ export const ptySpawn = tool({
         timeoutSeconds: args.timeoutSeconds,
         cols: args.cols,
         rows: args.rows,
+        raw: args.raw,
       })
     )
 
@@ -140,6 +147,7 @@ export const ptySpawn = tool({
       // for 80 columns and is given 40 wraps in the wrong places, and the output
       // itself never says why.
       `Size: ${info.cols}x${info.rows}`,
+      `Raw: ${info.raw === true}`,
       `</pty_spawned>`,
       ...(info.notifyOnExit ? ['', NOTIFY_ON_EXIT_INSTRUCTIONS] : []),
     ].join('\n')

@@ -117,7 +117,7 @@ opencode
 
 | Tool        | Description                                                                 |
 | ----------- | --------------------------------------------------------------------------- |
-| `pty_spawn` | Create a new PTY session (command, args, workdir, env, title, notifyOnExit, timeoutSeconds, cols, rows) |
+| `pty_spawn` | Create a new PTY session (command, args, workdir, env, title, notifyOnExit, timeoutSeconds, cols, rows, raw) |
 | `pty_write` | Send input to a PTY (text, escape sequences like `\x03` for Ctrl+C)         |
 | `pty_read`  | Read output buffer with a token budget, character-cursor paging and optional regex filtering |
 | `pty_list`  | List all PTY sessions with status, PID, line count and character count      |
@@ -145,6 +145,32 @@ pty_resize({ id, cols: 120, rows: 40 })
 for: out-of-range values are clamped. An omitted dimension keeps its current
 value. A program that read its size at startup will not react to a resize, so
 pass `cols`/`rows` to `pty_spawn` when that matters.
+
+### Serial consoles and raw mode
+
+A PTY normally runs with the kernel's cooked line discipline, which applies
+`ICRNL`: a carriage return written to the master is delivered to the program as a
+line feed. That is right for a shell and wrong for a serial console. Feeding a
+libvirt guest through `virsh console` over a PTY showed the boot menu and relayed
+arrow keys, but Enter did nothing — GRUB reads `\r` and ignores the `\n` the
+discipline substituted. Arrow keys are escape sequences and are not translated,
+which is why only Enter was affected.
+
+Pass `raw: true` to run with the discipline off (`stty raw -echo`), and bytes
+reach the program verbatim:
+
+```
+pty_spawn: command="virsh", args=["-c", "qemu:///system", "console", "--force", "myguest"],
+           description="Guest serial console", raw=true
+pty_write: id="pty_a1b2c3d4", data="\r"   # Enter reaches GRUB as CR
+```
+
+Raw mode turns off `ICANON`, `ICRNL`, `ISIG` and `ECHO`, so it is opt-in and not
+for a shell: you lose echo, line editing and Ctrl+C. Write only after the program
+has produced output — the discipline is switched by a wrapper immediately before
+your command starts, so a byte sent in the first instant may still be cooked.
+
+`pty_list` and the `<pty_spawned>` result show whether a session is raw.
 
 ### Seeing a screen instead of a stream
 

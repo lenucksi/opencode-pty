@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+**`raw` spawn option for PTY sessions**
+
+`pty_spawn` and the session-creation API accept `raw: true`, which disables the
+PTY slave's line discipline (`stty raw -echo`) before the command runs. Use it for
+a serial console (`virsh console`), a boot menu, or any program that expects a
+`\r` to stay a `\r`.
+
+Without it, the kernel's cooked discipline applies ICRNL and delivers Enter as
+`\n`. A libvirt serial console showed its boot menu and relayed arrow keys, but
+Enter did nothing - the byte was written and the program never saw it. Arrow keys
+are escape sequences and are not translated, which is why only Enter was affected.
+Raw mode turns ICRNL, ICANON, ISIG and ECHO off, so bytes arrive verbatim. It is
+opt-in because a shell would lose line editing and the interrupt key.
+
+`pty_list` and the `<pty_spawned>` result now report whether a session is raw.
+
+### Fixed
+
+- Enter works on a serial console reached through `pty_spawn`: the new `raw` option
+  stops the line discipline from rewriting a carriage return into a line feed.
+
 ## [0.6.0] - 2026-10-15
 
 ### Added
@@ -429,6 +454,6 @@ say what they actually did.
   is resolved.
 - Exit-notification delivery failures are logged rather than swallowed.
 
-[Unreleased]: https://github.com/lenucksi/opencode-pty/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/lenucksi/opencode-pty/compare/v0.6.0...HEAD
 [0.5.1]: https://github.com/lenucksi/opencode-pty/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/lenucksi/opencode-pty/compare/v0.4.0...v0.5.0
