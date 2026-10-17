@@ -264,15 +264,15 @@ describe('decodeScreen', () => {
   // The old rule kept even the trailing blank rows: the blank bottom of a screen is
   // shape, and a fresh 81-row screen half-printed produced a console of blanks with a
   // scrollbar before the screen was full - measured. The consumer trims after.
+  const text = (raw: unknown): string => decodeScreen(raw).text
+
   it('joins the screen rows into displayable text, trailing blanks dropped', () => {
-    expect(decodeScreen({ id: 'pty_1', cols: 40, rows: 3, lines: ['top', 'second'] })).toBe(
-      'top\nsecond'
-    )
+    expect(text({ id: 'pty_1', cols: 40, rows: 3, lines: ['top', 'second'] })).toBe('top\nsecond')
   })
 
   // The inverse still holds: a blank row BETWEEN content belongs to the program.
   it('keeps an inner blank row', () => {
-    expect(decodeScreen({ id: 'pty_1', cols: 40, rows: 5, lines: ['top', '', 'bottom', ''] })).toBe(
+    expect(text({ id: 'pty_1', cols: 40, rows: 5, lines: ['top', '', 'bottom', ''] })).toBe(
       'top\n\nbottom'
     )
   })
@@ -280,26 +280,73 @@ describe('decodeScreen', () => {
   // A row too wide for the screen occupies two screen rows, and that is what the program
   // shows - so this must not silently join them into one longer line.
   it('keeps the rows separate rather than rejoining a wrapped line', () => {
-    expect(decodeScreen({ lines: ['first half', 'second half'] })).toBe('first half\nsecond half')
+    expect(text({ lines: ['first half', 'second half'] })).toBe('first half\nsecond half')
   })
 
   it('accepts a bare array, so a direct body is not punished for it', () => {
-    expect(decodeScreen(['a', 'b'])).toBe('a\nb')
+    expect(text(['a', 'b'])).toBe('a\nb')
   })
 
   // Anything unreadable yields an empty box rather than throwing: a dialog that cannot
   // show output must not take the panel's refresh down with it.
   it('returns empty for anything else rather than throwing', () => {
-    expect(decodeScreen(null)).toBe('')
-    expect(decodeScreen(undefined)).toBe('')
-    expect(decodeScreen(42)).toBe('')
-    expect(decodeScreen({ cols: 40, rows: 3 })).toBe('')
+    expect(text(null)).toBe('')
+    expect(text(undefined)).toBe('')
+    expect(text(42)).toBe('')
+    expect(text({ cols: 40, rows: 3 })).toBe('')
   })
 
   // A single unusable row must not poison the rows around it: the screen is an array of
   // strings from the wire, and one surprise in it should cost one row, not all of them.
   it('drops unusable rows and keeps the rest', () => {
-    expect(decodeScreen({ lines: ['good', 42, null, 'also good'] })).toBe('good\nalso good')
+    expect(text({ lines: ['good', 42, null, 'also good'] })).toBe('good\nalso good')
+  })
+
+  // The whole reason this returns an object and not a string: the panel has to paint the
+  // colours, and a cell grid was already resolved server-side so the panel does not need
+  // a terminal of its own.
+  it('carries the colour runs of each visible row', () => {
+    const screen = decodeScreen({
+      lines: ['hello red'],
+      styledLines: [[{ text: 'hello ' }, { text: 'red', fg: '#ff0000' }]],
+    })
+    expect(screen.text).toBe('hello red')
+    expect(screen.runs).toEqual([[{ text: 'hello ' }, { text: 'red', fg: '#ff0000' }]])
+  })
+
+  // The response puts scrollback rows BEFORE the screen and styles only the screen, so
+  // the styled rows are a suffix. Off-by-one here would paint the wrong lines.
+  it('aligns the styled rows to the tail, not the head, of the lines', () => {
+    const screen = decodeScreen({
+      lines: ['history one', 'history two', 'menu line'],
+      styledLines: [[{ text: 'menu line', bg: '#0000aa' }]],
+    })
+    expect(screen.runs[0]).toEqual([])
+    expect(screen.runs[1]).toEqual([])
+    expect(screen.runs[2]).toEqual([{ text: 'menu line', bg: '#0000aa' }])
+  })
+
+  // A background reaches past the text, and `lines` trims those spaces away. Dropping the
+  // row would collapse the boot menu's blue box; the run has to keep it.
+  it('keeps a blank row that a background reaches', () => {
+    const screen = decodeScreen({
+      lines: ['title', '', ''],
+      styledLines: [[{ text: 'title' }], [{ text: '   ', bg: '#0000aa' }], []],
+    })
+    expect(screen.text).toBe('title\n')
+    expect(screen.runs).toHaveLength(2)
+    expect(screen.runs[1]).toEqual([{ text: '   ', bg: '#0000aa' }])
+  })
+
+  // Untrusted JSON: a row that is not an array of objects with a string `text` is dropped
+  // rather than half-rendered.
+  it('ignores a malformed styledLines section', () => {
+    const screen = decodeScreen({
+      lines: ['a', 'b'],
+      styledLines: ['nope', [{ text: 'ok' }, 42, null]],
+    })
+    expect(screen.text).toBe('a\nb')
+    expect(screen.runs[1]).toEqual([{ text: 'ok' }])
   })
 })
 

@@ -10,7 +10,7 @@ import { manager } from '../src/plugin/pty/manager.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
 import { removeOrigin, writeOrigin } from '../src/shared/runtime.ts'
 import tuiPanel from '../src/tui/index.ts'
-import type { PanelSession } from '../src/tui/lib.ts'
+import type { PanelSession, ScreenContent } from '../src/tui/lib.ts'
 import { PTYServer } from '../src/web/server/server.ts'
 
 /**
@@ -1448,9 +1448,9 @@ describe('the PTY sidebar panel', () => {
       // the click - a modal-free panel may as well arrive with its content.
       const screen = await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
-          | { screen?: string }
+          | { screen?: ScreenContent }
           | undefined
-        const text = stored?.screen ?? ''
+        const text = stored?.screen?.text ?? ''
         return text.includes('hello from the pty') ? text : undefined
       }, 8000)
       expect(screen).toContain('hello from the pty')
@@ -1477,10 +1477,10 @@ describe('the PTY sidebar panel', () => {
       await Bun.sleep(3000)
 
       const stored = seen.stores.get('opencode-pty.session-panel') as
-        | { sessionID?: string | null; screen?: string }
+        | { sessionID?: string | null; screen?: ScreenContent }
         | undefined
       expect(stored?.sessionID).toBeNull()
-      expect(stored?.screen).not.toContain('not yours')
+      expect(stored?.screen?.text).not.toContain('not yours')
     } finally {
       server[Symbol.dispose]()
     }
@@ -1620,9 +1620,9 @@ describe('the PTY sidebar panel', () => {
 
       const message = await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
-          | { screen?: string }
+          | { screen?: ScreenContent }
           | undefined
-        const text = stored?.screen ?? ''
+        const text = stored?.screen?.text ?? ''
         return text.includes('could not read the screen') ? text : undefined
       }, 8000)
       expect(message).toContain('500')
@@ -1654,23 +1654,23 @@ describe('the PTY sidebar panel', () => {
       command.run()
       await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
-          | { screen?: string }
+          | { screen?: ScreenContent }
           | undefined
-        return (stored?.screen ?? '').includes('first output') ? true : undefined
+        return (stored?.screen?.text ?? '').includes('first output') ? true : undefined
       }, 8000)
 
       server[Symbol.dispose]()
       await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
-          | { screen?: string; sessions?: unknown[] }
+          | { screen?: ScreenContent; sessions?: unknown[] }
           | undefined
         return (stored?.sessions?.length ?? 0) === 0 ? true : undefined
       }, 8000)
 
       const stored = seen.stores.get('opencode-pty.session-panel') as
-        | { screen?: string }
+        | { screen?: ScreenContent }
         | undefined
-      expect(stored?.screen).not.toContain('first output')
+      expect(stored?.screen?.text).not.toContain('first output')
     } finally {
       server[Symbol.dispose]()
     }

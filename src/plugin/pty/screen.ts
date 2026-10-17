@@ -22,32 +22,15 @@ import { Ghostty } from 'ghostty-web'
  * keep in sync when output arrives in pieces.
  */
 
-/** Bit positions of `CellFlags` in ghostty-web. Kept local so a rename upstream is a compile error, not a silent misread. */
-const FLAG_BOLD = 1 << 0
-const FLAG_ITALIC = 1 << 1
-const FLAG_UNDERLINE = 1 << 2
-const FLAG_STRIKETHROUGH = 1 << 3
-const FLAG_INVERSE = 1 << 4
-const FLAG_FAINT = 1 << 7
-
-export interface ColorSpan {
-  /** Zero-based row. */
-  row: number
-  /** Zero-based column of the first cell in the run. */
-  col: number
-  /** Number of cells, counted in grid cells including wide-char continuations. */
-  length: number
-  /** `#rrggbb`, or omitted when the run uses the default foreground. */
-  fg?: string
-  /** `#rrggbb`, or omitted when the run uses the default background. */
-  bg?: string
-  bold?: boolean
-  italic?: boolean
-  underline?: boolean
-  strikethrough?: boolean
-  inverse?: boolean
-  faint?: boolean
-}
+import {
+  type ColorSpan,
+  sameColor,
+  type StyledRun,
+  styleFields,
+  toSpan,
+  trimTrailingBlankRuns,
+} from './screen-style.ts'
+export type { ColorSpan, StyledRun } from './screen-style.ts'
 
 /**
  * How much of a session's output one render replays.
@@ -151,6 +134,15 @@ export interface ScreenSnapshot {
   /** Runs that differ from the default foreground, background or style. */
   spans: ColorSpan[]
   /**
+   * The visible rows as styled runs, index 0 the top row.
+   *
+   * Not the scrollback: history rows are plain text above the screen and carry no
+   * style here, matching `spans`, which is also screen-local. Trailing runs that
+   * are default-styled and blank are dropped, so a row reaches as far as its
+   * content, or its furthest background - whichever is further.
+   */
+  styledLines: StyledRun[][]
+  /**
    * How much of the retained output was replayed.
    *
    * A screen rebuilt from only the tail of a stream is a reconstruction: a
@@ -183,18 +175,6 @@ function loadGhostty(): Promise<Ghostty> {
 /** Test seam: reports whether the WASM module is already loaded. */
 export function isScreenEmulatorLoaded(): boolean {
   return ghosttyPromise !== null
-}
-
-function hex(color: RGB): string {
-  const part = (value: number): string =>
-    Math.max(0, Math.min(255, Math.round(value)))
-      .toString(16)
-      .padStart(2, '0')
-  return `#${part(color.r)}${part(color.g)}${part(color.b)}`
-}
-
-function sameColor(a: RGB, b: RGB): boolean {
-  return a.r === b.r && a.g === b.g && a.b === b.b
 }
 
 /** The text of one cell, including any combining marks it carries. */
@@ -294,6 +274,7 @@ export async function renderScreen(
     const spans: ColorSpan[] = []
     let widestRowCols = 0
     const continuedRows: number[] = []
+    const styledLines: StyledRun[][] = []
 
     // History first, oldest to newest, then the screen: a reader scrolling up past
     // the frame mirrors the terminal's own scrollback. Cursor coordinates stay
@@ -314,6 +295,16 @@ export async function renderScreen(
         spans.push(toSpan(y, run.col, run.length, run.cell, defaultFg, defaultBg))
         run = null
       }
+      // The same cells again, this time as text runs that also include the
+      // default-styled stretches: a renderer with no terminal of its own places
+      // characters, not coordinates, and needs the spaces a background sits on.
+      const styled: StyledRun[] = []
+      let pending: { cell: GhosttyCell; text: string } | null = null
+      const flushStyled = (): void => {
+        if (!pending) return
+        styled.push({ text: pending.text, ...styleFields(pending.cell, defaultFg, defaultBg) })
+        pending = null
+      }
 
       for (let x = 0; x < cells.length; x++) {
         const cell = cells[x]
@@ -329,8 +320,15 @@ export async function renderScreen(
           continue
         }
         rowCols += cell.width > 0 ? cell.width : 1
-        line += cellText(terminal, y, x, cell)
+        const ch = cellText(terminal, y, x, cell)
+        line += ch
         previousWasWide = cell.width > 1
+        if (pending && sameStyle(pending.cell, cell)) {
+          pending.text += ch
+        } else {
+          flushStyled()
+          pending = { cell, text: ch }
+        }
 
         if (isDefaultCell(cell, defaultFg, defaultBg)) {
           flush()
@@ -344,12 +342,14 @@ export async function renderScreen(
         run = { col: x, length: 1, cell }
       }
       flush()
+      flushStyled()
 
       widestRowCols = Math.max(widestRowCols, rowCols)
       if (terminal.isRowWrapped(y)) continuedRows.push(y)
       // Trailing blanks are screen shape, not content: a 240-column row of a
       // progress bar would otherwise be mostly padding.
       lines.push(line.replace(/\s+$/, ''))
+      styledLines.push(trimTrailingBlankRuns(styled))
     }
 
     return {
@@ -369,6 +369,7 @@ export async function renderScreen(
       ...(history.length > 0 ? { historyRows: history.length } : {}),
       scrollback: terminal.getScrollbackLength(),
       spans,
+      styledLines,
       replayedChars,
       totalChars: raw.length,
     }
@@ -398,26 +399,4 @@ function sameStyle(a: GhosttyCell, b: GhosttyCell): boolean {
     a.bg_b === b.bg_b &&
     a.flags === b.flags
   )
-}
-
-function toSpan(
-  row: number,
-  col: number,
-  length: number,
-  cell: GhosttyCell,
-  defaultFg: RGB,
-  defaultBg: RGB
-): ColorSpan {
-  const fg = { r: cell.fg_r, g: cell.fg_g, b: cell.fg_b }
-  const bg = { r: cell.bg_r, g: cell.bg_g, b: cell.bg_b }
-  const span: ColorSpan = { row, col, length }
-  if (!sameColor(fg, defaultFg)) span.fg = hex(fg)
-  if (!sameColor(bg, defaultBg)) span.bg = hex(bg)
-  if (cell.flags & FLAG_BOLD) span.bold = true
-  if (cell.flags & FLAG_ITALIC) span.italic = true
-  if (cell.flags & FLAG_UNDERLINE) span.underline = true
-  if (cell.flags & FLAG_STRIKETHROUGH) span.strikethrough = true
-  if (cell.flags & FLAG_INVERSE) span.inverse = true
-  if (cell.flags & FLAG_FAINT) span.faint = true
-  return span
 }

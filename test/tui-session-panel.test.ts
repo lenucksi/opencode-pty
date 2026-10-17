@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { TestRendererSetup } from '@opentui/core/testing'
 import { testRender } from '@opentui/solid'
 
-import type { PanelSession } from '../src/tui/lib.ts'
+import { type PanelSession, screenContent } from '../src/tui/lib.ts'
 import { type SessionPanelView, sessionPanelView } from '../src/tui/session-panel.ts'
 import {
   initialSessionPanelState,
@@ -135,7 +135,7 @@ describe('noteSessionPanelList', () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(state, [], ME)
     expect(state.selected).toBeNull()
-    expect(state.screen).toBe(NO_SELECTION_SCREEN)
+    expect(state.screen.text).toBe(NO_SELECTION_SCREEN)
   })
 })
 
@@ -183,17 +183,17 @@ describe('noteSessionSelected', () => {
   test('switching marks the screen as loading, so a stale screen is never shown', () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(state, [session({ id: 'a' }), session({ id: 'b' })], ME)
-    noteSessionScreen(state, 'the old screen', Date.now())
+    noteSessionScreen(state, screenContent('the old screen'), Date.now())
     noteSessionSelected(state, 'b')
-    expect(state.screen).toBe(LOADING_SCREEN)
+    expect(state.screen.text).toBe(LOADING_SCREEN)
   })
 
   test('picking the row already on screen changes nothing', () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(state, [session({ id: 'a' })], ME)
-    noteSessionScreen(state, 'kept', Date.now())
+    noteSessionScreen(state, screenContent('kept'), Date.now())
     noteSessionSelected(state, 'a')
-    expect(state.screen).toBe('kept')
+    expect(state.screen.text).toBe('kept')
   })
 })
 
@@ -201,8 +201,8 @@ describe('noteSessionScreen', () => {
   test('records the screen and the clock the run timer reads', () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(state, [session({ id: 'a' })], ME)
-    noteSessionScreen(state, 'line one', 1234)
-    expect(state.screen).toBe('line one')
+    noteSessionScreen(state, screenContent('line one'), 1234)
+    expect(state.screen.text).toBe('line one')
     expect(state.now).toBe(1234)
   })
 
@@ -283,8 +283,8 @@ describe('noteSessionScreen', () => {
   // looking at.
   test('is ignored when nothing is selected', () => {
     const state = initialSessionPanelState()
-    noteSessionScreen(state, 'orphan read', 1)
-    expect(state.screen).not.toBe('orphan read')
+    noteSessionScreen(state, screenContent('orphan read'), 1)
+    expect(state.screen.text).not.toBe('orphan read')
   })
 })
 
@@ -477,9 +477,34 @@ describe('sessionPanelView', () => {
   test('shows the screen it was given', async () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(state, [session({ id: 'a' })], ME)
-    noteSessionScreen(state, 'visible output', Date.now())
+    noteSessionScreen(state, screenContent('visible output'), Date.now())
     const text = await frame(() => sessionPanelView(view({ state })))
     expect(text).toContain('visible output')
+  })
+
+  // The panel used to render the screen as one plain string, so a program that paints
+  // (the UEFI boot menu, `ls --color`, `htop`) arrived in black and white while the same
+  // session was coloured in the web UI. The runs carry the style; this proves the panel
+  // spends them, at the cell level, not only the text.
+  test('paints the colours the program used, not only its text', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a' })], ME)
+    noteSessionSelected(state, 'a')
+    noteSessionScreen(
+      state,
+      {
+        text: 'alert ok',
+        // A foreground AND a background, so both paths are exercised: the boot menu is a
+        // background box as much as it is coloured text.
+        runs: [[{ text: 'alert', fg: '#ff0000', bg: '#0000aa' }, { text: ' ok' }]],
+      },
+      Date.now()
+    )
+    const created = await setup(() => sessionPanelView(view({ state })))
+    const spans = created.captureSpans().lines.flatMap((line) => line.spans)
+    const painted = spans.find((span) => span.text.includes('alert'))
+    expect(painted?.fg.toInts().slice(0, 3)).toEqual([255, 0, 0])
+    expect(painted?.bg.toInts().slice(0, 3)).toEqual([0, 0, 170])
   })
 
   // The only interaction this panel has. Everything else about it is a limit of the SDK,
@@ -592,7 +617,7 @@ describe('sessionPanelView', () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(state, [session({ id: 'a' })], ME)
     noteSessionSelected(state, 'a')
-    noteSessionScreen(state, 'line one', 1)
+    noteSessionScreen(state, screenContent('line one'), 1)
     const lines = (await frame(() => sessionPanelView(view({ state })))).split('\n')
     // `includes` instead of `startsWith`: the panel carries two columns of air on the
     // left (the inset that keeps the glyphs off the overlay's edge), so the frame's own
@@ -611,7 +636,7 @@ describe('sessionPanelView', () => {
     const state = initialSessionPanelState()
     noteSessionPanelList(state, [session({ id: 'pty_9', cols: 120, rows: 40, lineCount: 812 })], ME)
     noteSessionSelected(state, 'pty_9')
-    noteSessionScreen(state, 'one\ntwo\nthree', 1)
+    noteSessionScreen(state, screenContent('one\ntwo\nthree'), 1)
     const text = await frame(() =>
       sessionPanelView(
         view({ state, live: () => [session({ id: 'pty_9', cols: 120, rows: 40, lineCount: 812 })] })

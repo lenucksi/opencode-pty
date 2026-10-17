@@ -5,6 +5,7 @@ import { join } from 'node:path'
 
 import { manager } from '../src/plugin/pty/manager.ts'
 import { ptySpawn } from '../src/plugin/pty/tools/spawn.ts'
+import { screenContent, type ScreenContent } from '../src/tui/lib.ts'
 import {
   cleanupSession,
   findAnyHealthyOrigin,
@@ -275,20 +276,22 @@ describe('readScreen', () => {
     const id = await spawnSession('laid-out', 'printf', ['%b', 'top\r\nsecond\r\n\u001b[3;7Hmoved'])
     // The archive is written when the process ends, so the screen is not there the
     // instant the spawn returns. Polled rather than slept on.
-    let seen = 'never read'
+    let seen: ScreenContent = screenContent('never read')
     for (let attempt = 0; attempt < 100; attempt++) {
-      seen = await readScreen(origin(), id).catch((error: unknown) => `failed: ${String(error)}`)
-      if (seen.includes('moved')) {
-        expect(seen).toContain('top')
-        expect(seen).toContain('second')
+      seen = await readScreen(origin(), id).catch((error: unknown) =>
+        screenContent(`failed: ${String(error)}`)
+      )
+      if (seen.text.includes('moved')) {
+        expect(seen.text).toContain('top')
+        expect(seen.text).toContain('second')
         // Six columns in, on the third row: the layout the escape sequence asked for,
         // preserved because the emulator applied it.
-        expect(seen.split('\n')[2]).toBe('      moved')
+        expect(seen.text.split('\n')[2]).toBe('      moved')
         return
       }
       await Bun.sleep(25)
     }
-    throw new Error(`the screen never showed the output. Read: ${seen.slice(0, 160)}`)
+    throw new Error(`the screen never showed the output. Read: ${seen.text.slice(0, 160)}`)
   })
 
   test('names a failure rather than returning empty text', async () => {

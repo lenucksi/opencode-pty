@@ -479,7 +479,7 @@ describe('sending input to a session', () => {
 
     await createActions(d).sendInput(session({ id, title: 'waiting', status: 'running' }))
 
-    expect(await until(async () => (await readScreen(origin(), id)).includes('q'))).toBe(true)
+    expect(await until(async () => (await readScreen(origin(), id)).text.includes('q'))).toBe(true)
   })
 
   // A reader who types `q` means the key, not a prompt line, so the newline is added here.
@@ -493,8 +493,10 @@ describe('sending input to a session', () => {
     // `cat -n` numbers every line, which only happens if BOTH newlines arrived - so the
     // appended one and the typed one are both proven, not just the first. It pads the
     // number to six columns and separates it with TWO SPACES, measured, not a tab.
-    expect(await until(async () => (await readScreen(origin(), id)).includes('2  two'))).toBe(true)
-    const screen = await readScreen(origin(), id)
+    expect(await until(async () => (await readScreen(origin(), id)).text.includes('2  two'))).toBe(
+      true
+    )
+    const screen = (await readScreen(origin(), id)).text
     expect(screen).toContain('1  one')
     expect(screen).toContain('2  two')
   })
@@ -508,11 +510,13 @@ describe('sending input to a session', () => {
 
     await createActions(d).sendInput(session({ id, status: 'running' }))
 
-    expect(await until(async () => (await readScreen(origin(), id)).includes('1  only'))).toBe(true)
+    expect(await until(async () => (await readScreen(origin(), id)).text.includes('1  only'))).toBe(
+      true
+    )
     await Bun.sleep(200)
     // `cat -n` numbers every line it received, so a doubled newline would have produced a
     // second line holding nothing but its number.
-    expect(numberOnlyLines(await readScreen(origin(), id))).toEqual([])
+    expect(numberOnlyLines((await readScreen(origin(), id)).text)).toEqual([])
   })
 
   // Declining is the common case - Escape in the host's field - and it must not write.
@@ -525,7 +529,7 @@ describe('sending input to a session', () => {
 
     expect(recorded.prompts).toHaveLength(1)
     await Bun.sleep(200)
-    expect(numberOnlyLines(await readScreen(origin(), id))).toEqual([])
+    expect(numberOnlyLines((await readScreen(origin(), id)).text)).toEqual([])
   })
 
   // A confirmation of something that did not happen is worse than silence: the reader
@@ -580,7 +584,7 @@ describe('sending input to a session', () => {
     await createActions(d).sendInput(session({ id, status: 'running' }))
     await Bun.sleep(200)
     // A blank line sent to `cat -n` comes back as a line holding only the number 1.
-    expect(numberOnlyLines(await readScreen(origin(), id))).toEqual([])
+    expect(numberOnlyLines((await readScreen(origin(), id)).text)).toEqual([])
   })
 })
 

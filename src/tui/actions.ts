@@ -294,7 +294,10 @@ export function createOpenOutput(deps: ActionDeps) {
     const load = async (): Promise<void> => {
       try {
         const text = await readScreen(origin, session.id)
-        deps.update((draft) => noteDialogOutput(draft, text))
+        // The sidebar's own output dialog stays plain text: it is a different surface
+        // from the panel console (a modal showing the tail), and this change is about
+        // the console's colours. `text.text` is what it showed before.
+        deps.update((draft) => noteDialogOutput(draft, text.text))
       } catch (error) {
         deps.update((draft) => noteDialogOutput(draft, '(failed to read buffer)'))
         deps.debug('output.failed', { id: session.id, error: String(error) })

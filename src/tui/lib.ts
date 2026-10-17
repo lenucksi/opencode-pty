@@ -350,46 +350,8 @@ export function formatDuration(ms: number | null | undefined): string {
  * punished for it.
  */
 
-/**
- * Decode a `/api/sessions/:id/screen` response into displayable text.
- *
- * The endpoint returns the RENDERED screen - one string per row, trailing blanks
- * already removed - not the bytes the program wrote. That distinction is the whole
- * point: `buffer/plain` is `Bun.stripANSI(raw)`, so a cursor move is deleted along
- * with the colour codes and a full-screen program's output arrives unpainted with its
- * layout gone. The screen carries the layout.
- *
- * The rows are joined with newlines and nothing else. A line too wide for the screen
- * therefore occupies two rows here too, which is what the program itself shows; the
- * response's `continuedRows` is there for a reader who needs to know they are one line.
- *
- * Returns '' for anything unreadable rather than throwing: a dialog that cannot show
- * output should show an empty box, not take the panel's refresh down with it.
- */
-export function decodeScreen(raw: unknown): string {
-  const rows = (value: unknown): string[] | null => {
-    if (Array.isArray(value)) {
-      return value.filter((line): line is string => typeof line === 'string')
-    }
-    if (value && typeof value === 'object') {
-      const lines = (value as { lines?: unknown }).lines
-      if (Array.isArray(lines))
-        return lines.filter((line): line is string => typeof line === 'string')
-    }
-    return null
-  }
-  // A bare array is accepted so a caller that gets the body directly is not punished
-  // for it, exactly as `decodeBuffer` accepted a bare string.
-  // Trailing blanks are the screen's SHAPE, not the program's output: a fresh run
-  // prints its first lines at the top and the screen still has its full height - the
-  // reader measured a console that scrolled through blank rows and showed a scrollbar
-  // while the screen was not even full. The stage keeps the rows; the consumer drops
-  // the blank tail.
-  const combined = rows(raw) ?? []
-  let end = combined.length
-  while (end > 0 && (combined[end - 1]?.trim() ?? '') === '') end -= 1
-  return combined.slice(0, end).join('\n')
-}
+export { decodeScreen, screenContent } from './screen-content.ts'
+export type { ScreenContent } from './screen-content.ts'
 
 /**
  * Exactly `lines` lines of `text`, ending with the newest, and marked `…` on the

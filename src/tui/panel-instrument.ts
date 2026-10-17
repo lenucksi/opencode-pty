@@ -1,3 +1,4 @@
+import { screenContent } from './lib.ts'
 import { startScrollKeeper, type ScrollKeeper } from './scroll-keeper.ts'
 import type { SessionPanelHostDeps } from './session-panel-host.ts'
 import type { SessionPanelState } from './session-panel-state.ts'
@@ -39,7 +40,7 @@ export function noteListAndScreen(
   deps.debug('panel.list.note', {
     count: state.sessions.length,
     sameIdentity: state.sessions === listBefore,
-    same: state.screen === screenBefore,
+    same: state.screen.text === screenBefore.text,
   })
 }
 
@@ -66,14 +67,14 @@ export async function readSelectedScreenInto(
     setState((draft) => noteSessionScreen(draft, screen, now))
     deps.debug('panel.screen.write', {
       id,
-      same: before === screen,
-      chars: screen.length,
+      same: before.text === screen.text,
+      chars: screen.text.length,
     })
   } catch (error) {
     // Said in the panel rather than only in the log: a screen that silently stayed on
     // the previous session's output would read as the panel tracking the wrong process.
     setState((draft) =>
-      noteSessionScreen(draft, `(could not read the screen: ${String(error)})`, now)
+      noteSessionScreen(draft, screenContent(`(could not read the screen: ${String(error)})`), now)
     )
     deps.debug('panel.screen.failed', { id, error: String(error) })
   }
