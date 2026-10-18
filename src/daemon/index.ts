@@ -92,6 +92,17 @@ try {
 const store = new SessionStore({ root: stateDir })
 manager.setSessionStore(store)
 
+// Daemon notifier: pushes exit notifications to connected clients
+manager.setNotifier({
+  sendExitNotification: async (session, exitCode) => {
+    const payload = JSON.stringify({ method: 'exit_notification', params: { session, exitCode } }) + '\n'
+    for (const client of clients.values()) {
+      try { client.socket.write(payload) } catch {}
+    }
+  },
+  sendNotice: async () => {},
+})
+
 // Register notification callbacks that push to connected clients
 rawOutputCallbacks.push((sessionId: string, rawData: string, offset: number) => {
   const msg = JSON.stringify({ method: 'raw_data', params: { sessionId, rawData, offset } }) + '\n'

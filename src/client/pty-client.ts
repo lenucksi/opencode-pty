@@ -27,6 +27,7 @@ export class PtyClient {
   private requestId = 0
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
   private pushHandlers = new Map<string, (params: Record<string, unknown>) => void>()
+  private notifier: any = null
   private connected = false
   private buffer = ''
   private reconnecting = false
@@ -43,8 +44,18 @@ export class PtyClient {
   async connect(): Promise<void> {
     if (this.connected) return
 
-    // Try to connect
-    if (!existsSync(this.socketPath)) {
+    // Try to connect; if socket exists but connection fails, it's stale
+    if (existsSync(this.socketPath)) {
+      try {
+        // Probe connection
+        const probe = await Bun.connect({ unix: this.socketPath, socket: { data: () => {}, close: () => {}, error: () => {} } })
+        probe.end()
+      } catch {
+        // Stale socket, remove and start daemon
+        try { (await import('node:fs')).unlinkSync(this.socketPath) } catch {}
+        await this.startDaemon()
+      }
+    } else {
       await this.startDaemon()
     }
 
@@ -279,6 +290,11 @@ export class PtyClient {
     this.onPush('session_removed', (params) => {
       notifySessionRemoved(params.sessionId as string)
     })
+    this.onPush('exit_notification', async (params) => {
+      if (this.notifier?.sendExitNotification) {
+        await this.notifier.sendExitNotification(params.session as any, params.exitCode as number)
+      }
+    })
   }
 
   private scheduleReconnect(): void {
@@ -303,6 +319,14 @@ export class PtyClient {
         this.scheduleReconnect()
       }
     }, delay)
+  }
+
+  setNotifier(notifier: any): void {
+    this.notifier = notifier
+  }
+
+  setNotificationManager(_manager: any): void {
+    // No-op on client; daemon handles notifications
   }
 
   disconnect(): void {
