@@ -195,7 +195,7 @@ function handleRequest(socket: any, req: DaemonRequest) {
         result = { success: manager.write(req.params?.id as string, req.params?.data as string) }
         break
       case 'read':
-        result = manager.read(req.params?.id as string, req.params?.offset as number, req.params?.limit as number)
+        result = manager.read(req.params?.id as string, req.params?.offset as number, req.params?.limit as number, req.params?.budget as number)
         break
       case 'kill':
         result = { success: manager.kill(req.params?.id as string, req.params?.cleanup as boolean) }
@@ -211,6 +211,71 @@ function handleRequest(socket: any, req: DaemonRequest) {
           }
         }
         result = { ok: true }
+        break
+      case 'search': {
+        const regex = new RegExp(req.params?.pattern as string, req.params?.ignoreCase ? 'i' : '')
+        result = manager.search(req.params?.id as string, regex, req.params?.offset as number ?? 0, req.params?.limit as number, req.params?.budget as number)
+        break
+      }
+      case 'get':
+        result = manager.get(req.params?.id as string)
+        break
+      case 'get_session':
+        result = manager.getSession(req.params?.id as string)
+        break
+      case 'get_session_log':
+        result = manager.getSessionLog(req.params?.id as string, { tail: req.params?.tail as number })
+        break
+      case 'describe_missing_session':
+        result = manager.describeMissingSession(req.params?.id as string)
+        break
+      case 'describe_server':
+        result = manager.describeServer()
+        break
+      case 'get_raw_buffer':
+        result = manager.getRawBuffer(req.params?.id as string, req.params?.since as number)
+        break
+      case 'read_since':
+        result = manager.readSince(req.params?.id as string, req.params?.since as number, req.params?.budget as number)
+        break
+      case 'cleanup_by_session':
+        manager.cleanupBySession(req.params?.parentSessionId as string)
+        result = { ok: true }
+        break
+      case 'load_persisted_sessions':
+        result = manager.loadPersistedSessions()
+        break
+      case 'bulk_remove':
+        result = manager.bulkRemove(req.params?.ids as string[])
+        break
+      case 'restore_sessions':
+        result = manager.restoreSessions(req.params?.ids as string[])
+        break
+      case 'clear_all_sessions':
+        manager.clearAllSessions()
+        result = { ok: true }
+        break
+      case 'note_client_size':
+        manager.noteClientSize(req.params?.cols as number, req.params?.rows as number)
+        result = { ok: true }
+        break
+      case 'get_retention':
+        result = { retention: store.getRetention() }
+        break
+      case 'update_retention':
+        result = { pruned: store.updateRetention(req.params?.policy as any) }
+        break
+      case 'get_generation':
+        result = { generation: store.getGeneration() }
+        break
+      case 'get_state_dir':
+        result = { stateDir: store.getRoot() }
+        break
+      case 'list_persisted':
+        result = store.list()
+        break
+      case 'read_persisted':
+        result = store.read(req.params?.id as string, req.params?.offset as number, req.params?.limit as number)
         break
       default:
         error = `unknown method: ${req.method}`

@@ -21,6 +21,12 @@ export interface OpencodePtyOptions {
   autostart?: boolean
 
   /**
+   * Delegate PTY sessions to a persistent daemon process so they survive
+   * opencode server restarts. Default is false (in-process).
+   */
+  daemon?: boolean
+
+  /**
    * How long archived sessions are kept, and how many.
    *
    * `maxSessions` is a count cap, `maxAgeDays` an age cap, and `maxBytesPerSession` a

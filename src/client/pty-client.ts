@@ -11,6 +11,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { encodeMessage, parseMessage, isPush } from '../daemon/protocol.ts'
+import { notifyRawOutput, notifySessionUpdate, notifySessionRemoved } from '../plugin/pty/manager-notifications.ts'
 
 export interface PtyClientOptions {
   socketPath?: string
@@ -64,6 +65,7 @@ export class PtyClient {
           },
         })
         this.connected = true
+        this.registerPushHandlers()
         return
       } catch {
         await new Promise((r) => setTimeout(r, 250))
@@ -260,6 +262,18 @@ export class PtyClient {
 
   async setSessionStore(_store: any): Promise<void> {
     // No-op on client side; daemon owns the store
+  }
+
+  private registerPushHandlers(): void {
+    this.onPush('raw_data', (params) => {
+      notifyRawOutput(params.sessionId as string, params.rawData as string, params.offset as number)
+    })
+    this.onPush('session_update', (params) => {
+      notifySessionUpdate(params.session as any)
+    })
+    this.onPush('session_removed', (params) => {
+      notifySessionRemoved(params.sessionId as string)
+    })
   }
 
   disconnect(): void {

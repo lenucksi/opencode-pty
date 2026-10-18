@@ -1,10 +1,10 @@
-import { manager } from '../../../plugin/pty/manager.ts'
+import { getPtyManager } from '../../../plugin/pty/manager.ts'
 import type { HealthResponse } from '../../shared/types.ts'
 import { JsonResponse } from './responses.ts'
 
-export function handleHealth(server: Bun.Server<undefined>) {
-  const sessions = manager.list()
-  const activeSessions = sessions.filter((s) => s.status === 'running').length
+export async function handleHealth(server: Bun.Server<undefined>) {
+  const sessions = await getPtyManager().list()
+  const activeSessions = (sessions as any[]).filter((s: any) => s.status === 'running').length
   const totalSessions = sessions.length
 
   // Calculate response time (rough approximation)

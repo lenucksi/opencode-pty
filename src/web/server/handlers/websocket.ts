@@ -19,16 +19,16 @@ import {
 } from '../../shared/types'
 
 class WebSocketHandler {
-  private sendSessionList(ws: ServerWebSocket<undefined>): void {
+  private async sendSessionList(ws: ServerWebSocket<undefined>): Promise<void> {
     const sessions = manager.list()
     const message: WSMessageServerSessionList = { type: 'session_list', sessions }
     ws.send(JSON.stringify(message))
   }
 
-  private handleSubscribe(
+  private async handleSubscribe(
     ws: ServerWebSocket<undefined>,
     message: WSMessageClientSubscribeSession
-  ): void {
+  ): Promise<void> {
     const session = manager.get(message.sessionId)
     if (!session) {
       const error: WSMessageServerError = {
@@ -59,11 +59,11 @@ class WebSocketHandler {
     ws.send(JSON.stringify(response))
   }
 
-  private handleSessionListRequest(
+  private async handleSessionListRequest(
     ws: ServerWebSocket<undefined>,
     _message: WSMessageClientSessionList
-  ): void {
-    this.sendSessionList(ws)
+  ): Promise<void> {
+    await this.sendSessionList(ws)
   }
 
   private handleUnknownMessage(ws: ServerWebSocket<undefined>, message: WSMessageClient): void {
@@ -74,10 +74,10 @@ class WebSocketHandler {
     ws.send(JSON.stringify(error))
   }
 
-  public handleWebSocketMessage(
+  public async handleWebSocketMessage(
     ws: ServerWebSocket<undefined>,
     data: string | Buffer<ArrayBuffer>
-  ): void {
+  ): Promise<void> {
     if (typeof data !== 'string') {
       const error: WSMessageServerError = {
         type: 'error',
@@ -91,7 +91,7 @@ class WebSocketHandler {
 
       switch (message.type) {
         case 'subscribe':
-          this.handleSubscribe(ws, message as WSMessageClientSubscribeSession)
+          await this.handleSubscribe(ws, message as WSMessageClientSubscribeSession)
           break
 
         case 'unsubscribe':
@@ -99,7 +99,7 @@ class WebSocketHandler {
           break
 
         case 'session_list':
-          this.handleSessionListRequest(ws, message as WSMessageClientSessionList)
+          await this.handleSessionListRequest(ws, message as WSMessageClientSessionList)
           break
 
         case 'spawn':
@@ -107,15 +107,15 @@ class WebSocketHandler {
           break
 
         case 'input':
-          this.handleInput(message as WSMessageClientInput)
+          await this.handleInput(message as WSMessageClientInput)
           break
 
         case 'readRaw':
-          this.handleReadRaw(ws, message as WSMessageClientReadRaw)
+          await this.handleReadRaw(ws, message as WSMessageClientReadRaw)
           break
 
         case 'resize':
-          this.handleResize(ws, message as WSMessageClientResize)
+          await this.handleResize(ws, message as WSMessageClientResize)
           break
 
         default:
@@ -139,7 +139,7 @@ class WebSocketHandler {
 
       const sessionInfo = manager.spawn(message)
       if (message.subscribe) {
-        this.handleSubscribe(ws, { type: 'subscribe', sessionId: sessionInfo.id })
+        await this.handleSubscribe(ws, { type: 'subscribe', sessionId: sessionInfo.id })
       }
     } catch (err) {
       const error: WSMessageServerError = {
@@ -150,11 +150,11 @@ class WebSocketHandler {
     }
   }
 
-  private handleInput(message: WSMessageClientInput) {
+  private async handleInput(message: WSMessageClientInput): Promise<void> {
     manager.write(message.sessionId, message.data)
   }
 
-  private handleResize(ws: ServerWebSocket<undefined>, message: WSMessageClientResize) {
+  private async handleResize(ws: ServerWebSocket<undefined>, message: WSMessageClientResize): Promise<void> {
     // Recorded before the resize is attempted: this message is the only place the
     // server learns how big a human's terminal pane is, and a later agent-spawned
     // session should inherit that rather than a constant.
@@ -169,7 +169,7 @@ class WebSocketHandler {
     }
   }
 
-  private handleReadRaw(ws: ServerWebSocket<undefined>, message: WSMessageClientReadRaw) {
+  private async handleReadRaw(ws: ServerWebSocket<undefined>, message: WSMessageClientReadRaw): Promise<void> {
     const rawData = manager.getRawBuffer(message.sessionId)
     if (!rawData) {
       const error: WSMessageServerError = {
@@ -188,10 +188,10 @@ class WebSocketHandler {
   }
 }
 
-export function handleWebSocketMessage(
+export async function handleWebSocketMessage(
   ws: ServerWebSocket<undefined>,
   data: string | Buffer<ArrayBuffer>
-): void {
+): Promise<void> {
   const handler = new WebSocketHandler()
-  handler.handleWebSocketMessage(ws, data)
+  await handler.handleWebSocketMessage(ws, data)
 }

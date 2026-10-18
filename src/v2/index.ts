@@ -1,6 +1,6 @@
 import { installHostAdapter } from '../adapters/index.ts'
 import { createV2Adapter } from '../adapters/v2/index.ts'
-import { manager } from '../plugin/pty/manager.ts'
+import { getPtyManager } from '../plugin/pty/manager.ts'
 import { setParentSessionTitleResolver } from '../plugin/pty/parent-session-title.ts'
 import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
 import { getActiveServer, getOrCreateServer, registerV2Commands } from './commands.ts'
@@ -121,13 +121,29 @@ export const Plugin: PluginV2 = define({
       )
     }
 
+    // Daemon mode: optionally delegate to a persistent daemon process so PTY
+    // sessions survive opencode server restarts. Opt-in via options.daemon or
+    // the PTY_DAEMON env var. Falls back to in-process on any failure.
+    const useDaemon = ctx.options?.daemon === true || process.env.PTY_DAEMON === '1'
+    if (useDaemon) {
+      try {
+        const { connectToDaemon } = await import('../plugin/pty/manager.ts')
+        await connectToDaemon({
+          stateDir: (ctx.options as any)?.stateDir,
+        })
+        logPtyEvent('info', 'connected to pty daemon')
+      } catch (error) {
+        logPtyEvent('warn', 'daemon unavailable, using in-process manager', error)
+      }
+    }
+
     // Sessions archived by a previous run come back as read-only history, and
     // anything that was still running is marked as lost instead of silently
     // disappearing from listings.
-    const restored = manager.loadPersistedSessions()
+    const restored = await getPtyManager().loadPersistedSessions()
     if (restored.length > 0) {
       logPtyEvent('info', `restored ${restored.length} archived session(s)`, {
-        ids: restored.map((session) => session.id),
+        ids: (restored as any[]).map((session: any) => session.id),
       })
     }
 
@@ -136,7 +152,7 @@ export const Plugin: PluginV2 = define({
     // advertise a limit the store is not yet applying. The re-prune inside `updateRetention`
     // is what makes a lowered cap take effect at once - the store's own `prune()` runs only
     // in its constructor, which is long before these options exist.
-    const prunedRetention = manager.getSessionStore().updateRetention(ctx.options?.retention ?? {})
+    const prunedRetention = (await (await getPtyManager().getSessionStore()).updateRetention(ctx.options?.retention ?? {}))
     if (prunedRetention.length > 0) {
       logPtyEvent('info', `retention removed ${prunedRetention.length} archived session(s)`, {
         ids: prunedRetention,
@@ -160,7 +176,7 @@ export const Plugin: PluginV2 = define({
         // Sessions that the previous run left behind are announced once per
         // boot, with the address a human can look at.
         await announceRestart({
-          store: manager.getSessionStore(),
+          store: await getPtyManager().getSessionStore(),
           ...(notifier ? { notifier } : {}),
           restored,
           webUrl: `${server.server.url.origin}/`,

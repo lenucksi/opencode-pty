@@ -1,13 +1,13 @@
 import type { BunRequest } from 'bun'
 import { WEB_API_PARENT_SESSION_ID } from '../../../plugin/constants.ts'
-import { manager } from '../../../plugin/pty/manager.ts'
+import { getPtyManager } from '../../../plugin/pty/manager.ts'
 import { checkCommandPermission, checkWorkdirPermission } from '../../../plugin/pty/permissions.ts'
 import { logFileName, normalizeLogText, parseLogFormat } from '../../shared/log-format.ts'
 import type { routes } from '../../shared/routes.ts'
 import { ErrorResponse, JsonResponse } from './responses.ts'
 
-export function getSessions() {
-  const sessions = manager.list()
+export async function getSessions() {
+  const sessions = await getPtyManager().list()
   return new JsonResponse(sessions)
 }
 
@@ -38,7 +38,7 @@ export async function createSession(req: Request) {
       await checkWorkdirPermission(body.workdir)
     }
 
-    const session = manager.spawn({
+    const session = await getPtyManager().spawn({
       command: body.command,
       args,
       title: body.description,
@@ -57,8 +57,8 @@ export async function createSession(req: Request) {
   }
 }
 
-export function clearSessions() {
-  manager.clearAllSessions()
+export async function clearSessions() {
+  await getPtyManager().clearAllSessions()
   return new JsonResponse({ success: true })
 }
 
@@ -101,7 +101,7 @@ export async function bulkRemoveSessions(
     // A removal of nothing is a client bug, and answering 200 would hide it.
     return new ErrorResponse('No session ids given', 400)
   }
-  return new JsonResponse(manager.bulkRemove(ids))
+  return new JsonResponse(await getPtyManager().bulkRemove(ids))
 }
 
 export async function restoreSessions(
@@ -114,11 +114,11 @@ export async function restoreSessions(
   if (ids.length === 0) {
     return new ErrorResponse('No session ids given', 400)
   }
-  return new JsonResponse(manager.restoreSessions(ids))
+  return new JsonResponse(await getPtyManager().restoreSessions(ids))
 }
 
-export function getSession(req: BunRequest<typeof routes.session.path>) {
-  const session = manager.get(req.params.id)
+export async function getSession(req: BunRequest<typeof routes.session.path>) {
+  const session = await getPtyManager().get(req.params.id)
   if (!session) {
     return new ErrorResponse('Session not found', 404)
   }
@@ -133,7 +133,7 @@ export async function sendInput(
     if (!body.data || typeof body.data !== 'string') {
       return new ErrorResponse('Data field is required and must be a string', 400)
     }
-    const success = manager.write(req.params.id, body.data)
+    const success = await getPtyManager().write(req.params.id, body.data)
     if (!success) {
       return new ErrorResponse('Failed to write to session', 400)
     }
@@ -143,26 +143,26 @@ export async function sendInput(
   }
 }
 
-export function cleanupSession(req: BunRequest<typeof routes.session.cleanup.path>) {
-  const success = manager.kill(req.params.id, true)
+export async function cleanupSession(req: BunRequest<typeof routes.session.cleanup.path>) {
+  const success = await getPtyManager().kill(req.params.id, true)
   if (!success) {
     return new ErrorResponse('Failed to kill session', 400)
   }
   return new JsonResponse({ success: true })
 }
 
-export function killSession(req: BunRequest<typeof routes.session.path>) {
-  const success = manager.kill(req.params.id)
+export async function killSession(req: BunRequest<typeof routes.session.path>) {
+  const success = await getPtyManager().kill(req.params.id)
   if (!success) {
     return new ErrorResponse('Failed to kill session', 400)
   }
   return new JsonResponse({ success: true })
 }
 
-export function getRawBuffer(req: BunRequest<typeof routes.session.buffer.raw.path>) {
+export async function getRawBuffer(req: BunRequest<typeof routes.session.buffer.raw.path>) {
   const sinceParam = new URL(req.url).searchParams.get('since')
   const since = sinceParam !== null && sinceParam.trim() !== '' ? Number(sinceParam) : undefined
-  const bufferData = manager.getRawBuffer(
+  const bufferData = await getPtyManager().getRawBuffer(
     req.params.id,
     since !== undefined && Number.isFinite(since) ? since : undefined
   )
@@ -178,7 +178,7 @@ export function getRawBuffer(req: BunRequest<typeof routes.session.buffer.raw.pa
  * Works for live sessions too, so a caller has one place to fetch output from
  * (useful after a restart, when only the archive is left).
  */
-export function getSessionLog(req: BunRequest<typeof routes.session.log.path>) {
+export async function getSessionLog(req: BunRequest<typeof routes.session.log.path>) {
   const url = new URL(req.url)
   const tailParam = url.searchParams.get('tail')
   const parsedTail = tailParam === null ? undefined : Number.parseInt(tailParam, 10)
@@ -188,7 +188,7 @@ export function getSessionLog(req: BunRequest<typeof routes.session.log.path>) {
       : undefined
   const format = parseLogFormat(url.searchParams.get('format'))
 
-  const raw = manager.getSessionLog(req.params.id, tail === undefined ? {} : { tail })
+  const raw = await getPtyManager().getSessionLog(req.params.id, tail === undefined ? {} : { tail })
   if (raw === null) {
     return new ErrorResponse('Session not found', 404)
   }
@@ -203,8 +203,8 @@ export function getSessionLog(req: BunRequest<typeof routes.session.log.path>) {
   return new Response(normalizeLogText(raw, format), { headers })
 }
 
-export function getPlainBuffer(req: BunRequest<typeof routes.session.buffer.plain.path>) {
-  const bufferData = manager.getRawBuffer(req.params.id)
+export async function getPlainBuffer(req: BunRequest<typeof routes.session.buffer.plain.path>) {
+  const bufferData = await getPtyManager().getRawBuffer(req.params.id)
   if (!bufferData) {
     return new ErrorResponse('Session not found', 404)
   }

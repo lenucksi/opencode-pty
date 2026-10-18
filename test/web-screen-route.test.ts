@@ -139,7 +139,7 @@ describe('GET /api/sessions/:id/screen', () => {
     const id = spawn('top\\r\\nsecond\\r\\n\\e[3;7Hmoved', 40, 12)
     await waitFor(id, 'moved')
 
-    const plain = getPlainBuffer({
+    const plain = await getPlainBuffer({
       params: { id },
     } as unknown as BunRequest<typeof routes.session.buffer.plain.path>)
     const plainBody = (await plain.json()) as { plain: string }

@@ -5,7 +5,7 @@ import {
   MIN_TERMINAL_COLS,
   MIN_TERMINAL_ROWS,
 } from '../../../plugin/constants.ts'
-import { manager } from '../../../plugin/pty/manager.ts'
+import { getPtyManager } from '../../../plugin/pty/manager.ts'
 import {
   DEFAULT_REPLAY_WINDOW,
   fitScreenSize,
@@ -98,8 +98,8 @@ export async function getSessionScreen(
   // The session first, because its recorded geometry is the default. Recorded at
   // spawn and updated by every resize, so this is the size the program was
   // actually given, not a size re-derived from whatever a client last mentioned.
-  const session = manager.get(req.params.id)
-  const bufferData = manager.getRawBuffer(req.params.id)
+  const session = await getPtyManager().get(req.params.id)
+  const bufferData = await getPtyManager().getRawBuffer(req.params.id)
   // The same 404 as `getPlainBuffer`: no session, or no retained output for it.
   // A missing transcript is not a 200 with an empty screen - that reads as "the
   // program printed nothing", which is the opposite of the truth.
