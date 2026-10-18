@@ -1,5 +1,5 @@
 import { tool } from '@opencode-ai/plugin'
-import { manager } from '../manager.ts'
+import { getPtyManager } from '../manager.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './kill.txt'
 
@@ -15,14 +15,14 @@ export const ptyKill = tool({
       ),
   },
   async execute(args) {
-    const session = manager.get(args.id)
+    const session = await getPtyManager().get(args.id)
     if (!session) {
-      throw buildSessionNotFoundError(args.id)
+      throw await buildSessionNotFoundError(args.id)
     }
 
     const wasRunning = session.status === 'running'
     const cleanup = args.cleanup ?? false
-    const success = manager.kill(args.id, cleanup)
+    const success = await getPtyManager().kill(args.id, cleanup)
 
     if (!success) {
       throw new Error(`Failed to kill PTY session '${args.id}'.`)

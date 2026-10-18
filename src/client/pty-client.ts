@@ -181,6 +181,87 @@ export class PtyClient {
     }, 30000)
   }
 
+  // --- Additional PTYManager-compatible methods (IPC) ---
+
+  async getSession(id: string): Promise<any> {
+    return this.request('get_session', { id })
+  }
+
+  async getSessionLog(id: string, options: { tail?: number } = {}): Promise<string | null> {
+    const r = await this.request('get_session_log', { id, ...options })
+    return r?.log ?? null
+  }
+
+  async describeMissingSession(id: string): Promise<any> {
+    return this.request('describe_missing_session', { id })
+  }
+
+  async describeServer(): Promise<any> {
+    return this.request('describe_server')
+  }
+
+  async getRawBuffer(id: string, since?: number, budget?: number): Promise<any> {
+    return this.request('get_raw_buffer', { id, since, budget })
+  }
+
+  async readSince(id: string, since: number, budget?: number): Promise<any> {
+    return this.request('read_since', { id, since, budget })
+  }
+
+  async cleanupBySession(parentSessionId: string): Promise<void> {
+    await this.request('cleanup_by_session', { parentSessionId })
+  }
+
+  async loadPersistedSessions(): Promise<any[]> {
+    return this.request('load_persisted_sessions')
+  }
+
+  async bulkRemove(ids: string[]): Promise<any> {
+    return this.request('bulk_remove', { ids })
+  }
+
+  async restoreSessions(ids: string[]): Promise<any> {
+    return this.request('restore_sessions', { ids })
+  }
+
+  async clearAllSessions(): Promise<void> {
+    await this.request('clear_all_sessions')
+  }
+
+  noteClientSize(cols: number, rows: number): void {
+    this.request('note_client_size', { cols, rows }).catch(() => {})
+  }
+
+  async getSessionStore(): Promise<any> {
+    const client = this
+    return {
+      getRetention: async () => {
+        const r = await client.request('get_retention')
+        return r?.retention
+      },
+      updateRetention: async (policy: any) => {
+        const r = await client.request('update_retention', { policy })
+        return r?.pruned ?? []
+      },
+      getGeneration: async () => {
+        const r = await client.request('get_generation')
+        return r?.generation
+      },
+      getRoot: async () => {
+        const r = await client.request('get_state_dir')
+        return r?.stateDir
+      },
+      list: async () => client.request('list_persisted'),
+      read: async (id: string, offset: number, limit: number) => client.request('read_persisted', { id, offset, limit }),
+      isEnabled: async () => true,
+      close: async () => {},
+    }
+  }
+
+  async setSessionStore(_store: any): Promise<void> {
+    // No-op on client side; daemon owns the store
+  }
+
   disconnect(): void {
     if (this.socket) {
       try { this.socket.end() } catch {}

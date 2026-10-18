@@ -14,7 +14,7 @@ import {
   type OutputBlockMeta,
   TRUNCATION_MARKER,
 } from '../formatters.ts'
-import { manager } from '../manager.ts'
+import { getPtyManager } from '../manager.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './read.txt'
@@ -152,7 +152,7 @@ function validateAndCreateRegex(pattern: string, ignoreCase?: boolean): RegExp {
 /**
  * Handles pattern-based reading and formatting
  */
-function handlePatternRead(
+async function handlePatternRead(
   args: ReadArgs,
   id: string,
   pattern: string,
@@ -161,12 +161,12 @@ function handlePatternRead(
   offset: number,
   limit: number,
   budget: number | undefined
-): string {
+): Promise<string> {
   const regex = validateAndCreateRegex(pattern, ignoreCase)
 
-  const result = manager.search(id, regex, offset, limit, budget)
+  const result = await getPtyManager().search(id, regex, offset, limit, budget)
   if (!result) {
-    throw buildSessionNotFoundError(id)
+    throw await buildSessionNotFoundError(id)
   }
 
   if (result.matches.length === 0) {
@@ -185,7 +185,7 @@ function handlePatternRead(
   }
 
   // A match can be cut by the budget; mark it rather than dropping it silently.
-  const lines = result.matches.map((match) => {
+  const lines = (result.matches as any[]).map((match: any) => {
     const formatted = formatLine(match.text, match.lineNumber, match.text.length)
     return formatted.truncated
       ? `${formatted.text}${TRUNCATION_MARKER(formatted.shownChars, formatted.totalChars)}`
@@ -213,16 +213,16 @@ function handlePatternRead(
 /**
  * Handles plain reading and formatting
  */
-function handlePlainRead(
+async function handlePlainRead(
   args: ReadArgs,
   session: PTYSessionInfo,
   offset: number,
   limit: number,
   budget: number | undefined
-): string {
-  const result = manager.read(args.id, offset, limit, budget)
+): Promise<string> {
+  const result = await getPtyManager().read(args.id, offset, limit, budget)
   if (!result) {
-    throw buildSessionNotFoundError(args.id)
+    throw await buildSessionNotFoundError(args.id)
   }
 
   if (result.lines.length === 0) {
@@ -286,15 +286,15 @@ function handlePlainRead(
  * can walk the stream character by character and end up with exactly the bytes
  * the process produced, including the tail of a line an earlier call cut.
  */
-function handleSinceRead(
+async function handleSinceRead(
   args: ReadArgs,
   session: PTYSessionInfo,
   budget: number | undefined
-): string {
+): Promise<string> {
   const since = Math.max(0, Math.floor(args.since ?? 0))
-  const result = manager.readSince(args.id, since, budget)
+  const result = await getPtyManager().readSince(args.id, since, budget)
   if (!result) {
-    throw buildSessionNotFoundError(args.id)
+    throw await buildSessionNotFoundError(args.id)
   }
 
   if (result.totalChars === 0) {
@@ -402,9 +402,9 @@ export const ptyRead = tool({
       ),
   },
   async execute(args) {
-    const session = manager.get(args.id)
+    const session = await getPtyManager().get(args.id)
     if (!session) {
-      throw buildSessionNotFoundError(args.id)
+      throw await buildSessionNotFoundError(args.id)
     }
 
     const budget = resolveBudget(args)
@@ -412,14 +412,14 @@ export const ptyRead = tool({
     // `since` is a character cursor and `offset` a line cursor; they answer
     // different questions and cannot be combined. `since` wins, and says so.
     if (args.since !== undefined) {
-      return handleSinceRead(args, session, budget)
+      return await handleSinceRead(args, session, budget)
     }
 
     const offset = args.offset ?? 0
     const limit = args.limit ?? DEFAULT_READ_LIMIT
 
     if (args.pattern) {
-      return handlePatternRead(
+      return await handlePatternRead(
         args,
         args.id,
         args.pattern,
@@ -430,7 +430,7 @@ export const ptyRead = tool({
         budget
       )
     } else {
-      return handlePlainRead(args, session, offset, limit, budget)
+      return await handlePlainRead(args, session, offset, limit, budget)
     }
   },
 })

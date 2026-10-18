@@ -5,7 +5,7 @@ import {
   MIN_TERMINAL_COLS,
   MIN_TERMINAL_ROWS,
 } from '../../constants.ts'
-import { manager } from '../manager.ts'
+import { getPtyManager } from '../manager.ts'
 import { logPtyEvent } from '../plugin-log.ts'
 import { type ColorSpan, fitScreenSize, renderScreen, type ScreenSnapshot } from '../screen.ts'
 import type { PTYSessionInfo } from '../types.ts'
@@ -77,9 +77,9 @@ export const ptyScreen = tool({
       ),
   },
   async execute(args) {
-    const session: PTYSessionInfo | null = manager.get(args.id)
+    const session: PTYSessionInfo | null = await getPtyManager().get(args.id)
     if (!session) {
-      throw buildSessionNotFoundError(args.id)
+      throw await buildSessionNotFoundError(args.id)
     }
 
     // Per-dimension first, so an absurd axis is rejected on its own terms, then a
@@ -104,7 +104,7 @@ export const ptyScreen = tool({
     // Live sessions keep the raw stream in the ring buffer; an archived one only
     // has the transcript on disk. Both go through `getRawBuffer` so the two
     // render identically.
-    const raw = manager.getRawBuffer(args.id)?.raw
+    const raw = (await getPtyManager().getRawBuffer(args.id))?.raw
     if (raw === undefined) {
       return [
         `<pty_screen id="${session.id}" cols="${cols}" rows="${rows}">`,

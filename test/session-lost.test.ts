@@ -49,7 +49,7 @@ afterEach(() => {
 })
 
 describe('buildSessionNotFoundError', () => {
-  it('explains a session that only lives in the archive', () => {
+  it('explains a session that only lives in the archive', async () => {
     const store = tempStore()
     store.startSession({ ...sessionInfo(), parentSessionId: 'ses_parent' })
     store.appendOutput('pty_lost', 'PLAY RECAP\nok=38 changed=13 failed=0\n')
@@ -57,7 +57,7 @@ describe('buildSessionNotFoundError', () => {
     store.markStaleAsLost()
     manager.setSessionStore(store)
 
-    const message = buildSessionNotFoundError('pty_lost').message
+    const message = (await buildSessionNotFoundError('pty_lost')).message
 
     // The tag, with the id on it. This error is the model's only source for which
     // id to read from the archive next, and it usually arrives right after a
@@ -72,11 +72,11 @@ describe('buildSessionNotFoundError', () => {
     expect(message).toContain('</pty_session_lost>')
   })
 
-  it('stays a plain not-found for an id nobody ever saw', () => {
+  it('stays a plain not-found for an id nobody ever saw', async () => {
     const store = tempStore()
     manager.setSessionStore(store)
 
-    const message = buildSessionNotFoundError('pty_never').message
+    const message = (await buildSessionNotFoundError('pty_never')).message
 
     expect(message).toContain("PTY session 'pty_never' not found")
     expect(message).not.toContain('<pty_session_lost>')

@@ -1,6 +1,6 @@
 import { tool } from '@opencode-ai/plugin'
 import { checkExecutable } from '../command-check.ts'
-import { manager } from '../manager.ts'
+import { getPtyManager } from '../manager.ts'
 import { checkCommandPermission, checkWorkdirPermission } from '../permissions.ts'
 import { describeError } from '../utils.ts'
 import DESCRIPTION from './spawn.txt'
@@ -12,7 +12,7 @@ import DESCRIPTION from './spawn.txt'
  * limit" after a script that was not executable). The reason plus the usual
  * fixes is more useful than the exception alone.
  */
-function spawnOrExplain<R>(command: string, run: () => R): R {
+async function spawnOrExplain<R>(command: string, run: () => Promise<R>): Promise<R> {
   try {
     return run()
   } catch (error) {
@@ -109,8 +109,8 @@ export const ptySpawn = tool({
 
     const sessionId = ctx.sessionID
     const rendered = [args.command, ...(args.args ?? [])].join(' ')
-    const info = spawnOrExplain(rendered, () =>
-      manager.spawn({
+    const info = await spawnOrExplain(rendered, async () =>
+      await getPtyManager().spawn({
         command: args.command,
         args: args.args,
         workdir: args.workdir,

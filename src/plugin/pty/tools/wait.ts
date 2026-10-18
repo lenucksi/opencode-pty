@@ -24,14 +24,14 @@ function isTerminal(session: PTYSessionInfo): boolean {
  * the same way here as it is there, and the block says how much of the buffer the
  * tail accounts for.
  */
-function formatTail(session: PTYSessionInfo, count: number, budget: number): TailLines {
+async function formatTail(session: PTYSessionInfo, count: number, budget: number): Promise<TailLines> {
   const offset = Math.max(0, session.lineCount - count)
-  const result = manager.read(session.id, offset, count, budget)
+  const result = await manager.read(session.id, offset, count, budget)
   if (!result || result.lines.length === 0) {
     return { lines: [], truncatedLines: 0, shownChars: 0, bufferChars: session.charCount }
   }
   return {
-    lines: result.slices.map((slice, index) => {
+    lines: result.slices.map((slice: any, index: number) => {
       const formatted = formatLine(slice.text, result.offset + index + 1, slice.shownChars)
       return slice.truncated
         ? `${formatted.text}${TRUNCATION_MARKER(slice.shownChars, slice.totalChars)}`
@@ -50,8 +50,8 @@ interface TailLines {
   bufferChars: number
 }
 
-function formatWaitedBlock(session: PTYSessionInfo, budget: number): string {
-  const tail = formatTail(session, WAIT_TAIL_LINES, budget)
+async function formatWaitedBlock(session: PTYSessionInfo, budget: number): Promise<string> {
+  const tail = await formatTail(session, WAIT_TAIL_LINES, budget)
   const exitInfo = `${session.exitCode ?? 'unknown'}${session.exitSignal ? `, signal: ${session.exitSignal}` : ''}`
   const attrs = [
     `id="${session.id}"`,
@@ -92,12 +92,13 @@ export const ptyWait = tool({
   },
   async execute(args) {
     const tailBudget = charsForTokens(DEFAULT_READ_MAX_TOKENS)
-    const initial = manager.get(args.id)
+    const _g1 = manager.get(args.id)
+    const initial = _g1 instanceof Promise ? await _g1 : _g1
     if (!initial) {
-      throw buildSessionNotFoundError(args.id)
+      throw await buildSessionNotFoundError(args.id)
     }
     if (isTerminal(initial)) {
-      return formatWaitedBlock(initial, tailBudget)
+      return await formatWaitedBlock(initial, tailBudget)
     }
 
     let resolveDone!: (session: PTYSessionInfo) => void
@@ -115,10 +116,11 @@ export const ptyWait = tool({
     registerSessionUpdateCallback(onUpdate)
 
     // Close the race window between the initial get and registration.
-    const recheck = manager.get(args.id)
+    const _g2 = manager.get(args.id)
+    const recheck = _g2 instanceof Promise ? await _g2 : _g2
     if (!recheck) {
       removeSessionUpdateCallback(onUpdate)
-      throw buildSessionNotFoundError(args.id)
+      throw await buildSessionNotFoundError(args.id)
     }
     if (isTerminal(recheck)) {
       removeSessionUpdateCallback(onUpdate)
@@ -154,6 +156,6 @@ export const ptyWait = tool({
         `</pty_wait_timeout>`,
       ].join('\n')
     }
-    return formatWaitedBlock(winner, tailBudget)
+    return await formatWaitedBlock(winner, tailBudget)
   },
 })

@@ -490,3 +490,30 @@ export function initManager(opcClient: OpencodeClient): void {
 export function setManagerNotifier(notifier: SessionNotifier | null): void {
   manager.setNotifier(notifier)
 }
+
+// ---------------------------------------------------------------------------
+// Daemon mode: the plugin can delegate to a daemon process over IPC.
+// ---------------------------------------------------------------------------
+
+import { PtyClient } from '../../client/pty-client.ts'
+
+let _ptyClient: PtyClient | null = null
+let _daemonMode = false
+
+export function enableDaemonMode(options: { socketPath?: string; stateDir?: string; daemonBin?: string } = {}): void {
+  _ptyClient = new PtyClient(options)
+  _daemonMode = true
+}
+
+export function getPtyManager(): PTYManager | PtyClient {
+  return _daemonMode && _ptyClient ? _ptyClient : manager
+}
+
+export async function connectToDaemon(options: { socketPath?: string; stateDir?: string; daemonBin?: string } = {}): Promise<void> {
+  if (!_ptyClient) {
+    _ptyClient = new PtyClient(options)
+  }
+  await _ptyClient.connect()
+  _ptyClient.startHeartbeat()
+  _daemonMode = true
+}
