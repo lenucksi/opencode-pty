@@ -29,6 +29,9 @@ export class PtyClient {
   private pushHandlers = new Map<string, (params: Record<string, unknown>) => void>()
   private connected = false
   private buffer = ''
+  private reconnecting = false
+  private reconnectAttempts = 0
+  private maxReconnectAttempts = 10
 
   constructor(options: PtyClientOptions = {}) {
     this.socketPath = options.socketPath ?? join(process.env.XDG_RUNTIME_DIR ?? '/tmp', 'opencode-pty', 'ptyd.sock')
@@ -58,6 +61,7 @@ export class PtyClient {
             close: () => {
               this.connected = false
               console.warn('[PtyClient] daemon disconnected')
+              this.scheduleReconnect()
             },
             error: (_socket, err) => {
               console.error('[PtyClient] socket error:', err)
@@ -65,6 +69,7 @@ export class PtyClient {
           },
         })
         this.connected = true
+        this.reconnectAttempts = 0
         this.registerPushHandlers()
         return
       } catch {
@@ -274,6 +279,30 @@ export class PtyClient {
     this.onPush('session_removed', (params) => {
       notifySessionRemoved(params.sessionId as string)
     })
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnecting) return
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('[PtyClient] max reconnect attempts reached')
+      return
+    }
+    this.reconnecting = true
+    this.reconnectAttempts++
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000)
+    setTimeout(async () => {
+      try {
+        await this.connect()
+        this.reconnecting = false
+        this.reconnectAttempts = 0
+        this.registerPushHandlers()
+        console.log('[PtyClient] reconnected to daemon')
+      } catch (err) {
+        console.warn('[PtyClient] reconnect failed:', err)
+        this.reconnecting = false
+        this.scheduleReconnect()
+      }
+    }, delay)
   }
 
   disconnect(): void {
