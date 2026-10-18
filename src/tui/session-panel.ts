@@ -300,6 +300,7 @@ function framedScreen(view: SessionPanelView): unknown {
       minHeight: 0,
       stickyScroll: true,
       stickyStart: 'bottom',
+      scrollX: true,
       // Hand the scrollable to the host once it exists: the keeper outside decides
       // from the reader's position whether the next poll may drag the view, and the
       // view itself stays a pure function of what it is told.
