@@ -10,6 +10,7 @@
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { sessionsRoot } from '../plugin/pty/state-paths.ts'
 import { encodeMessage, parseMessage, isPush } from '../daemon/protocol.ts'
 import { notifyRawOutput, notifySessionUpdate, notifySessionRemoved } from '../plugin/pty/manager-notifications.ts'
 
@@ -36,8 +37,8 @@ export class PtyClient {
 
   constructor(options: PtyClientOptions = {}) {
     this.socketPath = options.socketPath ?? join(process.env.XDG_RUNTIME_DIR ?? '/tmp', 'opencode-pty', 'ptyd.sock')
-    this.stateDir = options.stateDir ?? ''
-    this.daemonBin = options.daemonBin ?? 'bun'
+    this.stateDir = options.stateDir ?? sessionsRoot()
+    this.daemonBin = options.daemonBin ?? new URL('../daemon/index.js', import.meta.url).pathname
   }
 
   /** Connect to the daemon, auto-starting it if needed. */
@@ -91,8 +92,11 @@ export class PtyClient {
   }
 
   private async startDaemon(): Promise<void> {
-    // Use setsid + nohup to detach the daemon from this process
-    Bun.spawn(['sh', '-c', `setsid nohup bun run ${this.daemonBin} --socket ${this.socketPath} --state-dir ${this.stateDir} </dev/null >/dev/null 2>&1 &`], {
+    const daemonEntry = this.daemonBin
+    const socket = this.socketPath
+    const stateDir = this.stateDir
+    const logPath = (process.env.XDG_STATE_HOME ?? (process.env.HOME ? process.env.HOME + '/.local/state' : '/tmp')) + '/opencode/opencode-pty.log'
+    Bun.spawn(['sh', '-c', `mkdir -p "$(dirname ${JSON.stringify(socket)})"; setsid nohup bun ${JSON.stringify(daemonEntry)} --socket ${JSON.stringify(socket)} --state-dir ${JSON.stringify(stateDir)} </dev/null >>${JSON.stringify(logPath)} 2>&1 &`], {
       stdout: 'ignore',
       stderr: 'ignore',
     })
