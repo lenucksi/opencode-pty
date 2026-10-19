@@ -188,7 +188,12 @@ describe('OpenCode V2 Plugin API', () => {
 
     it('is runnable through the registered command', async () => {
       const registered: Record<string, CommandDefinition> = {}
-      registerV2Commands({ add: (command) => void (registered[command.name] = command) })
+      const draft: CommandDraft = {
+        add: (command) => {
+          registered[command.name] = command
+        },
+      }
+      registerV2Commands(draft)
       await registered[PTY_RESTART_DAEMON_COMMAND]?.execute({})
       expect(registered[PTY_RESTART_DAEMON_COMMAND]?.description).toBe(
         'Restart the PTY daemon (ends every running PTY session)'

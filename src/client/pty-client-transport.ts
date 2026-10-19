@@ -170,10 +170,9 @@ export class PtyClientTransport {
     const daemonEntry = this.daemonBin
     const socket = this.socketPath
     const stateDir = this.stateDir
-    const logPath =
-      (process.env.XDG_STATE_HOME ??
-        (process.env.HOME ? process.env.HOME + '/.local/state' : '/tmp')) +
-      '/opencode/opencode-pty.log'
+    const stateHome =
+      process.env.XDG_STATE_HOME ?? (process.env.HOME ? `${process.env.HOME}/.local/state` : '/tmp')
+    const logPath = `${stateHome}/opencode/opencode-pty.log`
     // No shell: the paths are arguments, not text to be re-parsed. `setsid` is what
     // detaches the daemon from this host's session so it outlives it; `nohup` is not
     // needed once stdio points at a file.

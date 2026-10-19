@@ -32,7 +32,7 @@ export interface DaemonPush {
 export type DaemonMessage = DaemonRequest | DaemonResponse | DaemonPush
 
 export function encodeMessage(msg: DaemonMessage): string {
-  return JSON.stringify(msg) + '\n'
+  return `${JSON.stringify(msg)}\n`
 }
 
 export function parseMessage(line: string): DaemonMessage | null {
