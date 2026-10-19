@@ -12,7 +12,7 @@
  * truncated read stops.
  *
  * The model is resolved from `--model`, then `PTY_LLM_HARNESS_MODEL`, then
- * `opencode-go/space-bunny-free`. Behaviour is model dependent: the assertions
+ * `opencode-go/minimax-m3.1-flash-free`. Behaviour is model dependent: the assertions
  * are about documentation the model has to follow, and a different model will
  * follow it differently. Every result line names the model, so a behaviour
  * change is distinguishable from a regression in the plugin.
@@ -39,7 +39,7 @@ import {
 } from './workspace.ts'
 
 export const MODEL_ENV = 'PTY_LLM_HARNESS_MODEL'
-export const DEFAULT_MODEL = 'opencode-go/space-bunny-free'
+export const DEFAULT_MODEL = 'opencode-go/minimax-m3.1-flash-free'
 
 export interface RunnerOptions {
   scenarioIds: string[]
