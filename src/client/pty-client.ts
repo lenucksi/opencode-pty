@@ -20,6 +20,20 @@ export interface PtyClientOptions {
   daemonBin?: string
 }
 
+/**
+ * The daemon entry beside this module.
+ *
+ * The built client sits next to `index.js`; a source checkout has `index.ts` and no
+ * compiled sibling. Preferring the built file keeps the package honest, and the `.ts`
+ * fallback is what lets the harness drive the source tree without a build step of its
+ * own.
+ */
+function defaultDaemonEntry(): string {
+  const js = new URL('../daemon/index.js', import.meta.url)
+  if (existsSync(js)) return js.pathname
+  return new URL('../daemon/index.ts', import.meta.url).pathname
+}
+
 export class PtyClient {
   private socket: any = null
   private socketPath: string
@@ -38,7 +52,7 @@ export class PtyClient {
   constructor(options: PtyClientOptions = {}) {
     this.socketPath = options.socketPath ?? join(process.env.XDG_RUNTIME_DIR ?? '/tmp', 'opencode-pty', 'ptyd.sock')
     this.stateDir = options.stateDir ?? sessionsRoot()
-    this.daemonBin = options.daemonBin ?? new URL('../daemon/index.js', import.meta.url).pathname
+    this.daemonBin = options.daemonBin ?? defaultDaemonEntry()
   }
 
   /** Connect to the daemon, auto-starting it if needed. */
