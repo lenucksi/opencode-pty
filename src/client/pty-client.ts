@@ -101,6 +101,9 @@ export class PtyClient {
             },
             close: () => {
               this.connected = false
+              // A partial line from a lost connection would otherwise prefix every
+              // response of the next one, and each of them would fail to parse.
+              this.buffer = ''
               this.writer?.close()
               this.writer = null
               console.warn('[PtyClient] daemon disconnected')
@@ -112,6 +115,7 @@ export class PtyClient {
           },
         })
         this.connected = true
+        this.buffer = ''
         this.writer = new SocketWriter(this.socket)
         this.reconnectAttempts = 0
         this.registerPushHandlers()
