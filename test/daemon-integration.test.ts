@@ -10,10 +10,13 @@ describe('Daemon Integration', () => {
 
   beforeAll(async () => {
     mkdirSync(stateDir, { recursive: true })
-    daemonProc = Bun.spawn(['bun', 'run', 'src/daemon/index.ts', '--socket', socketPath, '--state-dir', stateDir], {
-      stdout: 'ignore',
-      stderr: 'ignore',
-    })
+    daemonProc = Bun.spawn(
+      ['bun', 'run', 'src/daemon/index.ts', '--socket', socketPath, '--state-dir', stateDir],
+      {
+        stdout: 'ignore',
+        stderr: 'ignore',
+      }
+    )
     // Wait for socket
     for (let i = 0; i < 40; i++) {
       await Bun.sleep(250)
@@ -23,10 +26,16 @@ describe('Daemon Integration', () => {
   })
 
   afterAll(async () => {
-    try { daemonProc.kill() } catch {}
+    try {
+      daemonProc.kill()
+    } catch {}
     await Bun.sleep(200)
-    try { rmSync(socketPath) } catch {}
-    try { rmSync(stateDir, { recursive: true }) } catch {}
+    try {
+      rmSync(socketPath)
+    } catch {}
+    try {
+      rmSync(stateDir, { recursive: true })
+    } catch {}
   })
 
   it('connects and pings', async () => {
@@ -42,7 +51,11 @@ describe('Daemon Integration', () => {
     const client = new PtyClient({ socketPath, stateDir })
     await client.connect()
 
-    const session = await client.spawn({ command: 'echo', args: ['hello daemon'], description: 'test' })
+    const session = await client.spawn({
+      command: 'echo',
+      args: ['hello daemon'],
+      description: 'test',
+    })
     expect(session.id).toMatch(/^pty_/)
     expect(session.status).toBe('running')
 
@@ -88,7 +101,11 @@ describe('Daemon Integration', () => {
     const client = new PtyClient({ socketPath, stateDir })
     await client.connect()
 
-    const session = await client.spawn({ command: 'sh', args: ['-c', 'echo "line1"; echo "line2"; echo "error here"'], description: 'test' })
+    const session = await client.spawn({
+      command: 'sh',
+      args: ['-c', 'echo "line1"; echo "line2"; echo "error here"'],
+      description: 'test',
+    })
     await Bun.sleep(300)
 
     const result = await client.search(session.id, /error/, 0, 10)
@@ -97,5 +114,39 @@ describe('Daemon Integration', () => {
 
     await client.kill(session.id, true)
     client.disconnect()
+  })
+
+  it('restarts the daemon on request and reconnects', async () => {
+    const client = new PtyClient({ socketPath, stateDir })
+    await client.connect()
+
+    const { oldPid, newPid } = await client.restartDaemon()
+    expect(oldPid).not.toBeNull()
+    expect(newPid).not.toBeNull()
+    expect(newPid).not.toBe(oldPid)
+
+    // A fresh daemon, not just a reconnect to the old one.
+    const pong = await client.ping()
+    expect(pong.pong).toBe(true)
+
+    const spawned = await client.spawn({
+      command: 'echo',
+      args: ['after restart'],
+      description: 'test',
+    })
+    await Bun.sleep(300)
+    const read = await client.read(spawned.id, 0, 10)
+    expect(read?.lines.join('')).toContain('after restart')
+    await client.kill(spawned.id, true)
+    client.disconnect()
+
+    // This daemon was detached by the client, so the file's process cannot reap it.
+    if (newPid !== null) {
+      try {
+        process.kill(newPid, 'SIGTERM')
+      } catch {
+        // Already gone.
+      }
+    }
   })
 })

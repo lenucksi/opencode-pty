@@ -8,8 +8,8 @@
  * All methods are async because IPC is inherently asynchronous.
  */
 
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, unlinkSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { encodeMessage, isPush, parseMessage } from '../daemon/protocol.ts'
 import { SocketWriter } from '../daemon/socket-writer.ts'
 import {
@@ -39,9 +39,20 @@ function defaultDaemonEntry(): string {
   return new URL('../daemon/index.ts', import.meta.url).pathname
 }
 
+/** Signal 0: permission check plus liveness, without disturbing the process. */
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export class PtyClient {
   private socket: any = null
   private socketPath: string
+  private pidFile: string
   private stateDir: string
   private daemonBin: string
   private requestId = 0
@@ -58,6 +69,7 @@ export class PtyClient {
   constructor(options: PtyClientOptions = {}) {
     this.socketPath =
       options.socketPath ?? join(process.env.XDG_RUNTIME_DIR ?? '/tmp', 'opencode-pty', 'ptyd.sock')
+    this.pidFile = join(dirname(this.socketPath), 'ptyd.pid')
     this.stateDir = options.stateDir ?? sessionsRoot()
     this.daemonBin = options.daemonBin ?? defaultDaemonEntry()
   }
@@ -383,6 +395,60 @@ export class PtyClient {
 
   setNotificationManager(_manager: any): void {
     // No-op on client; daemon handles notifications
+  }
+
+  /**
+   * Stop the running daemon and bring a fresh one up.
+   *
+   * The pid comes from the pid file, not from a connection: a daemon that is still
+   * serving other clients is exactly the one worth restarting, and it may have
+   * outlived the process that started it. SIGTERM lets it flush the archive and
+   * remove its socket before we connect again.
+   *
+   * Ends every session the daemon owns. That is the point of a restart - the PTY
+   * masters belong to that process - so callers have to say so.
+   */
+  async restartDaemon(): Promise<{ oldPid: number | null; newPid: number | null }> {
+    const oldPid = this.readDaemonPid()
+    // Hold off the automatic reconnect: it would race the connect below.
+    this.reconnecting = true
+    if (oldPid !== null) {
+      try {
+        process.kill(oldPid, 'SIGTERM')
+      } catch {
+        // Already gone; the socket check below still runs.
+      }
+    }
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (!existsSync(this.socketPath)) break
+      if (oldPid !== null && !isProcessAlive(oldPid)) break
+      await Bun.sleep(250)
+    }
+
+    // Drop the old connection without letting its close handler reconnect first.
+    try {
+      this.socket?.end()
+    } catch {}
+    this.socket = null
+    this.connected = false
+    this.buffer = ''
+    this.writer?.close()
+    this.writer = null
+    // A daemon killed before it cleaned up leaves a socket that refuses connections.
+    if (existsSync(this.socketPath)) {
+      try {
+        unlinkSync(this.socketPath)
+      } catch {}
+    }
+    this.reconnecting = false
+    await this.connect()
+    return { oldPid, newPid: this.readDaemonPid() }
+  }
+
+  private readDaemonPid(): number | null {
+    if (!existsSync(this.pidFile)) return null
+    const parsed = Number.parseInt(readFileSync(this.pidFile, 'utf8').trim(), 10)
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
   }
 
   disconnect(): void {

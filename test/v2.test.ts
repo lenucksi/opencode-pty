@@ -9,6 +9,7 @@ import {
   handleShowServerUrlCommand,
   Plugin,
   PTY_OPEN_CLIENT_COMMAND,
+  PTY_RESTART_DAEMON_COMMAND,
   PTY_SHOW_SERVER_URL_COMMAND,
   ptyTools,
   stopActiveServer,
@@ -169,6 +170,10 @@ describe('OpenCode V2 Plugin API', () => {
         'Show PTY Sessions Web Interface URL'
       )
       expect(typeof registeredCommands[PTY_SHOW_SERVER_URL_COMMAND]?.execute).toBe('function')
+      expect(registeredCommands[PTY_RESTART_DAEMON_COMMAND]?.description).toBe(
+        'Restart the PTY daemon (ends every running PTY session)'
+      )
+      expect(typeof registeredCommands[PTY_RESTART_DAEMON_COMMAND]?.execute).toBe('function')
     })
   })
 

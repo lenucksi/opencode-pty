@@ -500,7 +500,9 @@ import { PtyClient } from '../../client/pty-client.ts'
 let _ptyClient: PtyClient | null = null
 let _daemonMode = false
 
-export function enableDaemonMode(options: { socketPath?: string; stateDir?: string; daemonBin?: string } = {}): void {
+export function enableDaemonMode(
+  options: { socketPath?: string; stateDir?: string; daemonBin?: string } = {}
+): void {
   _ptyClient = new PtyClient(options)
   _daemonMode = true
 }
@@ -509,11 +511,27 @@ export function getPtyManager(): PTYManager | PtyClient {
   return _daemonMode && _ptyClient ? _ptyClient : manager
 }
 
-export async function connectToDaemon(options: { socketPath?: string; stateDir?: string; daemonBin?: string } = {}): Promise<void> {
+export async function connectToDaemon(
+  options: { socketPath?: string; stateDir?: string; daemonBin?: string } = {}
+): Promise<void> {
   if (!_ptyClient) {
     _ptyClient = new PtyClient(options)
   }
   await _ptyClient.connect()
   _ptyClient.startHeartbeat()
   _daemonMode = true
+}
+
+/**
+ * Stop the daemon and start a fresh one.
+ *
+ * In-process mode has no daemon to restart, and says so with two nulls rather than
+ * pretending it did something. The command surfaces that difference.
+ */
+export async function restartDaemon(): Promise<{
+  oldPid: number | null
+  newPid: number | null
+}> {
+  if (!_daemonMode || !_ptyClient) return { oldPid: null, newPid: null }
+  return _ptyClient.restartDaemon()
 }
