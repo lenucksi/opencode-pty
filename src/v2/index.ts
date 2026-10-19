@@ -129,7 +129,7 @@ export const Plugin: PluginV2 = define({
       try {
         const { connectToDaemon } = await import('../plugin/pty/manager.ts')
         await connectToDaemon({
-          stateDir: (ctx.options as any)?.stateDir,
+          stateDir: ctx.options?.stateDir,
         })
         logPtyEvent('info', 'connected to pty daemon')
       } catch (error) {
@@ -143,7 +143,7 @@ export const Plugin: PluginV2 = define({
     const restored = await getPtyManager().loadPersistedSessions()
     if (restored.length > 0) {
       logPtyEvent('info', `restored ${restored.length} archived session(s)`, {
-        ids: (restored as any[]).map((session: any) => session.id),
+        ids: restored.map((session) => session.id),
       })
     }
 
@@ -152,7 +152,9 @@ export const Plugin: PluginV2 = define({
     // advertise a limit the store is not yet applying. The re-prune inside `updateRetention`
     // is what makes a lowered cap take effect at once - the store's own `prune()` runs only
     // in its constructor, which is long before these options exist.
-    const prunedRetention = (await (await getPtyManager().getSessionStore()).updateRetention(ctx.options?.retention ?? {}))
+    const prunedRetention = await (await getPtyManager().getSessionStore()).updateRetention(
+      ctx.options?.retention ?? {}
+    )
     if (prunedRetention.length > 0) {
       logPtyEvent('info', `retention removed ${prunedRetention.length} archived session(s)`, {
         ids: prunedRetention,

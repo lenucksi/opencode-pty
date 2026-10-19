@@ -50,14 +50,14 @@ export const ptyResize = tool({
       ].join('\n')
     }
 
-    if (!await getPtyManager().resize(args.id, args.cols, args.rows)) {
+    if (!(await getPtyManager().resize(args.id, args.cols, args.rows))) {
       throw await buildSessionNotFoundError(args.id)
     }
 
     // Re-read rather than echoing the request: clamping means the answer is not
     // necessarily what was asked for, and the point of reporting is to remove
     // the need to guess.
-    const after = await getPtyManager().get(args.id) ?? before
+    const after = (await getPtyManager().get(args.id)) ?? before
     const changed: string[] = []
     if (after.cols !== before.cols) changed.push(`width ${before.cols} -> ${after.cols}`)
     if (after.rows !== before.rows) changed.push(`height ${before.rows} -> ${after.rows}`)

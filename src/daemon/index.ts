@@ -21,8 +21,9 @@ import {
   sessionUpdateCallbacks,
 } from '../plugin/pty/manager-notifications.ts'
 import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
-import { SessionStore } from '../plugin/pty/session-store.ts'
+import { SessionStore, type RetentionPolicy } from '../plugin/pty/session-store.ts'
 import { sessionsRoot } from '../plugin/pty/state-paths.ts'
+import type { PTYSessionInfo, SpawnOptions } from '../plugin/pty/types.ts'
 import {
   type DaemonRequest,
   type DaemonResponse,
@@ -36,7 +37,7 @@ const IDLE_TIMEOUT_MS = 60 * 60 * 1000 // 1 hour
 const HEARTBEAT_INTERVAL_MS = 30 * 1000 // 30 seconds
 
 interface Client {
-  socket: any
+  socket: Bun.Socket<undefined>
   /** Queued writer: a response can exceed one socket buffer. See socket-writer.ts. */
   writer: SocketWriter
   id: string
@@ -64,19 +65,23 @@ function shutdown() {
   // Flush buffers to disk
   try {
     manager.getSessionStore().close()
-  } catch {}
-  // Clean up socket
+  } catch {
+    // The store flushes what it can; a failure here must not keep the process up.
+  }
   try {
     if (existsSync(socketPath)) unlinkSync(socketPath)
-  } catch {}
+  } catch {
+    // Already removed, or not ours to remove.
+  }
   const pidFile = join(socketDir, 'ptyd.pid')
   try {
     if (existsSync(pidFile)) unlinkSync(pidFile)
-  } catch {}
+  } catch {
+    // Same as the socket above.
+  }
   process.exit(0)
 }
 
-// Parse args
 const { values } = parseArgs({
   options: {
     socket: {
@@ -117,10 +122,11 @@ if (existsSync(socketPath)) {
   }
   try {
     unlinkSync(socketPath)
-  } catch {}
+  } catch {
+    // Another process removed it between the probe and here.
+  }
 }
 
-// Initialize the session store with the right root
 const store = new SessionStore({ root: stateDir })
 manager.setSessionStore(store)
 
@@ -142,7 +148,7 @@ rawOutputCallbacks.push((sessionId: string, rawData: string, offset: number) => 
   }
 })
 
-sessionUpdateCallbacks.push((session: any) => {
+sessionUpdateCallbacks.push((session: PTYSessionInfo) => {
   const msg = JSON.stringify({ method: 'session_update', params: { session } }) + '\n'
   for (const client of clients.values()) {
     client.writer.enqueue(msg)
@@ -156,7 +162,6 @@ sessionRemovedCallbacks.push((sessionId: string) => {
   }
 })
 
-// Load persisted sessions
 const restored = manager.loadPersistedSessions()
 if (restored.length > 0) {
   logPtyEvent('info', `restored ${restored.length} archived session(s)`, {
@@ -172,15 +177,14 @@ if (prunedRetention.length > 0) {
   })
 }
 
-// Start the socket server
 const server = Bun.listen({
   unix: socketPath,
   socket: {
     open(_socket) {
       const clientId = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       clients.set(clientId, {
-        socket: _socket as any,
-        writer: new SocketWriter(_socket as any),
+        socket: _socket,
+        writer: new SocketWriter(_socket),
         id: clientId,
         lastSeen: Date.now(),
       })
@@ -227,140 +231,113 @@ const server = Bun.listen({
 void server
 logPtyEvent('info', `daemon listening on ${socketPath}`)
 
-// Handle incoming requests
-function handleRequest(socket: any, req: DaemonRequest) {
-  let result: unknown
-  let error: string | undefined
+/** Params as they arrive on the wire; each handler narrows what it needs. */
+type WireParams = Record<string, unknown>
+type RequestHandler = (params: WireParams, socket: Bun.Socket<undefined>) => unknown
 
-  try {
-    switch (req.method) {
-      case 'ping':
-        result = { pong: true, generation: store.getGeneration() }
-        break
-      case 'list':
-        result = manager.list()
-        break
-      case 'spawn':
-        result = manager.spawn(req.params as any)
-        break
-      case 'write':
-        result = { success: manager.write(req.params?.id as string, req.params?.data as string) }
-        break
-      case 'read':
-        result = manager.read(
-          req.params?.id as string,
-          req.params?.offset as number,
-          req.params?.limit as number,
-          req.params?.budget as number
-        )
-        break
-      case 'kill':
-        result = { success: manager.kill(req.params?.id as string, req.params?.cleanup as boolean) }
-        break
-      case 'resize':
-        result = {
-          success: manager.resize(
-            req.params?.id as string,
-            req.params?.cols as number,
-            req.params?.rows as number
-          ),
-        }
-        break
-      case 'heartbeat':
-        for (const client of clients.values()) {
-          if (client.socket === socket) {
-            client.lastSeen = Date.now()
-            break
-          }
-        }
-        result = { ok: true }
-        break
-      case 'search': {
-        const regex = new RegExp(req.params?.pattern as string, req.params?.ignoreCase ? 'i' : '')
-        result = manager.search(
-          req.params?.id as string,
-          regex,
-          (req.params?.offset as number) ?? 0,
-          req.params?.limit as number,
-          req.params?.budget as number
-        )
+/**
+ * One handler per method, so `handleRequest` is a dispatcher rather than a wall.
+ *
+ * The table is the protocol: a method missing here answers `unknown method`, which
+ * is the one place a client can tell that the daemon is older than the plugin.
+ */
+const handlers: Record<string, RequestHandler> = {
+  ping: () => ({ pong: true, generation: store.getGeneration() }),
+  list: () => manager.list(),
+  spawn: (params) => manager.spawn(spawnFrom(params)),
+  write: (params) => ({ success: manager.write(params.id as string, params.data as string) }),
+  read: (params) =>
+    manager.read(
+      params.id as string,
+      params.offset as number,
+      params.limit as number,
+      params.budget as number
+    ),
+  kill: (params) => ({ success: manager.kill(params.id as string, params.cleanup as boolean) }),
+  resize: (params) => ({
+    success: manager.resize(params.id as string, params.cols as number, params.rows as number),
+  }),
+  heartbeat: (_params, socket) => {
+    for (const client of clients.values()) {
+      if (client.socket === socket) {
+        client.lastSeen = Date.now()
         break
       }
-      case 'get':
-        result = manager.get(req.params?.id as string)
-        break
-      case 'get_session':
-        result = manager.getSession(req.params?.id as string)
-        break
-      case 'get_session_log':
-        result = manager.getSessionLog(req.params?.id as string, {
-          tail: req.params?.tail as number,
-        })
-        break
-      case 'describe_missing_session':
-        result = manager.describeMissingSession(req.params?.id as string)
-        break
-      case 'describe_server':
-        result = manager.describeServer()
-        break
-      case 'get_raw_buffer':
-        result = manager.getRawBuffer(req.params?.id as string, req.params?.since as number)
-        break
-      case 'read_since':
-        result = manager.readSince(
-          req.params?.id as string,
-          req.params?.since as number,
-          req.params?.budget as number
-        )
-        break
-      case 'cleanup_by_session':
-        manager.cleanupBySession(req.params?.parentSessionId as string)
-        result = { ok: true }
-        break
-      case 'load_persisted_sessions':
-        result = manager.loadPersistedSessions()
-        break
-      case 'bulk_remove':
-        result = manager.bulkRemove(req.params?.ids as string[])
-        break
-      case 'restore_sessions':
-        result = manager.restoreSessions(req.params?.ids as string[])
-        break
-      case 'clear_all_sessions':
-        manager.clearAllSessions()
-        result = { ok: true }
-        break
-      case 'note_client_size':
-        manager.noteClientSize(req.params?.cols as number, req.params?.rows as number)
-        result = { ok: true }
-        break
-      case 'get_retention':
-        result = { retention: store.getRetention() }
-        break
-      case 'update_retention':
-        result = { pruned: store.updateRetention(req.params?.policy as any) }
-        break
-      case 'get_generation':
-        result = { generation: store.getGeneration() }
-        break
-      case 'get_state_dir':
-        result = { stateDir: store.getRoot() }
-        break
-      case 'list_persisted':
-        result = store.list()
-        break
-      case 'read_persisted':
-        result = store.read(
-          req.params?.id as string,
-          req.params?.offset as number,
-          req.params?.limit as number
-        )
-        break
-      default:
-        error = `unknown method: ${req.method}`
     }
-  } catch (e) {
-    error = e instanceof Error ? e.message : String(e)
+    return { ok: true }
+  },
+  search: (params) =>
+    manager.search(
+      params.id as string,
+      new RegExp(params.pattern as string, params.ignoreCase ? 'i' : ''),
+      (params.offset as number) ?? 0,
+      params.limit as number,
+      params.budget as number
+    ),
+  get: (params) => manager.get(params.id as string),
+  get_session: (params) => manager.getSession(params.id as string),
+  get_session_log: (params) =>
+    manager.getSessionLog(params.id as string, { tail: params.tail as number }),
+  describe_missing_session: (params) => manager.describeMissingSession(params.id as string),
+  describe_server: () => manager.describeServer(),
+  get_raw_buffer: (params) => manager.getRawBuffer(params.id as string, params.since as number),
+  read_since: (params) =>
+    manager.readSince(params.id as string, params.since as number, params.budget as number),
+  cleanup_by_session: (params) => {
+    manager.cleanupBySession(params.parentSessionId as string)
+    return { ok: true }
+  },
+  load_persisted_sessions: () => manager.loadPersistedSessions(),
+  bulk_remove: (params) => manager.bulkRemove(params.ids as string[]),
+  restore_sessions: (params) => manager.restoreSessions(params.ids as string[]),
+  clear_all_sessions: () => {
+    manager.clearAllSessions()
+    return { ok: true }
+  },
+  note_client_size: (params) => {
+    manager.noteClientSize(params.cols as number, params.rows as number)
+    return { ok: true }
+  },
+  get_retention: () => ({ retention: store.getRetention() }),
+  update_retention: (params) => ({
+    pruned: store.updateRetention(params.policy as Partial<RetentionPolicy>),
+  }),
+  get_generation: () => ({ generation: store.getGeneration() }),
+  get_state_dir: () => ({ stateDir: store.getRoot() }),
+  list_persisted: () => store.list(),
+  read_persisted: (params) =>
+    store.read(params.id as string, params.offset as number, params.limit as number),
+}
+
+/** The wire carries JSON; this is the one place that says which fields a spawn needs. */
+function spawnFrom(params: WireParams): SpawnOptions {
+  const options: SpawnOptions = {
+    command: params.command as string,
+    parentSessionId: params.parentSessionId as string,
+  }
+  if (params.args !== undefined) options.args = params.args as string[]
+  if (params.workdir !== undefined) options.workdir = params.workdir as string
+  if (params.env !== undefined) options.env = params.env as Record<string, string>
+  if (params.title !== undefined) options.title = params.title as string
+  if (params.description !== undefined) options.description = params.description as string
+  if (params.parentAgent !== undefined) options.parentAgent = params.parentAgent as string
+  if (params.notifyOnExit !== undefined) options.notifyOnExit = params.notifyOnExit as boolean
+  if (params.timeoutSeconds !== undefined) options.timeoutSeconds = params.timeoutSeconds as number
+  if (params.cols !== undefined) options.cols = params.cols as number
+  if (params.rows !== undefined) options.rows = params.rows as number
+  if (params.raw !== undefined) options.raw = params.raw as boolean
+  return options
+}
+
+function handleRequest(socket: Bun.Socket<undefined>, req: DaemonRequest) {
+  const handler = handlers[req.method]
+  let result: unknown
+  let error: string | undefined
+  try {
+    if (handler === undefined) error = `unknown method: ${req.method}`
+    else result = handler(req.params ?? {}, socket)
+  } catch (caught) {
+    error = caught instanceof Error ? caught.message : String(caught)
   }
 
   const response: DaemonResponse = { id: req.id }
@@ -371,7 +348,9 @@ function handleRequest(socket: any, req: DaemonRequest) {
   else {
     try {
       socket.write(encodeMessage(response))
-    } catch {}
+    } catch {
+      // The peer is gone; nothing to report to.
+    }
   }
 }
 
@@ -383,7 +362,9 @@ setInterval(() => {
       logPtyEvent('info', `client ${id} timed out (no heartbeat for ${IDLE_TIMEOUT_MS}ms)`)
       try {
         client.socket.end()
-      } catch {}
+      } catch {
+        // The socket is already gone; removing the bookkeeping is the point.
+      }
       clients.delete(id)
     }
   }
@@ -397,7 +378,6 @@ setInterval(() => {
 process.on('SIGTERM', shutdown)
 process.on('SIGINT', shutdown)
 
-// Write PID file
 const pidFile = join(socketDir, 'ptyd.pid')
 writeFileSync(pidFile, `${process.pid}\n`, { mode: 0o600 })
 

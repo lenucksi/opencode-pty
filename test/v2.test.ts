@@ -6,12 +6,14 @@ import { originsForProject } from '../src/shared/runtime.ts'
 import {
   getActiveServer,
   getOrCreateServer,
+  handleRestartDaemonCommand,
   handleShowServerUrlCommand,
   Plugin,
   PTY_OPEN_CLIENT_COMMAND,
   PTY_RESTART_DAEMON_COMMAND,
   PTY_SHOW_SERVER_URL_COMMAND,
   ptyTools,
+  registerV2Commands,
   stopActiveServer,
 } from '../src/v2/index.ts'
 import type {
@@ -174,6 +176,27 @@ describe('OpenCode V2 Plugin API', () => {
         'Restart the PTY daemon (ends every running PTY session)'
       )
       expect(typeof registeredCommands[PTY_RESTART_DAEMON_COMMAND]?.execute).toBe('function')
+    })
+  })
+
+  describe('Daemon restart command', () => {
+    it('says there is nothing to restart when sessions run in-process', async () => {
+      const message = await handleRestartDaemonCommand()
+      expect(message).toContain('run in-process')
+      expect(message).toContain('no daemon to restart')
+    })
+
+    it('is runnable through the registered command', async () => {
+      const registered: Record<string, CommandDefinition> = {}
+      registerV2Commands({ add: (command) => void (registered[command.name] = command) })
+      await registered[PTY_RESTART_DAEMON_COMMAND]?.execute({})
+      expect(registered[PTY_RESTART_DAEMON_COMMAND]?.description).toBe(
+        'Restart the PTY daemon (ends every running PTY session)'
+      )
+    })
+
+    it('does nothing when the draft has no add()', () => {
+      expect(() => registerV2Commands({} as CommandDraft)).not.toThrow()
     })
   })
 

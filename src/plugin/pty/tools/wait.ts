@@ -24,7 +24,11 @@ function isTerminal(session: PTYSessionInfo): boolean {
  * the same way here as it is there, and the block says how much of the buffer the
  * tail accounts for.
  */
-async function formatTail(session: PTYSessionInfo, count: number, budget: number): Promise<TailLines> {
+async function formatTail(
+  session: PTYSessionInfo,
+  count: number,
+  budget: number
+): Promise<TailLines> {
   const offset = Math.max(0, session.lineCount - count)
   const result = await manager.read(session.id, offset, count, budget)
   if (!result || result.lines.length === 0) {

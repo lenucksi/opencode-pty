@@ -491,10 +491,7 @@ export function setManagerNotifier(notifier: SessionNotifier | null): void {
   manager.setNotifier(notifier)
 }
 
-// ---------------------------------------------------------------------------
 // Daemon mode: the plugin can delegate to a daemon process over IPC.
-// ---------------------------------------------------------------------------
-
 import { PtyClient } from '../../client/pty-client.ts'
 
 let _ptyClient: PtyClient | null = null

@@ -14,6 +14,7 @@ import {
   type OutputBlockMeta,
   TRUNCATION_MARKER,
 } from '../formatters.ts'
+import type { BoundedSearchResult } from '../output-manager.ts'
 import { getPtyManager } from '../manager.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
@@ -164,7 +165,13 @@ async function handlePatternRead(
 ): Promise<string> {
   const regex = validateAndCreateRegex(pattern, ignoreCase)
 
-  const result = await getPtyManager().search(id, regex, offset, limit, budget)
+  const result: BoundedSearchResult | null = await getPtyManager().search(
+    id,
+    regex,
+    offset,
+    limit,
+    budget
+  )
   if (!result) {
     throw await buildSessionNotFoundError(id)
   }
@@ -185,7 +192,7 @@ async function handlePatternRead(
   }
 
   // A match can be cut by the budget; mark it rather than dropping it silently.
-  const lines = (result.matches as any[]).map((match: any) => {
+  const lines = result.matches.map((match) => {
     const formatted = formatLine(match.text, match.lineNumber, match.text.length)
     return formatted.truncated
       ? `${formatted.text}${TRUNCATION_MARKER(formatted.shownChars, formatted.totalChars)}`

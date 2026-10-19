@@ -26,6 +26,9 @@ export interface OpencodePtyOptions {
    */
   daemon?: boolean
 
+  /** Where the daemon keeps its archive. Defaults to the plugin's sessions root. */
+  stateDir?: string
+
   /**
    * How long archived sessions are kept, and how many.
    *

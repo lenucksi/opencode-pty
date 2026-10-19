@@ -98,7 +98,10 @@ describe('handleWebSocketMessage', () => {
     const { ws, sent } = createFakeWebSocket()
     spyOn(manager, 'get').mockReturnValue(null)
 
-    await handleWebSocketMessage(ws, JSON.stringify({ type: 'subscribe', sessionId: 'pty_missing' }))
+    await handleWebSocketMessage(
+      ws,
+      JSON.stringify({ type: 'subscribe', sessionId: 'pty_missing' })
+    )
 
     expect(lastError(sent).error.message).toBe('Session pty_missing not found')
   })
@@ -225,7 +228,10 @@ describe('handleWebSocketMessage', () => {
       throw new Error('spawn failed')
     })
 
-    await handleWebSocketMessage(ws, JSON.stringify({ type: 'spawn', command: 'echo', subscribe: true }))
+    await handleWebSocketMessage(
+      ws,
+      JSON.stringify({ type: 'spawn', command: 'echo', subscribe: true })
+    )
     await new Promise(setImmediate)
 
     expect(lastError(sent).error.message).toBe('spawn failed')

@@ -1,10 +1,11 @@
 import { getPtyManager } from '../../../plugin/pty/manager.ts'
+import type { PTYSessionInfo } from '../../../plugin/pty/types.ts'
 import type { HealthResponse } from '../../shared/types.ts'
 import { JsonResponse } from './responses.ts'
 
 export async function handleHealth(server: Bun.Server<undefined>) {
-  const sessions = await getPtyManager().list()
-  const activeSessions = (sessions as any[]).filter((s: any) => s.status === 'running').length
+  const sessions: PTYSessionInfo[] = await getPtyManager().list()
+  const activeSessions = sessions.filter((session) => session.status === 'running').length
   const totalSessions = sessions.length
 
   // Calculate response time (rough approximation)

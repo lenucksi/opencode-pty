@@ -109,22 +109,24 @@ export const ptySpawn = tool({
 
     const sessionId = ctx.sessionID
     const rendered = [args.command, ...(args.args ?? [])].join(' ')
-    const info = await spawnOrExplain(rendered, async () =>
-      await getPtyManager().spawn({
-        command: args.command,
-        args: args.args,
-        workdir: args.workdir,
-        env: args.env,
-        title: args.title,
-        description: args.description,
-        parentSessionId: sessionId,
-        parentAgent: ctx.agent,
-        notifyOnExit: args.notifyOnExit,
-        timeoutSeconds: args.timeoutSeconds,
-        cols: args.cols,
-        rows: args.rows,
-        raw: args.raw,
-      })
+    const info = await spawnOrExplain(
+      rendered,
+      async () =>
+        await getPtyManager().spawn({
+          command: args.command,
+          args: args.args,
+          workdir: args.workdir,
+          env: args.env,
+          title: args.title,
+          description: args.description,
+          parentSessionId: sessionId,
+          parentAgent: ctx.agent,
+          notifyOnExit: args.notifyOnExit,
+          timeoutSeconds: args.timeoutSeconds,
+          cols: args.cols,
+          rows: args.rows,
+          raw: args.raw,
+        })
     )
 
     // The id and the geometry go on the tag as attributes, not only as prose

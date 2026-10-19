@@ -154,7 +154,10 @@ class WebSocketHandler {
     manager.write(message.sessionId, message.data)
   }
 
-  private async handleResize(ws: ServerWebSocket<undefined>, message: WSMessageClientResize): Promise<void> {
+  private async handleResize(
+    ws: ServerWebSocket<undefined>,
+    message: WSMessageClientResize
+  ): Promise<void> {
     // Recorded before the resize is attempted: this message is the only place the
     // server learns how big a human's terminal pane is, and a later agent-spawned
     // session should inherit that rather than a constant.
@@ -169,7 +172,10 @@ class WebSocketHandler {
     }
   }
 
-  private async handleReadRaw(ws: ServerWebSocket<undefined>, message: WSMessageClientReadRaw): Promise<void> {
+  private async handleReadRaw(
+    ws: ServerWebSocket<undefined>,
+    message: WSMessageClientReadRaw
+  ): Promise<void> {
     const rawData = manager.getRawBuffer(message.sessionId)
     if (!rawData) {
       const error: WSMessageServerError = {
