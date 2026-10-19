@@ -95,10 +95,30 @@ const stateDir = values['state-dir'] as string
 const socketDir = socketPath.substring(0, socketPath.lastIndexOf('/'))
 mkdirSync(socketDir, { recursive: true, mode: 0o700 })
 
-// Clean up stale socket
-try {
-  if (existsSync(socketPath)) unlinkSync(socketPath)
-} catch {}
+// A stale socket is removed; a live one is not stolen. Two daemons starting at
+// once is not hypothetical - a host and an explicit restart can race - and the
+// loser would otherwise unlink the winner's socket and keep listening on an
+// inode nobody can reach.
+if (existsSync(socketPath)) {
+  let live = false
+  try {
+    const probe = await Bun.connect({
+      unix: socketPath,
+      socket: { data() {}, close() {}, error() {} },
+    })
+    probe.end()
+    live = true
+  } catch {
+    // Nothing listening: stale, safe to remove.
+  }
+  if (live) {
+    logPtyEvent('info', `another daemon is already listening on ${socketPath}; exiting`)
+    process.exit(0)
+  }
+  try {
+    unlinkSync(socketPath)
+  } catch {}
+}
 
 // Initialize the session store with the right root
 const store = new SessionStore({ root: stateDir })

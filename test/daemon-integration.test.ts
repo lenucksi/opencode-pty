@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
-import { existsSync, mkdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 
 import { PtyClient } from '../src/client/pty-client.ts'
 
@@ -26,6 +26,15 @@ describe('Daemon Integration', () => {
   })
 
   afterAll(async () => {
+    // `bun run <file>` can leave the script as a child, so killing the wrapper is
+    // not enough: the daemon's own pid file names the process that owns the PTYs.
+    const pidFile = `${socketPath.slice(0, socketPath.lastIndexOf('/'))}/ptyd.pid`
+    try {
+      const pid = Number.parseInt(readFileSync(pidFile, 'utf8').trim(), 10)
+      if (Number.isSafeInteger(pid) && pid > 0) process.kill(pid, 'SIGTERM')
+    } catch {
+      // No pid file, or already gone.
+    }
     try {
       daemonProc.kill()
     } catch {}

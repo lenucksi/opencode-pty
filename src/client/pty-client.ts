@@ -63,6 +63,8 @@ export class PtyClient {
   private connected = false
   private buffer = ''
   private reconnecting = false
+  /** Set by disconnect(): an intentional end must not schedule a reconnect. */
+  private stopped = false
   private reconnectAttempts = 0
   private maxReconnectAttempts = 10
 
@@ -77,6 +79,7 @@ export class PtyClient {
   /** Connect to the daemon, auto-starting it if needed. */
   async connect(): Promise<void> {
     if (this.connected) return
+    this.stopped = false
 
     // Try to connect; if socket exists but connection fails, it's stale
     if (existsSync(this.socketPath)) {
@@ -119,7 +122,10 @@ export class PtyClient {
               this.writer?.close()
               this.writer = null
               console.warn('[PtyClient] daemon disconnected')
-              this.scheduleReconnect()
+              // A disconnect the caller asked for is not a lost daemon. Without
+              // this, every `disconnect()` armed a reconnect that started a new
+              // daemon about a second later.
+              if (!this.stopped) this.scheduleReconnect()
             },
             error: (_socket, err) => {
               console.error('[PtyClient] socket error:', err)
@@ -139,7 +145,24 @@ export class PtyClient {
     throw new Error('Failed to connect to daemon')
   }
 
+  private starting: Promise<void> | null = null
+
+  /**
+   * Start the daemon once, even when two callers race (a reconnect and an explicit
+   * restart). Without this, both see the missing socket and both spawn; one binds
+   * and the other unlinks its socket and listens on an unreachable inode.
+   */
   private async startDaemon(): Promise<void> {
+    if (this.starting !== null) return this.starting
+    this.starting = this.spawnDaemon()
+    try {
+      await this.starting
+    } finally {
+      this.starting = null
+    }
+  }
+
+  private async spawnDaemon(): Promise<void> {
     const daemonEntry = this.daemonBin
     const socket = this.socketPath
     const stateDir = this.stateDir
@@ -442,7 +465,15 @@ export class PtyClient {
     }
     this.reconnecting = false
     await this.connect()
-    return { oldPid, newPid: this.readDaemonPid() }
+    // The socket appears before the pid file: the daemon listens, then writes it.
+    // Reading too early reports null and, worse, leaves the caller with no pid to
+    // stop a process it just started.
+    let newPid = this.readDaemonPid()
+    for (let attempt = 0; attempt < 20 && newPid === null; attempt += 1) {
+      await Bun.sleep(100)
+      newPid = this.readDaemonPid()
+    }
+    return { oldPid, newPid }
   }
 
   private readDaemonPid(): number | null {
@@ -452,6 +483,7 @@ export class PtyClient {
   }
 
   disconnect(): void {
+    this.stopped = true
     if (this.socket) {
       try {
         this.socket.end()
