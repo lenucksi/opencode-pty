@@ -10,9 +10,14 @@
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { encodeMessage, isPush, parseMessage } from '../daemon/protocol.ts'
+import { SocketWriter } from '../daemon/socket-writer.ts'
+import {
+  notifyRawOutput,
+  notifySessionRemoved,
+  notifySessionUpdate,
+} from '../plugin/pty/manager-notifications.ts'
 import { sessionsRoot } from '../plugin/pty/state-paths.ts'
-import { encodeMessage, parseMessage, isPush } from '../daemon/protocol.ts'
-import { notifyRawOutput, notifySessionUpdate, notifySessionRemoved } from '../plugin/pty/manager-notifications.ts'
 
 export interface PtyClientOptions {
   socketPath?: string
@@ -43,6 +48,7 @@ export class PtyClient {
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
   private pushHandlers = new Map<string, (params: Record<string, unknown>) => void>()
   private notifier: any = null
+  private writer: SocketWriter | null = null
   private connected = false
   private buffer = ''
   private reconnecting = false
@@ -50,7 +56,8 @@ export class PtyClient {
   private maxReconnectAttempts = 10
 
   constructor(options: PtyClientOptions = {}) {
-    this.socketPath = options.socketPath ?? join(process.env.XDG_RUNTIME_DIR ?? '/tmp', 'opencode-pty', 'ptyd.sock')
+    this.socketPath =
+      options.socketPath ?? join(process.env.XDG_RUNTIME_DIR ?? '/tmp', 'opencode-pty', 'ptyd.sock')
     this.stateDir = options.stateDir ?? sessionsRoot()
     this.daemonBin = options.daemonBin ?? defaultDaemonEntry()
   }
@@ -63,11 +70,16 @@ export class PtyClient {
     if (existsSync(this.socketPath)) {
       try {
         // Probe connection
-        const probe = await Bun.connect({ unix: this.socketPath, socket: { data: () => {}, close: () => {}, error: () => {} } })
+        const probe = await Bun.connect({
+          unix: this.socketPath,
+          socket: { data: () => {}, close: () => {}, error: () => {} },
+        })
         probe.end()
       } catch {
         // Stale socket, remove and start daemon
-        try { (await import('node:fs')).unlinkSync(this.socketPath) } catch {}
+        try {
+          ;(await import('node:fs')).unlinkSync(this.socketPath)
+        } catch {}
         await this.startDaemon()
       }
     } else {
@@ -84,8 +96,13 @@ export class PtyClient {
               this.buffer += new TextDecoder().decode(data)
               this.processBuffer()
             },
+            drain: () => {
+              this.writer?.flush()
+            },
             close: () => {
               this.connected = false
+              this.writer?.close()
+              this.writer = null
               console.warn('[PtyClient] daemon disconnected')
               this.scheduleReconnect()
             },
@@ -95,6 +112,7 @@ export class PtyClient {
           },
         })
         this.connected = true
+        this.writer = new SocketWriter(this.socket)
         this.reconnectAttempts = 0
         this.registerPushHandlers()
         return
@@ -109,11 +127,21 @@ export class PtyClient {
     const daemonEntry = this.daemonBin
     const socket = this.socketPath
     const stateDir = this.stateDir
-    const logPath = (process.env.XDG_STATE_HOME ?? (process.env.HOME ? process.env.HOME + '/.local/state' : '/tmp')) + '/opencode/opencode-pty.log'
-    Bun.spawn(['sh', '-c', `mkdir -p "$(dirname ${JSON.stringify(socket)})"; setsid nohup bun ${JSON.stringify(daemonEntry)} --socket ${JSON.stringify(socket)} --state-dir ${JSON.stringify(stateDir)} </dev/null >>${JSON.stringify(logPath)} 2>&1 &`], {
-      stdout: 'ignore',
-      stderr: 'ignore',
-    })
+    const logPath =
+      (process.env.XDG_STATE_HOME ??
+        (process.env.HOME ? process.env.HOME + '/.local/state' : '/tmp')) +
+      '/opencode/opencode-pty.log'
+    Bun.spawn(
+      [
+        'sh',
+        '-c',
+        `mkdir -p "$(dirname ${JSON.stringify(socket)})"; setsid nohup bun ${JSON.stringify(daemonEntry)} --socket ${JSON.stringify(socket)} --state-dir ${JSON.stringify(stateDir)} </dev/null >>${JSON.stringify(logPath)} 2>&1 &`,
+      ],
+      {
+        stdout: 'ignore',
+        stderr: 'ignore',
+      }
+    )
     // Wait for socket to appear
     for (let i = 0; i < 40; i++) {
       await new Promise((r) => setTimeout(r, 250))
@@ -149,7 +177,7 @@ export class PtyClient {
     const id = ++this.requestId
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject })
-      this.socket.write(encodeMessage({ id, method, params }))
+      this.writer?.enqueue(encodeMessage({ id, method, params }))
       // Timeout
       setTimeout(() => {
         if (this.pending.has(id)) {
@@ -180,7 +208,13 @@ export class PtyClient {
     return this.request('read', { id, offset, limit, budget })
   }
 
-  async search(id: string, pattern: RegExp, offset?: number, limit?: number, budget?: number): Promise<any> {
+  async search(
+    id: string,
+    pattern: RegExp,
+    offset?: number,
+    limit?: number,
+    budget?: number
+  ): Promise<any> {
     return this.request('search', { id, pattern: pattern.source, offset, limit, budget })
   }
 
@@ -269,26 +303,26 @@ export class PtyClient {
   }
 
   async getSessionStore(): Promise<any> {
-    const client = this
     return {
       getRetention: async () => {
-        const r = await client.request('get_retention')
+        const r = await this.request('get_retention')
         return r?.retention
       },
       updateRetention: async (policy: any) => {
-        const r = await client.request('update_retention', { policy })
+        const r = await this.request('update_retention', { policy })
         return r?.pruned ?? []
       },
       getGeneration: async () => {
-        const r = await client.request('get_generation')
+        const r = await this.request('get_generation')
         return r?.generation
       },
       getRoot: async () => {
-        const r = await client.request('get_state_dir')
+        const r = await this.request('get_state_dir')
         return r?.stateDir
       },
-      list: async () => client.request('list_persisted'),
-      read: async (id: string, offset: number, limit: number) => client.request('read_persisted', { id, offset, limit }),
+      list: async () => this.request('list_persisted'),
+      read: async (id: string, offset: number, limit: number) =>
+        this.request('read_persisted', { id, offset, limit }),
       isEnabled: async () => true,
       close: async () => {},
     }
@@ -323,7 +357,7 @@ export class PtyClient {
     }
     this.reconnecting = true
     this.reconnectAttempts++
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000)
+    const delay = Math.min(1000 * 2 ** (this.reconnectAttempts - 1), 30000)
     setTimeout(async () => {
       try {
         await this.connect()
@@ -349,8 +383,12 @@ export class PtyClient {
 
   disconnect(): void {
     if (this.socket) {
-      try { this.socket.end() } catch {}
+      try {
+        this.socket.end()
+      } catch {}
       this.connected = false
+      this.writer?.close()
+      this.writer = null
     }
   }
 }

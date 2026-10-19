@@ -15,21 +15,30 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { manager } from '../plugin/pty/manager.ts'
-import { SessionStore } from '../plugin/pty/session-store.ts'
-import { sessionsRoot } from '../plugin/pty/state-paths.ts'
-import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
-import { encodeMessage, parseMessage, isRequest, type DaemonRequest, type DaemonResponse } from './protocol.ts'
 import {
   rawOutputCallbacks,
-  sessionUpdateCallbacks,
   sessionRemovedCallbacks,
+  sessionUpdateCallbacks,
 } from '../plugin/pty/manager-notifications.ts'
+import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
+import { SessionStore } from '../plugin/pty/session-store.ts'
+import { sessionsRoot } from '../plugin/pty/state-paths.ts'
+import {
+  type DaemonRequest,
+  type DaemonResponse,
+  encodeMessage,
+  isRequest,
+  parseMessage,
+} from './protocol.ts'
+import { SocketWriter } from './socket-writer.ts'
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000 // 1 hour
 const HEARTBEAT_INTERVAL_MS = 30 * 1000 // 30 seconds
 
 interface Client {
   socket: any
+  /** Queued writer: a response can exceed one socket buffer. See socket-writer.ts. */
+  writer: SocketWriter
   id: string
   lastSeen: number
 }
@@ -70,7 +79,10 @@ function shutdown() {
 // Parse args
 const { values } = parseArgs({
   options: {
-    socket: { type: 'string', default: join(process.env.XDG_RUNTIME_DIR ?? '/tmp', 'opencode-pty', 'ptyd.sock') },
+    socket: {
+      type: 'string',
+      default: join(process.env.XDG_RUNTIME_DIR ?? '/tmp', 'opencode-pty', 'ptyd.sock'),
+    },
     'state-dir': { type: 'string', default: sessionsRoot() },
   },
   strict: false,
@@ -95,10 +107,9 @@ manager.setSessionStore(store)
 // Daemon notifier: pushes exit notifications to connected clients
 manager.setNotifier({
   sendExitNotification: async (session, exitCode) => {
-    const payload = JSON.stringify({ method: 'exit_notification', params: { session, exitCode } }) + '\n'
-    for (const client of clients.values()) {
-      try { client.socket.write(payload) } catch {}
-    }
+    const payload =
+      JSON.stringify({ method: 'exit_notification', params: { session, exitCode } }) + '\n'
+    for (const client of clients.values()) client.writer.enqueue(payload)
   },
   sendNotice: async () => {},
 })
@@ -107,21 +118,21 @@ manager.setNotifier({
 rawOutputCallbacks.push((sessionId: string, rawData: string, offset: number) => {
   const msg = JSON.stringify({ method: 'raw_data', params: { sessionId, rawData, offset } }) + '\n'
   for (const client of clients.values()) {
-    try { client.socket.write(msg) } catch {}
+    client.writer.enqueue(msg)
   }
 })
 
 sessionUpdateCallbacks.push((session: any) => {
   const msg = JSON.stringify({ method: 'session_update', params: { session } }) + '\n'
   for (const client of clients.values()) {
-    try { client.socket.write(msg) } catch {}
+    client.writer.enqueue(msg)
   }
 })
 
 sessionRemovedCallbacks.push((sessionId: string) => {
   const msg = JSON.stringify({ method: 'session_removed', params: { sessionId } }) + '\n'
   for (const client of clients.values()) {
-    try { client.socket.write(msg) } catch {}
+    client.writer.enqueue(msg)
   }
 })
 
@@ -149,6 +160,7 @@ const server = Bun.listen({
       const clientId = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       clients.set(clientId, {
         socket: _socket as any,
+        writer: new SocketWriter(_socket as any),
         id: clientId,
         lastSeen: Date.now(),
       })
@@ -167,9 +179,18 @@ const server = Bun.listen({
       }
       resetIdleTimer()
     },
+    drain(_socket) {
+      for (const client of clients.values()) {
+        if (client.socket === _socket) {
+          client.writer.flush()
+          return
+        }
+      }
+    },
     close(_socket) {
       for (const [id, client] of clients) {
         if (client.socket === _socket) {
+          client.writer.close()
           clients.delete(id)
           logPtyEvent('info', `client disconnected: ${id}`)
           break
@@ -206,13 +227,24 @@ function handleRequest(socket: any, req: DaemonRequest) {
         result = { success: manager.write(req.params?.id as string, req.params?.data as string) }
         break
       case 'read':
-        result = manager.read(req.params?.id as string, req.params?.offset as number, req.params?.limit as number, req.params?.budget as number)
+        result = manager.read(
+          req.params?.id as string,
+          req.params?.offset as number,
+          req.params?.limit as number,
+          req.params?.budget as number
+        )
         break
       case 'kill':
         result = { success: manager.kill(req.params?.id as string, req.params?.cleanup as boolean) }
         break
       case 'resize':
-        result = { success: manager.resize(req.params?.id as string, req.params?.cols as number, req.params?.rows as number) }
+        result = {
+          success: manager.resize(
+            req.params?.id as string,
+            req.params?.cols as number,
+            req.params?.rows as number
+          ),
+        }
         break
       case 'heartbeat':
         for (const client of clients.values()) {
@@ -225,7 +257,13 @@ function handleRequest(socket: any, req: DaemonRequest) {
         break
       case 'search': {
         const regex = new RegExp(req.params?.pattern as string, req.params?.ignoreCase ? 'i' : '')
-        result = manager.search(req.params?.id as string, regex, req.params?.offset as number ?? 0, req.params?.limit as number, req.params?.budget as number)
+        result = manager.search(
+          req.params?.id as string,
+          regex,
+          (req.params?.offset as number) ?? 0,
+          req.params?.limit as number,
+          req.params?.budget as number
+        )
         break
       }
       case 'get':
@@ -235,7 +273,9 @@ function handleRequest(socket: any, req: DaemonRequest) {
         result = manager.getSession(req.params?.id as string)
         break
       case 'get_session_log':
-        result = manager.getSessionLog(req.params?.id as string, { tail: req.params?.tail as number })
+        result = manager.getSessionLog(req.params?.id as string, {
+          tail: req.params?.tail as number,
+        })
         break
       case 'describe_missing_session':
         result = manager.describeMissingSession(req.params?.id as string)
@@ -247,7 +287,11 @@ function handleRequest(socket: any, req: DaemonRequest) {
         result = manager.getRawBuffer(req.params?.id as string, req.params?.since as number)
         break
       case 'read_since':
-        result = manager.readSince(req.params?.id as string, req.params?.since as number, req.params?.budget as number)
+        result = manager.readSince(
+          req.params?.id as string,
+          req.params?.since as number,
+          req.params?.budget as number
+        )
         break
       case 'cleanup_by_session':
         manager.cleanupBySession(req.params?.parentSessionId as string)
@@ -286,7 +330,11 @@ function handleRequest(socket: any, req: DaemonRequest) {
         result = store.list()
         break
       case 'read_persisted':
-        result = store.read(req.params?.id as string, req.params?.offset as number, req.params?.limit as number)
+        result = store.read(
+          req.params?.id as string,
+          req.params?.offset as number,
+          req.params?.limit as number
+        )
         break
       default:
         error = `unknown method: ${req.method}`
@@ -298,7 +346,13 @@ function handleRequest(socket: any, req: DaemonRequest) {
   const response: DaemonResponse = { id: req.id }
   if (error) response.error = error
   else response.result = result
-  socket.write(encodeMessage(response))
+  const target = [...clients.values()].find((client) => client.socket === socket)
+  if (target !== undefined) target.writer.enqueue(encodeMessage(response))
+  else {
+    try {
+      socket.write(encodeMessage(response))
+    } catch {}
+  }
 }
 
 // Heartbeat check: remove stale clients, shutdown if all gone for 1h
@@ -307,7 +361,9 @@ setInterval(() => {
   for (const [id, client] of clients) {
     if (now - client.lastSeen > IDLE_TIMEOUT_MS) {
       logPtyEvent('info', `client ${id} timed out (no heartbeat for ${IDLE_TIMEOUT_MS}ms)`)
-      try { client.socket.end() } catch {}
+      try {
+        client.socket.end()
+      } catch {}
       clients.delete(id)
     }
   }
