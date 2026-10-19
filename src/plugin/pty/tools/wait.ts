@@ -1,7 +1,7 @@
 import { tool } from '@opencode-ai/plugin'
 import { charsForTokens, DEFAULT_READ_MAX_TOKENS } from '../../../shared/constants.ts'
 import { formatLine, TRUNCATION_MARKER } from '../formatters.ts'
-import { manager } from '../manager.ts'
+import { getPtyManager } from '../manager.ts'
 import {
   registerSessionUpdateCallback,
   removeSessionUpdateCallback,
@@ -30,7 +30,7 @@ async function formatTail(
   budget: number
 ): Promise<TailLines> {
   const offset = Math.max(0, session.lineCount - count)
-  const result = await manager.read(session.id, offset, count, budget)
+  const result = await getPtyManager().read(session.id, offset, count, budget)
   if (!result || result.lines.length === 0) {
     return { lines: [], truncatedLines: 0, shownChars: 0, bufferChars: session.charCount }
   }
@@ -96,7 +96,7 @@ export const ptyWait = tool({
   },
   async execute(args) {
     const tailBudget = charsForTokens(DEFAULT_READ_MAX_TOKENS)
-    const _g1 = manager.get(args.id)
+    const _g1 = getPtyManager().get(args.id)
     const initial = _g1 instanceof Promise ? await _g1 : _g1
     if (!initial) {
       throw await buildSessionNotFoundError(args.id)
@@ -120,7 +120,7 @@ export const ptyWait = tool({
     registerSessionUpdateCallback(onUpdate)
 
     // Close the race window between the initial get and registration.
-    const _g2 = manager.get(args.id)
+    const _g2 = getPtyManager().get(args.id)
     const recheck = _g2 instanceof Promise ? await _g2 : _g2
     if (!recheck) {
       removeSessionUpdateCallback(onUpdate)

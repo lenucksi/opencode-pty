@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from 'bun'
-import { manager } from '../../../plugin/pty/manager'
+import { getPtyManager } from '../../../plugin/pty/manager.ts'
 import { checkCommandPermission, checkWorkdirPermission } from '../../../plugin/pty/permissions'
 import {
   CustomError,
@@ -20,7 +20,7 @@ import {
 
 class WebSocketHandler {
   private async sendSessionList(ws: ServerWebSocket<undefined>): Promise<void> {
-    const sessions = manager.list()
+    const sessions = await getPtyManager().list()
     const message: WSMessageServerSessionList = { type: 'session_list', sessions }
     ws.send(JSON.stringify(message))
   }
@@ -29,7 +29,7 @@ class WebSocketHandler {
     ws: ServerWebSocket<undefined>,
     message: WSMessageClientSubscribeSession
   ): Promise<void> {
-    const session = manager.get(message.sessionId)
+    const session = await getPtyManager().get(message.sessionId)
     if (!session) {
       const error: WSMessageServerError = {
         type: 'error',
@@ -137,7 +137,7 @@ class WebSocketHandler {
         await checkWorkdirPermission(message.workdir)
       }
 
-      const sessionInfo = manager.spawn(message)
+      const sessionInfo = await getPtyManager().spawn(message)
       if (message.subscribe) {
         await this.handleSubscribe(ws, { type: 'subscribe', sessionId: sessionInfo.id })
       }
@@ -151,7 +151,7 @@ class WebSocketHandler {
   }
 
   private async handleInput(message: WSMessageClientInput): Promise<void> {
-    manager.write(message.sessionId, message.data)
+    await getPtyManager().write(message.sessionId, message.data)
   }
 
   private async handleResize(
@@ -161,8 +161,8 @@ class WebSocketHandler {
     // Recorded before the resize is attempted: this message is the only place the
     // server learns how big a human's terminal pane is, and a later agent-spawned
     // session should inherit that rather than a constant.
-    manager.noteClientSize(message.cols, message.rows)
-    const resized = manager.resize(message.sessionId, message.cols, message.rows)
+    getPtyManager().noteClientSize(message.cols, message.rows)
+    const resized = await getPtyManager().resize(message.sessionId, message.cols, message.rows)
     if (!resized) {
       const error: WSMessageServerError = {
         type: 'error',
@@ -176,7 +176,7 @@ class WebSocketHandler {
     ws: ServerWebSocket<undefined>,
     message: WSMessageClientReadRaw
   ): Promise<void> {
-    const rawData = manager.getRawBuffer(message.sessionId)
+    const rawData = await getPtyManager().getRawBuffer(message.sessionId)
     if (!rawData) {
       const error: WSMessageServerError = {
         type: 'error',

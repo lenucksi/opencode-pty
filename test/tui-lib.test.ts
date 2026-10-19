@@ -398,20 +398,26 @@ describe('isPtyHealth', () => {
   })
 })
 describe('archiveLabel', () => {
-  // Absent unless something failed. A finished session with an exit 0 is a record, not
-  // an event, and the expansion shows only failures - so a line offering to open
-  // nothing would be a control with no answer.
+  // The line is the click that expands the finished rows. It used to appear only when
+  // something failed, so a session that exited 0 had no row and no expansion to reach
+  // it - the reader's freshly created session looked missing.
   it('says nothing when nothing finished', () => {
     expect(archiveLabel({ finished: 0, failed: 0, shown: 0, expanded: false })).toBeNull()
   })
 
-  it('says nothing when nothing failed, however many finished', () => {
-    expect(archiveLabel({ finished: 200, failed: 0, shown: 0, expanded: false })).toBeNull()
-    expect(archiveLabel({ finished: 200, failed: 0, shown: 0, expanded: true })).toBeNull()
+  it('still offers the expansion when every finished run succeeded', () => {
+    // Finished rows that all succeeded still offer the expansion: they are the runs the
+    // reader just made, and hiding them made a fresh session look like it never existed.
+    expect(archiveLabel({ finished: 200, failed: 0, shown: 0, expanded: false })).toBe(
+      '▸ 200 finished · none failed'
+    )
+    expect(archiveLabel({ finished: 200, failed: 0, shown: 10, expanded: true })).toBe(
+      '▾ 200 finished · 10 shown · none failed'
+    )
   })
 
   it('names the archive and the failures', () => {
-    expect(archiveLabel({ finished: 200, failed: 3, shown: 3, expanded: false })).toBe(
+    expect(archiveLabel({ finished: 200, failed: 3, shown: 10, expanded: false })).toBe(
       '\u25b8 200 finished \u00b7 3 failed'
     )
   })
@@ -420,7 +426,7 @@ describe('archiveLabel', () => {
   // so - otherwise it describes the screen rather than the archive.
   it('admits it is showing a subset when the cap cut the list', () => {
     expect(archiveLabel({ finished: 200, failed: 17, shown: 10, expanded: true })).toBe(
-      '\u25be 200 finished \u00b7 10 of 17 failed'
+      '\u25be 200 finished \u00b7 10 shown \u00b7 17 failed'
     )
   })
 

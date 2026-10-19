@@ -62,13 +62,17 @@ export const MAX_START_FAILURES = 3
 export const RETRY_STATUS = 'unavailable — toggle to retry'
 
 /**
- * How many failed finished rows the expansion shows before it admits there are more.
+ * How many finished rows the expansion shows before it admits there are more.
  *
  * The sidebar is ~40 columns and the archive is hundreds of entries, so the expansion
  * cannot show all of it - and it must not pretend to. The footer states how many are
  * shown when the two numbers differ.
+ *
+ * It caps ALL finished rows, not only the failed ones: a clean exit is still the run
+ * the reader just made, and hiding it made a session they had started a second ago
+ * look like it was never created.
  */
-export const FINISHED_FAILURE_LIMIT = 10
+export const FINISHED_LIMIT = 10
 
 export function initialPanelState(): PanelState {
   return {
@@ -167,7 +171,17 @@ export function failureCount(sessions: readonly PanelSession[]): number {
 export function failedFinished(sessions: readonly PanelSession[]): PanelSession[] {
   return sessions
     .filter((session) => isFinished(session) && endedBadly(session))
-    .slice(0, FINISHED_FAILURE_LIMIT)
+    .slice(0, FINISHED_LIMIT)
+}
+
+/**
+ * The finished rows the expansion lists: newest first, capped, success or failure.
+ *
+ * The order comes from the input, which `orderForDisplay` already put newest-first, so
+ * there is no second sort to disagree with the first.
+ */
+export function finishedRows(sessions: readonly PanelSession[]): PanelSession[] {
+  return sessions.filter(isFinished).slice(0, FINISHED_LIMIT)
 }
 
 /**
@@ -186,7 +200,7 @@ export function visibleSessions(
 ): PanelSession[] {
   const running = sessions.filter(isRunning)
   if (!showFinished) return running
-  return [...running, ...failedFinished(sessions)]
+  return [...running, ...finishedRows(sessions)]
 }
 
 /** One group of sessions: everything one OpenCode session started. */

@@ -1,4 +1,5 @@
-import { manager } from '../../plugin/pty/manager.ts'
+import { getPtyManager } from '../../plugin/pty/manager.ts'
+import { logPtyEvent } from '../../plugin/pty/plugin-log.ts'
 import type { HostAdapter, PermissionAuthorizer, SessionNotifier } from '../types.ts'
 
 export interface V2AdapterOptions {
@@ -17,7 +18,11 @@ export class V2HostAdapter implements HostAdapter {
   }
 
   onSessionDeleted(sessionId: string): void {
-    manager.cleanupBySession(sessionId)
+    // Fire-and-forget: a daemon answers over the socket, and the host does not wait
+    // for a cleanup. A rejection is logged rather than left unhandled.
+    void Promise.resolve(getPtyManager().cleanupBySession(sessionId)).catch((error) => {
+      logPtyEvent('warn', `cleanup of ${sessionId} failed`, error)
+    })
   }
 }
 

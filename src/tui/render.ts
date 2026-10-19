@@ -14,7 +14,7 @@ import {
 } from './lib.ts'
 import {
   emptyListLabel,
-  failedFinished,
+  finishedRows,
   failureCount,
   filterChipLabel,
   GROUP_AUTO_OPEN_LIMIT,
@@ -351,7 +351,7 @@ export function sidebarFooterView(view: PanelView) {
         archiveLabel({
           finished: finishedSessions(view.sessions).length,
           failed: failureCount(view.sessions),
-          shown: failedFinished(view.sessions).length,
+          shown: finishedRows(view.sessions).length,
           expanded: view.showFinished,
         }) ?? '',
     }),
