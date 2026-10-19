@@ -369,9 +369,10 @@ describe('GET /api/sessions/:id/screen with scrollback', () => {
     // the screen. Assert the boundary BEHAVIOUR (the screen starts with the row after
     // the newest history line), not a magic line number - the emulator counts its own
     // scroll cap, and the amout is what the response reports.
-    const boundary = body.historyRows!
+    const boundary = body.historyRows
+    if (boundary === undefined) throw new Error('the response does not say where history ends')
     expect(body.lines[boundary]).not.toBe(body.lines[boundary - 1])
-    expect(body.lines[boundary]!.startsWith('a3')).toBe(true)
+    expect(body.lines[boundary]?.startsWith('a3')).toBe(true)
   })
 
   it('keeps the plain screen when no scrollback is asked', async () => {

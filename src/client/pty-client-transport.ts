@@ -11,7 +11,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync } 
 import { dirname, join } from 'node:path'
 
 import type { SessionNotifier } from '../adapters/types.ts'
-import { encodeMessage, isPush, parseMessage } from '../daemon/protocol.ts'
+import { type DaemonRequest, encodeMessage, isPush, parseMessage } from '../daemon/protocol.ts'
 import { SocketWriter } from '../daemon/socket-writer.ts'
 import {
   notifyRawOutput,
@@ -52,13 +52,16 @@ function isProcessAlive(pid: number): boolean {
 }
 
 export class PtyClientTransport {
-  private socket: any = null
+  private socket: Bun.Socket<undefined> | null = null
   private socketPath: string
   private pidFile: string
   private stateDir: string
   private daemonBin: string
   private requestId = 0
-  private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
+  private pending = new Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (error: Error) => void }
+  >()
   private pushHandlers = new Map<string, (params: Record<string, unknown>) => void>()
   protected notifier: SessionNotifier | null = null
   private writer: SocketWriter | null = null
@@ -218,12 +221,17 @@ export class PtyClientTransport {
   }
 
   /** Send a request and wait for the response. */
-  protected async request(method: string, params?: Record<string, unknown>): Promise<any> {
+  protected async request<T = unknown>(method: string, params?: object): Promise<T> {
     if (!this.connected) await this.connect()
     const id = ++this.requestId
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
-      this.writer?.enqueue(encodeMessage({ id, method, params }))
+    return new Promise<T>((resolve, reject) => {
+      // The wire carries `unknown`; the caller's declaration is the assertion.
+      this.pending.set(id, { resolve: (value) => resolve(value as T), reject })
+      const message: DaemonRequest =
+        params === undefined
+          ? { id, method }
+          : { id, method, params: params as Record<string, unknown> }
+      this.writer?.enqueue(encodeMessage(message))
       // Timeout
       setTimeout(() => {
         if (this.pending.has(id)) {
@@ -287,7 +295,7 @@ export class PtyClientTransport {
     this.notifier = notifier
   }
 
-  setNotificationManager(_manager: any): void {
+  setNotificationManager(_manager: unknown): void {
     // No-op on client; daemon handles notifications
   }
 

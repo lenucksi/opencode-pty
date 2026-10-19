@@ -35,7 +35,7 @@ async function formatTail(
     return { lines: [], truncatedLines: 0, shownChars: 0, bufferChars: session.charCount }
   }
   return {
-    lines: result.slices.map((slice: any, index: number) => {
+    lines: result.slices.map((slice, index) => {
       const formatted = formatLine(slice.text, result.offset + index + 1, slice.shownChars)
       return slice.truncated
         ? `${formatted.text}${TRUNCATION_MARKER(slice.shownChars, slice.totalChars)}`

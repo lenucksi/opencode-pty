@@ -15,12 +15,13 @@ class StubClient extends PtyClient {
   readonly calls: Array<{ method: string; params?: Record<string, unknown> }> = []
   responses: Record<string, unknown> = {}
 
-  protected override async request(
-    method: string,
-    params?: Record<string, unknown>
-  ): Promise<unknown> {
-    this.calls.push(params === undefined ? { method } : { method, params })
-    return this.responses[method]
+  protected override async request<T = unknown>(method: string, params?: object): Promise<T> {
+    this.calls.push(
+      params === undefined ? { method } : { method, params: params as Record<string, unknown> }
+    )
+    // The stub's answer is whatever the case set; the caller's declaration says what
+    // shape it is pretending to be.
+    return this.responses[method] as T
   }
 }
 
@@ -34,7 +35,7 @@ describe('PtyClient API surface', () => {
   it('forwards spawn options unchanged', async () => {
     const stub = client({ spawn: { id: 'pty_1' } })
     const options = { command: 'echo', parentSessionId: 'ses_1' }
-    expect(await stub.spawn(options)).toEqual({ id: 'pty_1' })
+    expect((await stub.spawn(options)).id).toBe('pty_1')
     expect(stub.calls).toEqual([{ method: 'spawn', params: options }])
   })
 
@@ -133,12 +134,12 @@ describe('PtyClient API surface', () => {
       read_persisted: { lines: ['x'] },
     })
     const store = await stub.getSessionStore()
-    expect(await store.getRetention()).toEqual({ maxSessions: 5 })
+    expect(await store.getRetention()).toMatchObject({ maxSessions: 5 })
     expect(await store.updateRetention({ maxSessions: 5 })).toEqual(['pty_1'])
     expect(await store.getGeneration()).toBe('gen')
     expect(await store.getRoot()).toBe('/state')
-    expect(await store.list()).toEqual(['a'])
-    expect(await store.read('pty_1', 0, 5)).toEqual({ lines: ['x'] })
+    expect(await store.list()).toHaveLength(1)
+    expect((await store.read('pty_1', 0, 5))?.lines).toEqual(['x'])
     expect(await store.isEnabled()).toBe(true)
     expect(await store.close()).toBeUndefined()
     await stub.setSessionStore(null)

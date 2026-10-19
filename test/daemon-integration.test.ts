@@ -73,7 +73,7 @@ describe('Daemon Integration', () => {
 
     const readResult = await client.read(session.id, 0, 10)
     expect(readResult).not.toBeNull()
-    expect(readResult.lines.join('')).toContain('hello daemon')
+    expect(readResult?.lines.join('')).toContain('hello daemon')
 
     const killed = await client.kill(session.id, true)
     expect(killed).toBe(true)
@@ -119,7 +119,7 @@ describe('Daemon Integration', () => {
 
     const result = await client.search(session.id, /error/, 0, 10)
     expect(result).not.toBeNull()
-    expect(result.matches.length).toBeGreaterThan(0)
+    expect(result?.matches.length).toBeGreaterThan(0)
 
     await client.kill(session.id, true)
     client.disconnect()

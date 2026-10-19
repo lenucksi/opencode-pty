@@ -5,11 +5,36 @@ import {
   readAnnouncedGeneration,
   writeAnnouncedGeneration,
 } from '../plugin/pty/restart-notice.ts'
-import type { PersistedSession, SessionStore } from '../plugin/pty/session-store.ts'
+import type { BoundedReadResult } from '../plugin/pty/output-manager.ts'
+import type {
+  PersistedSession,
+  RetentionPolicy,
+  SessionStore,
+} from '../plugin/pty/session-store.ts'
 import { normalizeLogText } from '../web/shared/log-format.ts'
 
+/**
+ * The store this announcement reads from.
+ *
+ * Either return type is accepted, because the caller may hold a daemon client whose
+ * store speaks over a socket. `SessionStore` stays assignable unchanged: a synchronous
+ * method is a valid `T | Promise<T>`.
+ */
+export interface RestartStore {
+  getGeneration(): string | Promise<string>
+  getRoot(): string | Promise<string>
+  list(): PersistedSession[] | Promise<PersistedSession[]>
+  read(
+    id: string,
+    offset: number,
+    limit: number
+  ): BoundedReadResult | null | Promise<BoundedReadResult | null>
+  isEnabled(): boolean | Promise<boolean>
+  getRetention(): RetentionPolicy | Promise<RetentionPolicy>
+}
+
 export interface AnnounceRestartOptions {
-  store: SessionStore
+  store: SessionStore | RestartStore
   notifier?: SessionNotifier
   restored: PersistedSession[]
   webUrl?: string
@@ -29,8 +54,8 @@ export async function announceRestart(options: AnnounceRestartOptions): Promise<
   const lost = options.restored.filter((session) => session.lost)
   if (lost.length === 0) return
 
-  const generation = options.store.getGeneration()
-  const root = options.store.getRoot()
+  const generation = await options.store.getGeneration()
+  const root = await options.store.getRoot()
   if (readAnnouncedGeneration(root) === generation) return
 
   const targets = new Map<string, PersistedSession[]>()
@@ -55,30 +80,35 @@ export async function announceRestart(options: AnnounceRestartOptions): Promise<
   }
 
   const now = options.now ?? Date.now
-  const archivedCount = options.store.list().length
+  const archivedCount = (await options.store.list()).length
 
   for (const [parentSessionId, sessions] of targets) {
     const [first] = sessions
     if (!first) continue
 
-    const text = buildRestartNotice({
-      generation,
-      startedAt: new Date(now()).toISOString(),
-      ...(options.webUrl ? { webUrl: options.webUrl } : {}),
-      ...(options.hostVersion ? { hostVersion: options.hostVersion } : {}),
-      lost: sessions.map((session) => ({
+    // One read per lost session, in parallel: the store may be a daemon client, and
+    // a map callback cannot await.
+    const lostRows = await Promise.all(
+      sessions.map(async (session) => ({
         id: session.id,
         title: session.title,
         status: session.lost ? `${session.status} (lost)` : session.status,
         lineCount: session.lineCount,
         tail: normalizeLogText(
-          options.store.read(session.id, 0, 5)?.lines.join('\n') ?? '',
+          (await options.store.read(session.id, 0, 5))?.lines.join('\n') ?? '',
           'plain'
         ),
-      })),
+      }))
+    )
+    const text = buildRestartNotice({
+      generation,
+      startedAt: new Date(now()).toISOString(),
+      ...(options.webUrl ? { webUrl: options.webUrl } : {}),
+      ...(options.hostVersion ? { hostVersion: options.hostVersion } : {}),
+      lost: lostRows,
       archivedCount,
-      persistEnabled: options.store.isEnabled(),
-      retention: options.store.getRetention(),
+      persistEnabled: await options.store.isEnabled(),
+      retention: await options.store.getRetention(),
     })
 
     await notifier.sendNotice({ id: first.id, parentSessionId }, text, 'restart')

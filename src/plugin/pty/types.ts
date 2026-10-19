@@ -52,7 +52,7 @@ export interface PTYSession {
    * time rather than at process exit.
    */
   exitAt?: Date
-  parentSessionId: string
+  parentSessionId?: string
   parentAgent?: string
   notifyOnExit: boolean
   timeoutSeconds?: number
@@ -146,7 +146,8 @@ export interface SpawnOptions {
   env?: Record<string, string>
   title?: string
   description?: string
-  parentSessionId: string
+  /** The conversation that owns the session. Absent for sessions nobody started. */
+  parentSessionId?: string
   parentAgent?: string
   notifyOnExit?: boolean
   timeoutSeconds?: number

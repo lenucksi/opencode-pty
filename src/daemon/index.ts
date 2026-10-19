@@ -165,7 +165,7 @@ sessionRemovedCallbacks.push((sessionId: string) => {
 const restored = manager.loadPersistedSessions()
 if (restored.length > 0) {
   logPtyEvent('info', `restored ${restored.length} archived session(s)`, {
-    ids: restored.map((s: any) => s.id),
+    ids: restored.map((session) => session.id),
   })
 }
 
@@ -311,10 +311,9 @@ const handlers: Record<string, RequestHandler> = {
 
 /** The wire carries JSON; this is the one place that says which fields a spawn needs. */
 function spawnFrom(params: WireParams): SpawnOptions {
-  const options: SpawnOptions = {
-    command: params.command as string,
-    parentSessionId: params.parentSessionId as string,
-  }
+  const options: SpawnOptions = { command: params.command as string }
+  if (params.parentSessionId !== undefined)
+    options.parentSessionId = params.parentSessionId as string
   if (params.args !== undefined) options.args = params.args as string[]
   if (params.workdir !== undefined) options.workdir = params.workdir as string
   if (params.env !== undefined) options.env = params.env as Record<string, string>
