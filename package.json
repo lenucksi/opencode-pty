@@ -100,7 +100,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
-    "@opencode/theme": "2.0.29",
+    "@opencode/theme": "2.0.32",
     "@opentui/core": "0.6.6",
     "@opentui/solid": "0.6.6",
     "@playwright/test": "1.64.1",
@@ -116,7 +116,7 @@
   },
   "peerDependencies": {
     "typescript": "^7.0.2",
-    "@opencode/theme": ">=2.0.29",
+    "@opencode/theme": ">=2.0.32",
     "@opentui/core": ">=0.6.6",
     "@opentui/solid": ">=0.6.6",
     "solid-js": ">=1.9.0"
@@ -128,7 +128,7 @@
   "dependencies": {
     "@opencode-ai/plugin": "^1.19.3",
     "@opencode-ai/sdk": "^1.19.3",
-    "@opencode/plugin": "^2.0.29",
+    "@opencode/plugin": "^2.0.32",
     "bun-pty": "^0.5.1",
     "ghostty-web": "github:anomalyco/ghostty-web#6e24d040458ddd7aae81572fe2901deec32f9fe7",
     "open": "^11.0.4"
