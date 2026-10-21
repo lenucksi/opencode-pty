@@ -57,7 +57,7 @@ export async function handleShowServerUrlCommand(options?: ServerOptions): Promi
 export async function handleRestartDaemonCommand(): Promise<string> {
   const { oldPid, newPid } = await restartDaemon()
   if (oldPid === null && newPid === null) {
-    const message = 'PTY sessions run in-process; there is no daemon to restart.'
+    const message = 'There is no PTY daemon on this machine, so there was nothing to restart.'
     notifyUser(message, 'warning')
     return message
   }

@@ -11,7 +11,7 @@
  * 1 hour) and then shuts down, flushing all buffers to disk first.
  */
 
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { manager } from '../plugin/pty/manager.ts'
@@ -21,16 +21,11 @@ import {
   sessionUpdateCallbacks,
 } from '../plugin/pty/manager-notifications.ts'
 import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
-import { SessionStore, type RetentionPolicy } from '../plugin/pty/session-store.ts'
+import { SessionStore } from '../plugin/pty/session-store.ts'
 import { sessionsRoot } from '../plugin/pty/state-paths.ts'
-import type { PTYSessionInfo, SpawnOptions } from '../plugin/pty/types.ts'
-import {
-  type DaemonRequest,
-  type DaemonResponse,
-  encodeMessage,
-  isRequest,
-  parseMessage,
-} from './protocol.ts'
+import type { PTYSessionInfo } from '../plugin/pty/types.ts'
+import { type DaemonRequest, isRequest, parseMessage } from './protocol.ts'
+import { createRequestHandler } from './requests.ts'
 import { SocketWriter } from './socket-writer.ts'
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000 // 1 hour
@@ -60,6 +55,23 @@ function resetIdleTimer() {
   }, IDLE_TIMEOUT_MS)
 }
 
+/**
+ * The pid of the daemon that owns the socket path, if it is not this one.
+ *
+ * The pid file is the machine's answer to "which daemon is the real one". A daemon
+ * whose path was taken over finds its own pid missing from that file - and the file
+ * is the only thing that can say so, because a daemon that lost the path cannot see
+ * the path any more.
+ */
+function ownerPid(): number | null {
+  try {
+    const parsed = Number.parseInt(readFileSync(pidFile, 'utf8').trim(), 10)
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 function shutdown() {
   logPtyEvent('info', 'daemon shutting down')
   // Flush buffers to disk
@@ -68,14 +80,18 @@ function shutdown() {
   } catch {
     // The store flushes what it can; a failure here must not keep the process up.
   }
-  try {
-    if (existsSync(socketPath)) unlinkSync(socketPath)
-  } catch {
-    // Already removed, or not ours to remove.
+  // A daemon that was superseded must not remove the successor's socket or pid
+  // file: it is listening on an inode nobody can reach, and the path belongs to
+  // somebody else now.
+  if (pathIsMine()) {
+    try {
+      if (existsSync(socketPath)) unlinkSync(socketPath)
+    } catch {
+      // Already removed, or not ours to remove.
+    }
   }
-  const pidFile = join(socketDir, 'ptyd.pid')
   try {
-    if (existsSync(pidFile)) unlinkSync(pidFile)
+    if (ownerPid() === process.pid && existsSync(pidFile)) unlinkSync(pidFile)
   } catch {
     // Same as the socket above.
   }
@@ -99,6 +115,15 @@ const stateDir = values['state-dir'] as string
 // Ensure socket directory exists
 const socketDir = socketPath.substring(0, socketPath.lastIndexOf('/'))
 mkdirSync(socketDir, { recursive: true, mode: 0o700 })
+
+/**
+ * Who owns the socket path, in a file.
+ *
+ * The pid file is written when the daemon binds and removed when it stops - but
+ * only by the daemon that owns the path, because a daemon that was superseded must
+ * not delete its successor's file.
+ */
+const pidFile = join(socketDir, 'ptyd.pid')
 
 // A stale socket is removed; a live one is not stolen. Two daemons starting at
 // once is not hypothetical - a host and an explicit restart can race - and the
@@ -129,6 +154,14 @@ if (existsSync(socketPath)) {
 
 const store = new SessionStore({ root: stateDir })
 manager.setSessionStore(store)
+
+/**
+ * The dispatcher, with the method table behind it.
+ *
+ * The table lives in `requests.ts`: it is a long list of short answers, and this
+ * file is about being a daemon.
+ */
+const handleRequest = createRequestHandler(store, clients)
 
 // Daemon notifier: pushes exit notifications to connected clients
 manager.setNotifier({
@@ -177,188 +210,113 @@ if (prunedRetention.length > 0) {
   })
 }
 
-const server = Bun.listen({
-  unix: socketPath,
-  socket: {
-    open(_socket) {
-      const clientId = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      clients.set(clientId, {
-        socket: _socket,
-        writer: new SocketWriter(_socket),
-        id: clientId,
-        lastSeen: Date.now(),
-      })
-      logPtyEvent('info', `client connected: ${clientId}`)
-      resetIdleTimer()
-    },
-    data(_socket, data) {
-      const text = new TextDecoder().decode(data)
-      for (const line of text.split('\n')) {
-        if (line.trim() === '') continue
-        const msg = parseMessage(line)
-        if (!msg) continue
-        if (isRequest(msg)) {
-          handleRequest(_socket, msg as DaemonRequest)
-        }
-      }
-      resetIdleTimer()
-    },
-    drain(_socket) {
-      for (const client of clients.values()) {
-        if (client.socket === _socket) {
-          client.writer.flush()
-          return
-        }
-      }
-    },
-    close(_socket) {
-      for (const [id, client] of clients) {
-        if (client.socket === _socket) {
-          client.writer.close()
-          clients.delete(id)
-          logPtyEvent('info', `client disconnected: ${id}`)
-          break
-        }
-      }
-      resetIdleTimer()
-    },
-    error(_socket, err) {
-      logPtyEvent('error', 'socket error', err)
-    },
-  },
-})
+/**
+ * The inode of the socket this daemon serves.
+ *
+ * A Unix socket is a file, and the file's identity survives every connection to
+ * it. Comparing inodes is therefore the precise answer to "is that path still
+ * mine": a daemon whose path was taken over finds a different inode there, and a
+ * daemon that still serves the path finds its own. The pid file cannot say this:
+ * it is a note, and a note can be wrong.
+ */
+let servedIno: number | null = null
+
+/**
+ * Is the socket path still the one this daemon serves?
+ *
+ * False means nobody can reach this daemon any more: either the path was taken
+ * over or it is gone. Either way it holds sessions that nobody can use, so it has
+ * to step aside.
+ */
+function pathIsMine(): boolean {
+  if (servedIno === null) return false
+  try {
+    return statSync(socketPath).ino === servedIno
+  } catch {
+    return false
+  }
+}
+
+const server = listen()
+
+/**
+ * Bind the socket, or step aside.
+ *
+ * The path can be taken between the probe above and this call - another daemon
+ * binding it in that window is not hypothetical, because every opencode instance
+ * on the machine starts one. A crash here would take the machine's log with it, and
+ * the daemon that owns the path is the one that should stay.
+ */
+function listen(): ReturnType<typeof Bun.listen<undefined>> {
+  try {
+    return Bun.listen({
+      unix: socketPath,
+      socket: {
+        open(_socket) {
+          const clientId = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          clients.set(clientId, {
+            socket: _socket,
+            writer: new SocketWriter(_socket),
+            id: clientId,
+            lastSeen: Date.now(),
+          })
+          logPtyEvent('info', `client connected: ${clientId}`)
+          resetIdleTimer()
+        },
+        data(_socket, data) {
+          const text = new TextDecoder().decode(data)
+          for (const line of text.split('\n')) {
+            if (line.trim() === '') continue
+            const msg = parseMessage(line)
+            if (!msg) continue
+            if (isRequest(msg)) {
+              handleRequest(_socket, msg as DaemonRequest)
+            }
+          }
+          resetIdleTimer()
+        },
+        drain(_socket) {
+          for (const client of clients.values()) {
+            if (client.socket === _socket) {
+              client.writer.flush()
+              return
+            }
+          }
+        },
+        close(_socket) {
+          for (const [id, client] of clients) {
+            if (client.socket === _socket) {
+              client.writer.close()
+              clients.delete(id)
+              logPtyEvent('info', `client disconnected: ${id}`)
+              break
+            }
+          }
+          resetIdleTimer()
+        },
+        error(_socket, err) {
+          logPtyEvent('error', 'socket error', err)
+        },
+      },
+    })
+  } catch (error) {
+    logPtyEvent('info', `another daemon owns ${socketPath}; exiting`, { error: String(error) })
+    process.exit(0)
+  }
+}
 
 void server
+// The inode of the socket we serve. From here on it is the answer to "is the path
+// at that name still mine" - the pid file is a note about it, and a note can be
+// wrong.
+try {
+  servedIno = statSync(socketPath).ino
+} catch {
+  servedIno = null
+}
 logPtyEvent('info', `daemon listening on ${socketPath}`)
 
 /** Params as they arrive on the wire; each handler narrows what it needs. */
-type WireParams = Record<string, unknown>
-type RequestHandler = (params: WireParams, socket: Bun.Socket<undefined>) => unknown
-
-/**
- * One handler per method, so `handleRequest` is a dispatcher rather than a wall.
- *
- * The table is the protocol: a method missing here answers `unknown method`, which
- * is the one place a client can tell that the daemon is older than the plugin.
- */
-const handlers: Record<string, RequestHandler> = {
-  ping: () => ({ pong: true, generation: store.getGeneration() }),
-  list: () => manager.list(),
-  spawn: (params) => manager.spawn(spawnFrom(params)),
-  write: (params) => ({ success: manager.write(params.id as string, params.data as string) }),
-  read: (params) =>
-    manager.read(
-      params.id as string,
-      params.offset as number,
-      params.limit as number,
-      params.budget as number
-    ),
-  kill: (params) => ({ success: manager.kill(params.id as string, params.cleanup as boolean) }),
-  resize: (params) => ({
-    success: manager.resize(params.id as string, params.cols as number, params.rows as number),
-  }),
-  heartbeat: (_params, socket) => {
-    for (const client of clients.values()) {
-      if (client.socket === socket) {
-        client.lastSeen = Date.now()
-        break
-      }
-    }
-    return { ok: true }
-  },
-  search: (params) =>
-    manager.search(
-      params.id as string,
-      new RegExp(params.pattern as string, params.ignoreCase ? 'i' : ''),
-      (params.offset as number) ?? 0,
-      params.limit as number,
-      params.budget as number
-    ),
-  get: (params) => manager.get(params.id as string),
-  get_session: (params) => manager.getSession(params.id as string),
-  get_session_log: (params) =>
-    manager.getSessionLog(params.id as string, { tail: params.tail as number }),
-  describe_missing_session: (params) => manager.describeMissingSession(params.id as string),
-  describe_server: () => manager.describeServer(),
-  screen: (params) =>
-    manager.screen(params.id as string, {
-      cols: params.cols as number | undefined,
-      rows: params.rows as number | undefined,
-      scrollback: params.scrollback as number | undefined,
-    }),
-  get_raw_buffer: (params) => manager.getRawBuffer(params.id as string, params.since as number),
-  read_since: (params) =>
-    manager.readSince(params.id as string, params.since as number, params.budget as number),
-  cleanup_by_session: (params) => {
-    manager.cleanupBySession(params.parentSessionId as string)
-    return { ok: true }
-  },
-  load_persisted_sessions: () => manager.loadPersistedSessions(),
-  bulk_remove: (params) => manager.bulkRemove(params.ids as string[]),
-  restore_sessions: (params) => manager.restoreSessions(params.ids as string[]),
-  clear_all_sessions: () => {
-    manager.clearAllSessions()
-    return { ok: true }
-  },
-  note_client_size: (params) => {
-    manager.noteClientSize(params.cols as number, params.rows as number)
-    return { ok: true }
-  },
-  get_retention: () => ({ retention: store.getRetention() }),
-  update_retention: (params) => ({
-    pruned: store.updateRetention(params.policy as Partial<RetentionPolicy>),
-  }),
-  get_generation: () => ({ generation: store.getGeneration() }),
-  get_state_dir: () => ({ stateDir: store.getRoot() }),
-  list_persisted: () => store.list(),
-  read_persisted: (params) =>
-    store.read(params.id as string, params.offset as number, params.limit as number),
-}
-
-/** The wire carries JSON; this is the one place that says which fields a spawn needs. */
-function spawnFrom(params: WireParams): SpawnOptions {
-  const options: SpawnOptions = { command: params.command as string }
-  if (params.parentSessionId !== undefined)
-    options.parentSessionId = params.parentSessionId as string
-  if (params.args !== undefined) options.args = params.args as string[]
-  if (params.workdir !== undefined) options.workdir = params.workdir as string
-  if (params.env !== undefined) options.env = params.env as Record<string, string>
-  if (params.title !== undefined) options.title = params.title as string
-  if (params.description !== undefined) options.description = params.description as string
-  if (params.parentAgent !== undefined) options.parentAgent = params.parentAgent as string
-  if (params.notifyOnExit !== undefined) options.notifyOnExit = params.notifyOnExit as boolean
-  if (params.timeoutSeconds !== undefined) options.timeoutSeconds = params.timeoutSeconds as number
-  if (params.cols !== undefined) options.cols = params.cols as number
-  if (params.rows !== undefined) options.rows = params.rows as number
-  if (params.raw !== undefined) options.raw = params.raw as boolean
-  return options
-}
-
-function handleRequest(socket: Bun.Socket<undefined>, req: DaemonRequest) {
-  const handler = handlers[req.method]
-  let result: unknown
-  let error: string | undefined
-  try {
-    if (handler === undefined) error = `unknown method: ${req.method}`
-    else result = handler(req.params ?? {}, socket)
-  } catch (caught) {
-    error = caught instanceof Error ? caught.message : String(caught)
-  }
-
-  const response: DaemonResponse = { id: req.id }
-  if (error) response.error = error
-  else response.result = result
-  const target = [...clients.values()].find((client) => client.socket === socket)
-  if (target !== undefined) target.writer.enqueue(encodeMessage(response))
-  else {
-    try {
-      socket.write(encodeMessage(response))
-    } catch {
-      // The peer is gone; nothing to report to.
-    }
-  }
-}
-
 // Heartbeat check: remove stale clients, shutdown if all gone for 1h
 setInterval(() => {
   const now = Date.now()
@@ -373,17 +331,45 @@ setInterval(() => {
       clients.delete(id)
     }
   }
+  // A daemon that was superseded retires. The path is taken, this daemon is
+  // listening on an inode nobody can reach, and the machine would otherwise keep
+  // both: the pid file names the daemon that owns the path now.
   if (clients.size === 0 && now - lastActivity > IDLE_TIMEOUT_MS) {
     logPtyEvent('info', 'no clients for 1h, shutting down')
     shutdown()
   }
 }, HEARTBEAT_INTERVAL_MS)
+/**
+ * The retirement check, on its own clock.
+ *
+ * A daemon that lost the socket path to a successor is a daemon nobody can reach,
+ * and it holds every session it owns. It has to notice on its own, and it cannot
+ * wait an hour to do it - so this runs on seconds, not on the heartbeat.
+ *
+ * The path decides, not the pid file: the inode under the name is the ground
+ * truth about who serves it. The pid file is kept in step with that, because a
+ * restart reads it - and a restart that reads a pid that is not there kills
+ * nothing and reports that it did.
+ */
+setInterval(() => {
+  if (!pathIsMine()) {
+    logPtyEvent('info', 'the socket path is no longer ours; retiring')
+    shutdown()
+    return
+  }
+  if (ownerPid() !== process.pid) {
+    try {
+      writeFileSync(pidFile, `${process.pid}\n`, { mode: 0o600 })
+    } catch {
+      // The file is not ours to write; the next tick tries again.
+    }
+  }
+}, 2000)
 
 // Signal handling
 process.on('SIGTERM', shutdown)
 process.on('SIGINT', shutdown)
 
-const pidFile = join(socketDir, 'ptyd.pid')
 writeFileSync(pidFile, `${process.pid}\n`, { mode: 0o600 })
 
 logPtyEvent('info', `daemon started (pid ${process.pid}, socket ${socketPath})`)

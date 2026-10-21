@@ -544,7 +544,7 @@ export function setManagerNotifier(notifier: SessionNotifier | null): void {
 }
 
 // Daemon mode: the plugin can delegate to a daemon process over IPC.
-import { PtyClient } from '../../client/pty-client.ts'
+import { PtyClient, sharedDaemonPid } from '../../client/pty-client.ts'
 
 let _ptyClient: PtyClient | null = null
 let _daemonMode = false
@@ -574,13 +574,21 @@ export async function connectToDaemon(
 /**
  * Stop the daemon and start a fresh one.
  *
- * In-process mode has no daemon to restart, and says so with two nulls rather than
- * pretending it did something. The command surfaces that difference.
+ * The daemon belongs to the machine, not to one opencode instance: every instance
+ * on it talks to the same socket, and the command that rolls it is the user's. So
+ * an instance that does not use the daemon can still roll it - but only if there IS
+ * one, because a restart must not start what is not there.
  */
 export async function restartDaemon(): Promise<{
   oldPid: number | null
   newPid: number | null
 }> {
-  if (!_daemonMode || !_ptyClient) return { oldPid: null, newPid: null }
-  return _ptyClient.restartDaemon()
+  if (_daemonMode && _ptyClient) return _ptyClient.restartDaemon()
+  if (sharedDaemonPid() === null) return { oldPid: null, newPid: null }
+  const client = new PtyClient()
+  try {
+    return await client.restartDaemon()
+  } finally {
+    client.disconnect()
+  }
 }
