@@ -37,11 +37,11 @@ describe('handleHealth', () => {
       { status: 'running' },
     ] as ReturnType<typeof manager.list>)
 
-    const response = handleHealth({
+    const response = await handleHealth({
       pendingWebSockets: 4,
     } as unknown as Bun.Server<undefined>)
 
-    expect(response.status).toBe(200)
+    expect((await response).status).toBe(200)
     const body = (await response.json()) as HealthResponse
     expect(body.status).toBe('healthy')
     expect(body.sessions).toEqual({ total: 3, active: 2 })
@@ -72,7 +72,7 @@ describe('session handlers', () => {
 
   it('lists sessions', async () => {
     spyOn(manager, 'list').mockReturnValue([sessionInfo])
-    const response = getSessions()
+    const response = await getSessions()
     expect(await response.json()).toEqual([sessionInfo])
   })
 
@@ -141,7 +141,7 @@ describe('session handlers', () => {
       })
     )
 
-    expect(response.status).toBe(200)
+    expect((await response).status).toBe(200)
     expect(await response.json()).toEqual(sessionInfo)
     expect(checks).toEqual(['cmd:echo', 'dir:/tmp'])
     expect(spawnSpy).toHaveBeenCalledWith(
@@ -171,23 +171,23 @@ describe('session handlers', () => {
 
   it('clears all sessions', async () => {
     const clearSpy = spyOn(manager, 'clearAllSessions').mockImplementation(() => {})
-    const response = clearSessions()
+    const response = await clearSessions()
     expect(clearSpy).toHaveBeenCalled()
     expect(await response.json()).toEqual({ success: true })
   })
 
   it('fetches a session or returns 404', async () => {
     spyOn(manager, 'get').mockReturnValue(sessionInfo)
-    const found = getSession({
+    const found = await getSession({
       params: { id: 'pty_web' },
     } as unknown as BunRequest<typeof routes.session.path>)
     expect(await found.json()).toEqual(sessionInfo)
 
     spyOn(manager, 'get').mockReturnValue(null)
-    const missing = getSession({
+    const missing = await getSession({
       params: { id: 'nope' },
     } as unknown as BunRequest<typeof routes.session.path>)
-    expect(missing.status).toBe(404)
+    expect((await missing).status).toBe(404)
   })
 
   describe('sendInput', () => {
@@ -242,32 +242,32 @@ describe('session handlers', () => {
 
   it('cleans up a session', async () => {
     const killSpy = spyOn(manager, 'kill').mockReturnValue(true)
-    const response = cleanupSession({
+    const response = await cleanupSession({
       params: { id: 'pty_web' },
     } as unknown as BunRequest<typeof routes.session.cleanup.path>)
     expect(killSpy).toHaveBeenCalledWith('pty_web', true)
     expect(await response.json()).toEqual({ success: true })
 
     spyOn(manager, 'kill').mockReturnValue(false)
-    const failed = cleanupSession({
+    const failed = await cleanupSession({
       params: { id: 'pty_web' },
     } as unknown as BunRequest<typeof routes.session.cleanup.path>)
-    expect(failed.status).toBe(400)
+    expect((await failed).status).toBe(400)
   })
 
   it('kills a session', async () => {
     const killSpy = spyOn(manager, 'kill').mockReturnValue(true)
-    const response = killSession({
+    const response = await killSession({
       params: { id: 'pty_web' },
     } as unknown as BunRequest<typeof routes.session.path>)
     expect(killSpy).toHaveBeenCalledWith('pty_web')
     expect(await response.json()).toEqual({ success: true })
 
     spyOn(manager, 'kill').mockReturnValue(false)
-    const failed = killSession({
+    const failed = await killSession({
       params: { id: 'pty_web' },
     } as unknown as BunRequest<typeof routes.session.path>)
-    expect(failed.status).toBe(400)
+    expect((await failed).status).toBe(400)
   })
 
   describe('raw buffer', () => {
@@ -275,7 +275,7 @@ describe('session handlers', () => {
 
     it('returns the buffer and honours a finite `since`', async () => {
       const getRawBufferSpy = spyOn(manager, 'getRawBuffer').mockReturnValue(bufferData)
-      const response = getRawBuffer({
+      const response = await getRawBuffer({
         params: { id: 'pty_web' },
         url: 'http://localhost/api/sessions/pty_web/buffer/raw?since=5',
       } as unknown as BunRequest<typeof routes.session.buffer.raw.path>)
@@ -302,11 +302,11 @@ describe('session handlers', () => {
 
     it('returns 404 when the session is gone', async () => {
       spyOn(manager, 'getRawBuffer').mockReturnValue(null)
-      const response = getRawBuffer({
+      const response = await getRawBuffer({
         params: { id: 'missing' },
         url: 'http://localhost/api/sessions/missing/buffer/raw',
       } as unknown as BunRequest<typeof routes.session.buffer.raw.path>)
-      expect(response.status).toBe(404)
+      expect((await response).status).toBe(404)
     })
   })
 
@@ -317,7 +317,7 @@ describe('session handlers', () => {
         byteLength: 12,
         offset: 0,
       })
-      const response = getPlainBuffer({
+      const response = await getPlainBuffer({
         params: { id: 'pty_web' },
       } as unknown as BunRequest<typeof routes.session.buffer.plain.path>)
 
@@ -328,10 +328,10 @@ describe('session handlers', () => {
 
     it('returns 404 when the session is gone', async () => {
       spyOn(manager, 'getRawBuffer').mockReturnValue(null)
-      const response = getPlainBuffer({
+      const response = await getPlainBuffer({
         params: { id: 'missing' },
       } as unknown as BunRequest<typeof routes.session.buffer.plain.path>)
-      expect(response.status).toBe(404)
+      expect((await response).status).toBe(404)
     })
   })
 })
@@ -374,7 +374,7 @@ describe('handleServerInfo', () => {
     // The client's bundle can be older than the server it is talking to. Serving
     // the server's own build identity is the only answer that stays true.
     resetBuildInfoCache()
-    const payload = (await handleServerInfo(fakeServer).json()) as {
+    const payload = (await (await handleServerInfo(fakeServer)).json()) as {
       build: ReturnType<typeof currentBuildInfo>
     }
 
@@ -383,7 +383,7 @@ describe('handleServerInfo', () => {
   })
 
   it('reports a commit or admits it has none', async () => {
-    const payload = (await handleServerInfo(fakeServer).json()) as {
+    const payload = (await (await handleServerInfo(fakeServer)).json()) as {
       build: ReturnType<typeof currentBuildInfo>
     }
 
@@ -397,7 +397,7 @@ describe('handleServerInfo', () => {
   })
 
   it('keeps reporting where the server is', async () => {
-    const payload = (await handleServerInfo(fakeServer).json()) as {
+    const payload = (await (await handleServerInfo(fakeServer)).json()) as {
       uiUrl: string
       port: number
     }

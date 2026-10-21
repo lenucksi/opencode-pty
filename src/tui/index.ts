@@ -1,4 +1,5 @@
 import { Plugin } from '@opencode/plugin/tui'
+import { untrack } from 'solid-js'
 import { countSessions } from '../web/shared/session-search.ts'
 import { createActions } from './actions.ts'
 import { openSendDialog } from './send-dialog.ts'
@@ -316,7 +317,10 @@ export default Plugin.define({
      * where it is pure and tested.
      */
     const parentTitles = (sessions: readonly PanelSession[]): Record<string, string> =>
-      resolveParentTitles(sessions, (id) => context.data.session.get(id)?.title)
+      // `untrack`: this runs inside the sidebar's render scope, and a tracked read of
+      // the host's session store would rebuild the whole PTY list on every token of
+      // every conversation - which is what the reader saw as constant flicker.
+      resolveParentTitles(sessions, (id) => untrack(() => context.data.session.get(id)?.title))
 
     registerFilterCommand(context, {
       current: () => prefs.filter,

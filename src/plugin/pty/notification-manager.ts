@@ -16,6 +16,11 @@ export class NotificationManager implements SessionNotifier {
   }
 
   async sendExitNotification(session: PTYSession, exitCode: number): Promise<void> {
+    if (!session.parentSessionId) {
+      // Nobody to wake: a session created without a conversation has no target.
+      logPtyEvent('warn', `no parent session to notify for ${session.id}`)
+      return
+    }
     await this.sendNotice(
       {
         id: session.id,

@@ -32,11 +32,16 @@ describe('PTY Manager Integration', () => {
           }
         })
       })
+      // The output waits for the subscription on purpose. With a daemon the spawn
+      // answer travels over a socket, so a command that prints in its first tick can
+      // finish before the server has subscribed this client - which the web client
+      // covers by reconciling a snapshot, not by this push path. What this case is
+      // about is the push itself: give the subscribe time to land, then print.
       managedTestClient.send({
         type: 'spawn',
         title,
-        command: 'echo',
-        args: ['test output'],
+        command: 'sh',
+        args: ['-c', 'sleep 0.3; echo "test output"'],
         description: 'Test session',
         parentSessionId: managedTestServer.sessionId,
         subscribe: true,

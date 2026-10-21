@@ -207,14 +207,12 @@ async function extractPoster(videoPath: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  if (!existsSync(join(ROOT, 'dist', 'web', 'index.html'))) {
-    console.log('Building the web client with test hooks enabled...')
-    const buildCode = await run('bun', ['run', 'build:prod'], {
-      env: { VITE_EXPOSE_TEST_HOOKS: '1' },
-    })
-    if (buildCode !== 0) {
-      throw new Error('Build failed')
-    }
+  console.log('Building the web client with test hooks enabled...')
+  const buildCode = await run('bun', ['run', 'build:prod'], {
+    env: { VITE_EXPOSE_TEST_HOOKS: '1' },
+  })
+  if (buildCode !== 0) {
+    throw new Error('Build failed')
   }
 
   const server = await startDemoServer()

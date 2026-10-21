@@ -7,11 +7,10 @@ import {
   isFinished,
   sessionIdentity,
   type PanelSession,
-  ROW_BULLET,
-  rowLabel,
-  rowTone,
   sessionDurationMs,
 } from './lib.ts'
+import { horizontalBar, keyHints } from './console-chrome.ts'
+import { listHeader, rowFor } from './session-list.ts'
 import { screenNodes } from './screen-nodes.ts'
 import type { Tones } from './tones.ts'
 import type { ScrollCanvas } from './scroll-keeper.ts'
@@ -64,6 +63,8 @@ export interface SessionPanelView {
   readonly onClose: () => void
   /** Ask for a line and hand it to the selected process. */
   readonly onSend: (session: PanelSession) => void
+  /** Move the console sideways, in cells. */
+  readonly onScrollBy: (cells: number) => void
   readonly onSelect: (id: string) => void
   /** Fold the session list open or closed. The click on its header row. */
   readonly onToggleList: () => void
@@ -82,42 +83,6 @@ export interface SessionPanelView {
    * and the line has to fall back to the stable id.
    */
   readonly parentName: (id: string | undefined) => string | undefined
-}
-
-/** One row, with the selected one marked; the selection reads per click, not per render. */
-function rowFor(view: SessionPanelView, session: PanelSession) {
-  const tone = rowTone(session)
-  return jsx('box', {
-    flexDirection: 'row',
-    width: '100%',
-    height: 1,
-    flexShrink: 0,
-    children: [
-      jsx('text', {
-        fg:
-          tone === 'success'
-            ? view.tones.success
-            : tone === 'error'
-              ? view.tones.error
-              : view.tones.muted,
-        children: ROW_BULLET,
-      }),
-      jsx('text', {
-        flexGrow: 1,
-        // The selection is marked in the TEXT, not only by colour: a reader who cannot
-        // distinguish the tones still has to see which row is on screen. Inside the
-        // accessor, so a click re-texts the affected rows instead of re-laying the panel.
-        children: (): string => {
-          const selected = view.state.selected === session.id
-          return selected ? `> ${rowLabel(session)}` : `  ${rowLabel(session)}`
-        },
-        onMouseDown: (event: MouseEvent) => {
-          event.stopPropagation()
-          view.onSelect(session.id)
-        },
-      }),
-    ],
-  })
 }
 
 /**
@@ -300,6 +265,12 @@ function framedScreen(view: SessionPanelView): unknown {
       minHeight: 0,
       stickyScroll: true,
       stickyStart: 'bottom',
+      scrollX: true,
+      // The horizontal bar is opentui's own and appears by itself once the content is
+      // wider than the viewport. The arrows would eat three columns of a 40-column
+      // sidebar, so they are off: the bar is a position indicator, and the reader
+      // scrolls with the wheel or the keyboard.
+      horizontalScrollbarOptions: { showArrows: false },
       // Hand the scrollable to the host once it exists: the keeper outside decides
       // from the reader's position whether the next poll may drag the view, and the
       // view itself stays a pure function of what it is told.
@@ -307,73 +278,25 @@ function framedScreen(view: SessionPanelView): unknown {
       children: jsx('box', {
         flexDirection: 'column',
         width: '100%',
-        children: (): unknown[] => screenNodes(view.state.screen),
+        children: (): unknown[] =>
+          screenNodes(view.state.screen, view.state.scrollLeft, view.state.consoleWidth),
       }),
     }),
   })
 }
 
 /**
- * The list header, handed over as a row the click folds the list on.
+ * The session list, folded by default.
  *
- * COLLAPSED by default, and that is a stance rather than a state saved for later: the
- * list is the index of everything this conversation started, the console is the reason
- * the panel is open, and every list row costs the console something. An 18-record list
- * costs a third of the panel before the console has drawn a thing - measured against the
- * screenshot that reported the collapse.
- *
- * The gesture stays where the list was, so the reader does not have to learn a new
- * position in either state.
+ * Its children are computed INSIDE the accessor: a list change re-rows the list, and
+ * nothing else - the console outside it cannot hear the write.
  */
-function listHeader(
+function listBlock(
   view: SessionPanelView,
   sessions: Accessor<PanelSession[]>,
   expanded: Accessor<boolean>
 ): unknown {
-  const count = (): number => sessions().length
   return jsx('box', {
-    flexDirection: 'row',
-    width: '100%',
-    height: 1,
-    flexShrink: 0,
-    onMouseDown: (event: MouseEvent) => {
-      event.stopPropagation()
-      view.onToggleList()
-    },
-    children: [
-      jsx('text', {
-        fg: view.tones.muted,
-        children: expanded() ? '▾' : '▸',
-      }),
-      jsx('text', {
-        flexGrow: 1,
-        fg: view.tones.base,
-        children: (): string => {
-          const n = count()
-          const open = expanded()
-          return open
-            ? `${n} session${n === 1 ? '' : 's'}`
-            : `${n} session${n === 1 ? '' : 's'}…  (expand)`
-        },
-      }),
-    ],
-  })
-}
-
-export function sessionPanelView(view: SessionPanelView) {
-  // Memos, so the claim's render never TRACKS the poll's store: every read of these was
-  // going into the render scope before, and the poll writes per tick - the reader saw
-  // the whole tree rebuilt, and the console's scrollbox was a freshly born widget with
-  // it, yanking their scroll to the bottom. The memos own their reads instead.
-  const chosen = createMemo(() => selectedLive(view.state, view.live()))
-  const sessions = createMemo(() => view.state.sessions)
-  const expanded = createMemo(() => view.state.listExpanded)
-
-  const header = panelHeader(view, chosen)
-
-  // The list children are computed INSIDE the accessor: a list change re-rows the list,
-  // and nothing else - the console outside it cannot hear the write.
-  const list = jsx('box', {
     flexDirection: 'column',
     width: '100%',
     flexShrink: 0,
@@ -405,6 +328,20 @@ export function sessionPanelView(view: SessionPanelView) {
       return entries
     },
   })
+}
+
+export function sessionPanelView(view: SessionPanelView) {
+  // Memos, so the claim's render never TRACKS the poll's store: every read of these was
+  // going into the render scope before, and the poll writes per tick - the reader saw
+  // the whole tree rebuilt, and the console's scrollbox was a freshly born widget with
+  // it, yanking their scroll to the bottom. The memos own their reads instead.
+  const chosen = createMemo(() => selectedLive(view.state, view.live()))
+  const sessions = createMemo(() => view.state.sessions)
+  const expanded = createMemo(() => view.state.listExpanded)
+
+  const header = panelHeader(view, chosen)
+
+  const list = listBlock(view, sessions, expanded)
 
   // The console's slice: identity line above the frame, both absent while nothing is
   // selected. Reading `chosen` inside the accessor keeps a poll from re-running this
@@ -417,13 +354,33 @@ export function sessionPanelView(view: SessionPanelView) {
       // Gated by the SELECTION, not by `chosen`: `selected` is exactly what the poll's
       // `noteSessionSelected` writes and the spot the frame relied on before.
       if (view.state.selected === null) return []
-      return [identityLine(view, chosen), framedScreen(view)]
+      return [identityLine(view, chosen), framedScreen(view), horizontalBar(view)]
     },
   })
 
   // The footer LAST, and `flexShrink: 0`: the framed screen above it grows to fill, so a
   // bar inside the frame would be pushed off the bottom by its own content.
-  const footer = jsx('box', { height: 1, flexShrink: 0, children: statusBar(view, chosen) })
+  // Two rows when the panel is focused (the counters and the key hints), one
+  // otherwise: a hint row that is always there would cost the console a row for
+  // readers who cannot use the keys anyway.
+  const footer = jsx('box', {
+    flexDirection: 'column',
+    width: '100%',
+    height: 'auto',
+    flexShrink: 0,
+    children: [
+      statusBar(view, chosen),
+      ...(view.focused
+        ? [
+            jsx('text', {
+              width: '100%',
+              fg: view.tones.muted,
+              children: keyHints(view),
+            }),
+          ]
+        : []),
+    ],
+  })
   return jsx('box', {
     flexDirection: 'column',
     width: '100%',

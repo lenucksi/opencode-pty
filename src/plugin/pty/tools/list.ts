@@ -1,14 +1,14 @@
 import { tool } from '@opencode-ai/plugin'
 import { formatSessionInfo } from '../formatters.ts'
-import { manager } from '../manager.ts'
+import { getPtyManager } from '../manager.ts'
 import DESCRIPTION from './list.txt'
 
 export const ptyList = tool({
   description: DESCRIPTION,
   args: {},
   async execute() {
-    const sessions = manager.list()
-    const server = manager.describeServer()
+    const sessions = await getPtyManager().list()
+    const server = await getPtyManager().describeServer()
 
     if (sessions.length === 0) {
       return [

@@ -223,13 +223,25 @@ describe('pty_screen', () => {
   it('states a partial replay instead of implying a whole-session render', async () => {
     // A bounded window is a reconstruction. Saying nothing would let a reader
     // treat a missing row as a row the program never painted.
-    const id = spawn(['-c', `for i in $(seq 1 20000); do echo "filler $i"; done; sleep 5`], 80, 10)
-    await new Promise((resolve) => setTimeout(resolve, 1200))
+    //
+    // The manager renders a LIVE session from its whole ring buffer, so a partial
+    // only happens for an archive longer than the archive window. The seam is the
+    // manager's screen, and this pins what the tool does with a partial answer.
+    const id = spawn(['-c', 'printf "content"; sleep 5'], 80, 10)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    const realScreen = manager.screen.bind(manager)
+    const spy = spyOn(manager, 'screen').mockImplementation(async (target, options) => {
+      if (target !== id) return realScreen(target, options)
+      const snapshot = await realScreen(target, options)
+      if (snapshot === null) return null
+      return { ...snapshot, replayedChars: 100, totalChars: 1000 }
+    })
 
     const result = text(await ptyScreen.execute({ id }, ctx))
 
-    expect(result).toMatch(/partial="\d+\/\d+"/)
-    expect(result).toContain('Rows painted earlier')
+    expect(result).toMatch(/partial="100\/1000"/)
+    expect(result).toContain('Rendered from the last 100 of 1000')
+    spy.mockRestore()
   })
 
   it('says so when the program is on the alternate screen', async () => {
@@ -266,9 +278,10 @@ describe('pty_screen', () => {
   it('reports an unavailable transcript instead of an empty screen', async () => {
     const id = spawn(['-c', 'printf "content"; sleep 5'], 40, 6)
     await new Promise((resolve) => setTimeout(resolve, 300))
-    const realGetRaw = manager.getRawBuffer.bind(manager)
-    const spy = spyOn(manager, 'getRawBuffer').mockImplementation((target, since) =>
-      target === id ? null : realGetRaw(target, since)
+    // The tool reads the screen through the manager now, so that is the seam.
+    const realScreen = manager.screen.bind(manager)
+    const spy = spyOn(manager, 'screen').mockImplementation((target, options) =>
+      target === id ? Promise.resolve(null) : realScreen(target, options)
     )
 
     const result = text(await ptyScreen.execute({ id }, ctx))

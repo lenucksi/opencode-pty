@@ -1,4 +1,4 @@
-import { manager } from './manager.ts'
+import { getPtyManager } from './manager.ts'
 
 /**
  * Readable reason for a failure, so a tool result can say why something broke
@@ -17,8 +17,8 @@ export function describeError(error: unknown): string {
  * after a restart the model usually still believes it is running, and the tail
  * of its output is exactly what it needs to continue sensibly.
  */
-export function buildSessionNotFoundError(id: string): Error {
-  const archived = manager.describeMissingSession(id)
+export async function buildSessionNotFoundError(id: string): Promise<Error> {
+  const archived = await getPtyManager().describeMissingSession(id)
   if (!archived) {
     return new Error(`PTY session '${id}' not found. Use pty_list to see active sessions.`)
   }

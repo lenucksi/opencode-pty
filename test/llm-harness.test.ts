@@ -672,7 +672,7 @@ describe('model resolution', () => {
     expect(resolveModel('  ', { [MODEL_ENV]: 'env/model' })).toBe('env/model')
     expect(resolveModel(undefined, {})).toBe(DEFAULT_MODEL)
     expect(resolveModel(undefined, { [MODEL_ENV]: '' })).toBe(DEFAULT_MODEL)
-    expect(DEFAULT_MODEL).toBe('opencode-go/space-bunny-free')
+    expect(DEFAULT_MODEL).toBe('opencode-go/minimax-m3.1-flash-free')
   })
 
   it('parses the runner flags', () => {

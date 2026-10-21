@@ -5,6 +5,42 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-10-19
+
+### Added
+
+**PTY sessions survive an opencode restart**
+
+A session's process used to die with the opencode server that spawned it: the PTY
+lived in the plugin's process, and every restart took the dev server, the watcher
+and the serial console with it. An opt-in daemon now owns them instead.
+
+Set `daemon: true` in the plugin options (or `PTY_DAEMON=1`) and the plugin
+connects to `opencode-ptyd` over a Unix socket, auto-starting it with
+`setsid`+`nohup` when it is not running. The daemon keeps the sessions, the
+archive and the generation; the plugin becomes an IPC client that forwards the
+eight tools and the web UI's handlers to it. Output, status changes, removals and
+exit notifications are pushed back over the same socket.
+
+Tools, Web UI and TUI panel all read through the active manager, so they show the
+daemon's sessions rather than an empty in-process list. Defaults are unchanged:
+without the option the plugin runs in-process exactly as before.
+
+Reliability details that are not obvious:
+
+- Delivery is heartbeat-based, not PID-based: the client pings every 30 s and the
+  daemon lingers an hour after the last client leaves, which is what lets it
+  outlive a restart without leaking forever.
+- A stale socket (file present, nothing listening) is removed and the daemon
+  restarted, so a crash is not a permanent dead end.
+- A dropped connection reconnects with exponential backoff and re-registers the
+  push handlers.
+- The daemon entry and state dir are resolved relative to the module and
+  `sessionsRoot()`, and the child's stderr goes to the PTY log - a daemon that
+  cannot start now says why.
+
+See `docs/daemon.md` and `docs/daemon-test-scenarios.md`.
+
 ## [0.7.1] - 2026-10-17
 
 ### Fixed

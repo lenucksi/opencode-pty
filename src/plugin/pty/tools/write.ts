@@ -1,5 +1,5 @@
 import { tool } from '@opencode-ai/plugin'
-import { manager } from '../manager.ts'
+import { getPtyManager } from '../manager.ts'
 import { checkCommandPermission } from '../permissions.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './write.txt'
@@ -60,9 +60,9 @@ export const ptyWrite = tool({
     data: tool.schema.string().describe('The input data to send to the PTY'),
   },
   async execute(args) {
-    const session = manager.get(args.id)
+    const session = await getPtyManager().get(args.id)
     if (!session) {
-      throw buildSessionNotFoundError(args.id)
+      throw await buildSessionNotFoundError(args.id)
     }
 
     if (session.status !== 'running') {
@@ -80,7 +80,7 @@ export const ptyWrite = tool({
       }
     }
 
-    const success = manager.write(args.id, parsedData)
+    const success = await getPtyManager().write(args.id, parsedData)
     if (!success) {
       throw new Error(`Failed to write to PTY '${args.id}'.`)
     }

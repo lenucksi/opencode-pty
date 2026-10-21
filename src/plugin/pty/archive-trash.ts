@@ -25,9 +25,16 @@ import type { PersistedSession } from './session-store.ts'
  * caller asked for something that had already gone.
  */
 export function moveToTrash(root: string, id: string): boolean {
+  const source = join(root, id)
+  if (!existsSync(source)) {
+    // Not an error: the caller asked for something that had already gone. Logging
+    // it as one flooded the daemon's startup with one ENOENT per stale index
+    // entry (the index lists ids whose directories were already removed).
+    return false
+  }
   try {
     mkdirSync(trashRoot(root), { recursive: true, mode: 0o700 })
-    renameSync(join(root, id), join(trashRoot(root), id))
+    renameSync(source, join(trashRoot(root), id))
     return true
   } catch (error) {
     logPtyEvent('error', `failed to remove archived session ${id}`, error)

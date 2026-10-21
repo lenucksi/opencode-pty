@@ -84,6 +84,43 @@ function defaultGeneration(now: number): string {
 }
 
 /**
+ * A generation that survives an opencode restart *and* is shared across
+ * instances (TUI + serve) within the same boot.
+ *
+ * Without this, every instance creates its own generation, the
+ * `announced-generation` marker never matches across instances, and the
+ * restart notice pings every instance in a loop.
+ *
+ * The file's mtime is the boot time. If it is younger than 5 minutes, reuse
+ * the stored generation (same boot, multiple instances). Otherwise generate a
+ * new one (real restart). 5 minutes is the heuristic: a real crash-and-restart
+ * within 5 minutes is rare, and the alternative (a notice per instance) is
+ * worse.
+ */
+function loadOrGenerateGeneration(root: string, now: number): string {
+  const path = join(root, 'generation')
+  try {
+    if (existsSync(path)) {
+      const mtime = statSync(path).mtimeMs
+      if (now - mtime < 5 * 60 * 1000) {
+        const value = readFileSync(path, 'utf8').trim()
+        if (value.length > 0) return value
+      }
+    }
+  } catch {
+    // Fall through to generation.
+  }
+  const gen = defaultGeneration(now)
+  try {
+    mkdirSync(root, { recursive: true, mode: 0o700 })
+    writeFileSync(path, `${gen}\n`, { mode: 0o600 })
+  } catch {
+    // Best effort; the in-memory generation still works for this instance.
+  }
+  return gen
+}
+
+/**
  * Archived PTY sessions on disk.
  *
  * A session's output is appended as it arrives (buffered, then flushed) so a
@@ -115,7 +152,7 @@ export class SessionStore {
     // archives out of the developer's state directory.
     this.root = options.root ?? defaultRoot()
     this.now = options.now ?? Date.now
-    this.generation = options.generation ?? defaultGeneration(this.now())
+    this.generation = options.generation ?? loadOrGenerateGeneration(this.root, this.now())
     this.enabled = options.enabled ?? process.env.OPENCODE_PTY_PERSIST !== '0'
     this.retention = { ...DEFAULT_RETENTION, ...options.retention }
     this.flushIntervalMs = options.flushIntervalMs ?? 250

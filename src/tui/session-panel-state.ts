@@ -13,6 +13,7 @@
 
 import { type PanelSession, screenContent, type ScreenContent } from './lib.ts'
 import { orderForDisplay } from './panel-state.ts'
+import { mergeIdentical, sameGroup } from './row-identity.ts'
 
 export interface SessionPanelState {
   /**
@@ -37,6 +38,24 @@ export interface SessionPanelState {
   scope: string | null
   /** This session's PTY sessions, in display order. */
   sessions: PanelSession[]
+  /**
+   * How far the console is scrolled sideways, in cells.
+   *
+   * The panel shows a screen the program drew for a much wider terminal, so the
+   * console has to be able to look at the part that does not fit. opentui's scrollbox
+   * cannot do that sideways - its scroll size is the content's COMPUTED width, which
+   * is the viewport's width, so it never has anything to scroll to - which is why
+   * this offset is ours.
+   */
+  scrollLeft: number
+  /**
+   * How wide the console is, in cells.
+   *
+   * The offset is measured against it, so the panel has to know it. It is measured
+   * on the canvas once it exists, and written here only when it changes: a write
+   * per tick would re-lay the panel out every 200 ms.
+   */
+  consoleWidth: number
   /** Which one is on screen, or null when the list is empty. */
   selected: string | null
   /**
@@ -66,6 +85,8 @@ export function initialSessionPanelState(): SessionPanelState {
     scope: null,
     sessions: [],
     selected: null,
+    scrollLeft: 0,
+    consoleWidth: 0,
     screen: screenContent(''),
     now: Date.now(),
     listExpanded: false,
@@ -169,7 +190,6 @@ export function noteSessionPanelList(
   // SELECTION maintenance below runs regardless: a first call with an empty group, for
   // one, has no rows to change but still has to say what the panel shows.
   if (!sameGroup(state.sessions, mine)) state.sessions = mine
-  state.sessions = mine
   const stillThere = mine.some((session) => session.id === state.selected)
   if (stillThere) return
   // `mine[0]`, not a separate search for a running row: `sessionsForSession` ordered the
@@ -182,6 +202,34 @@ export function noteSessionPanelList(
 }
 
 /** The row the panel is showing, or null when there is no selection. */
+/**
+ * Move the console sideways, and keep it inside the screen.
+ *
+ * The screen is at most as wide as its widest row, so an offset past that would
+ * show nothing at all.
+ */
+export function noteSessionPanelScrollLeft(
+  state: SessionPanelState,
+  cells: number,
+  widest: number
+): void {
+  const max = Math.max(0, widest - state.consoleWidth)
+  state.scrollLeft = Math.min(Math.max(0, cells), max)
+}
+
+/**
+ * The console's width, when the canvas reports a new one.
+ *
+ * Written only on a change: the keeper looks at the canvas every 200 ms, and a
+ * write per look would re-lay the panel out that often.
+ */
+export function noteSessionPanelConsoleWidth(state: SessionPanelState, width: number): void {
+  if (width <= 0 || width === state.consoleWidth) return
+  state.consoleWidth = width
+  // A narrower console can leave the offset past the new end.
+  if (state.scrollLeft > 0 && state.scrollLeft > width) state.scrollLeft = 0
+}
+
 export function selectedSession(state: SessionPanelState): PanelSession | null {
   if (state.selected === null) return null
   return state.sessions.find((session) => session.id === state.selected) ?? null
@@ -219,55 +267,4 @@ export function noteSessionScreen(
   if (state.selected === null) return
   state.screen = screen
   state.now = now
-}
-
-/**
- * The rows the panel is already showing, carried over into the fresh list when they are
- * the same content.
- *
- * Every poll hands this a list the SERVER just built, so identical content arrives as
- * new objects; handing the store a whole new array makes whatever watches it treat
- * every row as changed, which is the twitch the reader measured once a panel was
- * scrolled. A row whose fields did not move keeps its object identity, and a list where
- * nothing moved keeps... the array: only what changed is asked to change.
- */
-function mergeIdentical(incoming: PanelSession[], shown: readonly PanelSession[]): PanelSession[] {
-  const byId = new Map(shown.map((session) => [session.id, session]))
-  let changed = incoming.length !== shown.length
-  const merged = incoming.map((session) => {
-    const before = byId.get(session.id)
-    if (before !== undefined && samePanelSession(before, session)) return before
-    changed = true
-    return session
-  })
-  // Ordering is part of the content too: the same rows in a different order are rows a
-  // watcher has to see as moved. The comparison runs against what was SHOWN, because
-  // `merged` deliberately carries the prior objects where the content matched - and a
-  // position against the fresh input would read "changed" for identical content.
-  if (!changed) {
-    for (let i = 0; i < incoming.length; i++) {
-      const current = merged[i]
-      const prior = shown[i]
-      if (current !== undefined && prior !== undefined && current !== prior) {
-        changed = true
-        break
-      }
-    }
-  }
-  return changed ? merged : (shown as PanelSession[])
-}
-
-/**
- * Whether two records agree on everything the panel shows: the fields a watcher reads,
- * compared by value so a re-serialized record does not count as a change.
- */
-function samePanelSession(a: PanelSession | undefined, b: PanelSession | undefined): boolean {
-  if (a === undefined || b === undefined) return a === undefined && b === undefined
-  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])]
-  return keys.every((key) => (a as never)[key] === (b as never)[key])
-}
-
-/** Whether two lists are pairwise the same objects, length included. */
-function sameGroup(a: readonly PanelSession[], b: readonly PanelSession[]): boolean {
-  return a.length === b.length && a.every((session, index) => session === b[index])
 }

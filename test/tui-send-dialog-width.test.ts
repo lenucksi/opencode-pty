@@ -64,7 +64,8 @@ describe('the send dialog at medium width', () => {
     // The label the reader measured, drawn COMPLETE: a chip cut at the dialog edge has
     // its box colour and padding amputated, which is the papercut even when the glyphs
     // themselves squeezèd through.
-    const enterRow = rows[rowOf('Enter')]!
+    const enterRow = rows[rowOf('Enter')]
+    if (enterRow === undefined) throw new Error('the rows fixture has no Enter row')
     expect(enterRow.includes('Enter')).toBe(true)
     // The hint the row used to carry grew it past every width; the footer says it now,
     // and says it inside the same dialog.

@@ -5,7 +5,7 @@ import {
   MIN_TERMINAL_COLS,
   MIN_TERMINAL_ROWS,
 } from '../../constants.ts'
-import { manager } from '../manager.ts'
+import { getPtyManager } from '../manager.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './resize.txt'
@@ -13,7 +13,7 @@ import DESCRIPTION from './resize.txt'
 /**
  * `pty_resize` — change a running session's terminal geometry.
  *
- * Reachability is the point. `manager.resize` existed and only the web UI called
+ * Reachability is the point. `await getPtyManager().resize` existed and only the web UI called
  * it, so an agent running a full-screen program had no way to change the geometry
  * it was given: it could kill and respawn, or work around the problem in the
  * program's own flags. Neither is a resize.
@@ -36,9 +36,9 @@ export const ptyResize = tool({
       ),
   },
   async execute(args) {
-    const before: PTYSessionInfo | null = manager.get(args.id)
+    const before: PTYSessionInfo | null = await getPtyManager().get(args.id)
     if (!before) {
-      throw buildSessionNotFoundError(args.id)
+      throw await buildSessionNotFoundError(args.id)
     }
 
     if (args.cols === undefined && args.rows === undefined) {
@@ -50,14 +50,14 @@ export const ptyResize = tool({
       ].join('\n')
     }
 
-    if (!manager.resize(args.id, args.cols, args.rows)) {
-      throw buildSessionNotFoundError(args.id)
+    if (!(await getPtyManager().resize(args.id, args.cols, args.rows))) {
+      throw await buildSessionNotFoundError(args.id)
     }
 
     // Re-read rather than echoing the request: clamping means the answer is not
     // necessarily what was asked for, and the point of reporting is to remove
     // the need to guess.
-    const after = manager.get(args.id) ?? before
+    const after = (await getPtyManager().get(args.id)) ?? before
     const changed: string[] = []
     if (after.cols !== before.cols) changed.push(`width ${before.cols} -> ${after.cols}`)
     if (after.rows !== before.rows) changed.push(`height ${before.rows} -> ${after.rows}`)

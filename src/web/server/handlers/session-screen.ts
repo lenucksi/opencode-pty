@@ -5,13 +5,8 @@ import {
   MIN_TERMINAL_COLS,
   MIN_TERMINAL_ROWS,
 } from '../../../plugin/constants.ts'
-import { manager } from '../../../plugin/pty/manager.ts'
-import {
-  DEFAULT_REPLAY_WINDOW,
-  fitScreenSize,
-  renderScreen,
-  type ScreenSnapshot,
-} from '../../../plugin/pty/screen.ts'
+import { getPtyManager } from '../../../plugin/pty/manager.ts'
+import { fitScreenSize, type ScreenSnapshot } from '../../../plugin/pty/screen.ts'
 
 /**
  * The upper bound a caller may ask for as scrollback.
@@ -98,12 +93,11 @@ export async function getSessionScreen(
   // The session first, because its recorded geometry is the default. Recorded at
   // spawn and updated by every resize, so this is the size the program was
   // actually given, not a size re-derived from whatever a client last mentioned.
-  const session = manager.get(req.params.id)
-  const bufferData = manager.getRawBuffer(req.params.id)
+  const session = await getPtyManager().get(req.params.id)
   // The same 404 as `getPlainBuffer`: no session, or no retained output for it.
   // A missing transcript is not a 200 with an empty screen - that reads as "the
   // program printed nothing", which is the opposite of the truth.
-  if (!session || !bufferData) {
+  if (!session) {
     return new ErrorResponse('Session not found', 404)
   }
 
@@ -131,15 +125,16 @@ export async function getSessionScreen(
     0
   )
 
-  let snapshot: ScreenSnapshot
+  let snapshot: ScreenSnapshot | null
   try {
-    snapshot = await renderScreen(
-      bufferData.raw,
-      fitted.cols,
-      fitted.rows,
-      DEFAULT_REPLAY_WINDOW,
-      wantScrollback
-    )
+    // Through the manager, so a daemon renders the screen where the buffer lives
+    // and this process only receives the cells - not a megabyte of escape
+    // sequences that it would replay and throw away.
+    snapshot = await getPtyManager().screen(req.params.id, {
+      cols: fitted.cols,
+      rows: fitted.rows,
+      scrollback: wantScrollback,
+    })
   } catch (error) {
     // The reason is in the response because the alternative is worse: an empty
     // screen is indistinguishable from a program that has printed nothing.
@@ -149,6 +144,12 @@ export async function getSessionScreen(
     )
   }
 
+  // The render only saw the TAIL of the buffer, so its own total is the tail's
+  // length. The session's total is what a reader needs: a partial replay has to say
+  // how much of the session it left out.
+  if (snapshot === null) {
+    return new ErrorResponse('Session not found', 404)
+  }
   const body: SessionScreenResponse = { id: session.id, ...snapshot }
   if (fitted.clamped) {
     body.requested = { cols: requestedCols, rows: requestedRows }

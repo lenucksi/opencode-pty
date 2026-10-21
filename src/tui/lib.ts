@@ -265,19 +265,17 @@ export function archiveLabel(input: {
   shown: number
   expanded: boolean
 }): string | null {
-  // Null unless something failed. A finished session with an exit 0 is a record, not an
-  // event, and the expansion shows only failures - so a line reading "1 finished, none
-  // failed" would be a click that opens nothing. The header already carries the true
-  // total, so nothing is lost by staying absent.
-  if (input.finished === 0 || input.failed === 0) return null
+  // Null only when nothing is finished: with finished records the line is the click
+  // that expands them, whether they failed or not. It used to stay absent unless
+  // something failed, which left a session that exited 0 invisible with no way to
+  // expand to it.
+  if (input.finished === 0) return null
   const arrow = input.expanded ? '▾' : '▸'
-  // `N of M failed` when the cap cut the list: the two numbers differ, and a line that
+  // `N of M shown` when the cap cut the list: the two numbers differ, and a line that
   // named only the visible ones would describe the screen instead of the archive.
-  const detail =
-    input.shown < input.failed
-      ? `${input.shown} of ${input.failed} failed`
-      : `${input.failed} failed`
-  return `${arrow} ${input.finished} finished · ${detail}`
+  const shownPart = input.expanded && input.shown < input.finished ? ` · ${input.shown} shown` : ''
+  const failedPart = input.failed > 0 ? ` · ${input.failed} failed` : ' · none failed'
+  return `${arrow} ${input.finished} finished${shownPart}${failedPart}`
 }
 
 /**

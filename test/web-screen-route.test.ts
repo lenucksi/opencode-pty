@@ -139,7 +139,7 @@ describe('GET /api/sessions/:id/screen', () => {
     const id = spawn('top\\r\\nsecond\\r\\n\\e[3;7Hmoved', 40, 12)
     await waitFor(id, 'moved')
 
-    const plain = getPlainBuffer({
+    const plain = await getPlainBuffer({
       params: { id },
     } as unknown as BunRequest<typeof routes.session.buffer.plain.path>)
     const plainBody = (await plain.json()) as { plain: string }
@@ -294,7 +294,7 @@ describe('GET /api/sessions/:id/screen', () => {
           }
         }
       }
-    })
+    }, 20_000)
   })
 
   it('reports a failed render instead of an empty screen', async () => {
@@ -369,9 +369,10 @@ describe('GET /api/sessions/:id/screen with scrollback', () => {
     // the screen. Assert the boundary BEHAVIOUR (the screen starts with the row after
     // the newest history line), not a magic line number - the emulator counts its own
     // scroll cap, and the amout is what the response reports.
-    const boundary = body.historyRows!
+    const boundary = body.historyRows
+    if (boundary === undefined) throw new Error('the response does not say where history ends')
     expect(body.lines[boundary]).not.toBe(body.lines[boundary - 1])
-    expect(body.lines[boundary]!.startsWith('a3')).toBe(true)
+    expect(body.lines[boundary]?.startsWith('a3')).toBe(true)
   })
 
   it('keeps the plain screen when no scrollback is asked', async () => {

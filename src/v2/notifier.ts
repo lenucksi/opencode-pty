@@ -48,6 +48,10 @@ export class V2SessionNotifier implements SessionNotifier {
   ) {}
 
   async sendExitNotification(session: PTYSession, exitCode: number): Promise<void> {
+    if (!session.parentSessionId) {
+      this.log('warn', `no parent session to notify for ${session.id}`)
+      return
+    }
     await this.sendNotice(
       {
         id: session.id,

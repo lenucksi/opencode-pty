@@ -1,9 +1,11 @@
 import open from 'open'
+import { restartDaemon } from '../plugin/pty/manager.ts'
 import { PTYServer, type ServerOptions } from '../web/server/server.ts'
 import type { CommandDraft, OpencodePtyOptions } from './types.ts'
 
 export const PTY_OPEN_CLIENT_COMMAND = 'pty-open-background-spy'
 export const PTY_SHOW_SERVER_URL_COMMAND = 'pty-show-server-url'
+export const PTY_RESTART_DAEMON_COMMAND = 'pty-daemon-restart'
 
 let activeServer: PTYServer | null = null
 
@@ -38,6 +40,21 @@ export async function handleShowServerUrlCommand(options?: ServerOptions): Promi
 }
 
 /**
+ * Restart the daemon from the command line.
+ *
+ * The daemon outlives the host by design, which is also why a rebuilt daemon does
+ * not take effect on a host restart - this is the way to roll it. It ends every
+ * session the daemon owns, so the description says so.
+ */
+export async function handleRestartDaemonCommand(): Promise<string> {
+  const { oldPid, newPid } = await restartDaemon()
+  if (oldPid === null && newPid === null) {
+    return 'PTY sessions run in-process; there is no daemon to restart.'
+  }
+  return `PTY daemon restarted: old pid ${oldPid ?? 'none'}, new pid ${newPid ?? 'none'}.`
+}
+
+/**
  * Registers the PTY slash commands with opencode v2's `CommandEditor`.
  *
  * opencode v2's `command.transform` draft exposes `add(definition)` only
@@ -63,6 +80,14 @@ export function registerV2Commands(draft: CommandDraft, options?: OpencodePtyOpt
     description: 'Show PTY Sessions Web Interface URL',
     execute: async () => {
       await handleShowServerUrlCommand(options)
+    },
+  })
+
+  add({
+    name: PTY_RESTART_DAEMON_COMMAND,
+    description: 'Restart the PTY daemon (ends every running PTY session)',
+    execute: async () => {
+      await handleRestartDaemonCommand()
     },
   })
 }

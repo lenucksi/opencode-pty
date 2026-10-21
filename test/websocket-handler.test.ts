@@ -63,29 +63,29 @@ afterEach(() => {
 })
 
 describe('handleWebSocketMessage', () => {
-  it('rejects binary messages with a helpful error', () => {
+  it('rejects binary messages with a helpful error', async () => {
     const { ws, sent } = createFakeWebSocket()
 
-    handleWebSocketMessage(ws, Buffer.from('binary'))
+    await handleWebSocketMessage(ws, Buffer.from('binary'))
 
     expect(lastError(sent).error.message).toContain('Binary messages are not supported')
   })
 
-  it('reports malformed JSON', () => {
+  it('reports malformed JSON', async () => {
     const { ws, sent } = createFakeWebSocket()
 
-    handleWebSocketMessage(ws, 'not json')
+    await handleWebSocketMessage(ws, 'not json')
 
     const message = lastError(sent).error.message
     expect(message).toContain('SyntaxError')
     expect(message).toContain('JSON Parse error')
   })
 
-  it('subscribes to an existing session', () => {
+  it('subscribes to an existing session', async () => {
     const { ws, sent, subscribed } = createFakeWebSocket()
     spyOn(manager, 'get').mockReturnValue(buildSession({ id: 'pty_abc' }))
 
-    handleWebSocketMessage(ws, JSON.stringify({ type: 'subscribe', sessionId: 'pty_abc' }))
+    await handleWebSocketMessage(ws, JSON.stringify({ type: 'subscribe', sessionId: 'pty_abc' }))
 
     expect(subscribed).toEqual(['session:pty_abc'])
     expect(sent.at(-1)).toEqual<WSMessageServerSubscribedSession>({
@@ -94,19 +94,22 @@ describe('handleWebSocketMessage', () => {
     })
   })
 
-  it('errors when subscribing to a missing session', () => {
+  it('errors when subscribing to a missing session', async () => {
     const { ws, sent } = createFakeWebSocket()
     spyOn(manager, 'get').mockReturnValue(null)
 
-    handleWebSocketMessage(ws, JSON.stringify({ type: 'subscribe', sessionId: 'pty_missing' }))
+    await handleWebSocketMessage(
+      ws,
+      JSON.stringify({ type: 'subscribe', sessionId: 'pty_missing' })
+    )
 
     expect(lastError(sent).error.message).toBe('Session pty_missing not found')
   })
 
-  it('unsubscribes and acknowledges', () => {
+  it('unsubscribes and acknowledges', async () => {
     const { ws, sent, unsubscribed } = createFakeWebSocket()
 
-    handleWebSocketMessage(ws, JSON.stringify({ type: 'unsubscribe', sessionId: 'pty_abc' }))
+    await handleWebSocketMessage(ws, JSON.stringify({ type: 'unsubscribe', sessionId: 'pty_abc' }))
 
     expect(unsubscribed).toEqual(['session:pty_abc'])
     expect(sent.at(-1)).toEqual<WSMessageServerUnsubscribedSession>({
@@ -115,21 +118,21 @@ describe('handleWebSocketMessage', () => {
     })
   })
 
-  it('responds to a session_list request', () => {
+  it('responds to a session_list request', async () => {
     const { ws, sent } = createFakeWebSocket()
     const sessions = [buildSession()]
     spyOn(manager, 'list').mockReturnValue(sessions)
 
-    handleWebSocketMessage(ws, JSON.stringify({ type: 'session_list' }))
+    await handleWebSocketMessage(ws, JSON.stringify({ type: 'session_list' }))
 
     expect(sent.at(-1)).toEqual<WSMessageServerSessionList>({ type: 'session_list', sessions })
   })
 
-  it('writes input to a session', () => {
+  it('writes input to a session', async () => {
     const { ws } = createFakeWebSocket()
     const writeSpy = spyOn(manager, 'write').mockReturnValue(true)
 
-    handleWebSocketMessage(
+    await handleWebSocketMessage(
       ws,
       JSON.stringify({ type: 'input', sessionId: 'pty_abc', data: 'hello\n' })
     )
@@ -137,11 +140,11 @@ describe('handleWebSocketMessage', () => {
     expect(writeSpy).toHaveBeenCalledWith('pty_abc', 'hello\n')
   })
 
-  it('resizes a session silently on success', () => {
+  it('resizes a session silently on success', async () => {
     const { ws, sent } = createFakeWebSocket()
     const resizeSpy = spyOn(manager, 'resize').mockReturnValue(true)
 
-    handleWebSocketMessage(
+    await handleWebSocketMessage(
       ws,
       JSON.stringify({ type: 'resize', sessionId: 'pty_abc', cols: 80, rows: 24 })
     )
@@ -150,11 +153,11 @@ describe('handleWebSocketMessage', () => {
     expect(sent).toHaveLength(0)
   })
 
-  it('errors when resizing a missing session', () => {
+  it('errors when resizing a missing session', async () => {
     const { ws, sent } = createFakeWebSocket()
     spyOn(manager, 'resize').mockReturnValue(false)
 
-    handleWebSocketMessage(
+    await handleWebSocketMessage(
       ws,
       JSON.stringify({ type: 'resize', sessionId: 'pty_missing', cols: 80, rows: 24 })
     )
@@ -162,11 +165,11 @@ describe('handleWebSocketMessage', () => {
     expect(lastError(sent).error.message).toBe('Session pty_missing not found')
   })
 
-  it('returns the raw buffer for a session', () => {
+  it('returns the raw buffer for a session', async () => {
     const { ws, sent } = createFakeWebSocket()
     spyOn(manager, 'getRawBuffer').mockReturnValue({ raw: 'hello', byteLength: 5, offset: 0 })
 
-    handleWebSocketMessage(ws, JSON.stringify({ type: 'readRaw', sessionId: 'pty_abc' }))
+    await handleWebSocketMessage(ws, JSON.stringify({ type: 'readRaw', sessionId: 'pty_abc' }))
 
     expect(sent.at(-1)).toEqual<WSMessageServerReadRawResponse>({
       type: 'readRawResponse',
@@ -175,19 +178,19 @@ describe('handleWebSocketMessage', () => {
     })
   })
 
-  it('errors when reading the raw buffer of a missing session', () => {
+  it('errors when reading the raw buffer of a missing session', async () => {
     const { ws, sent } = createFakeWebSocket()
     spyOn(manager, 'getRawBuffer').mockReturnValue(null)
 
-    handleWebSocketMessage(ws, JSON.stringify({ type: 'readRaw', sessionId: 'pty_missing' }))
+    await handleWebSocketMessage(ws, JSON.stringify({ type: 'readRaw', sessionId: 'pty_missing' }))
 
     expect(lastError(sent).error.message).toBe('Session pty_missing not found')
   })
 
-  it('reports unknown message types', () => {
+  it('reports unknown message types', async () => {
     const { ws, sent } = createFakeWebSocket()
 
-    handleWebSocketMessage(ws, JSON.stringify({ type: 'bogus' }))
+    await handleWebSocketMessage(ws, JSON.stringify({ type: 'bogus' }))
 
     expect(lastError(sent).error.message).toBe('Unknown message type bogus')
   })
@@ -197,7 +200,7 @@ describe('handleWebSocketMessage', () => {
     const spawnSpy = spyOn(manager, 'spawn').mockReturnValue(buildSession({ id: 'pty_new' }))
     spyOn(manager, 'get').mockReturnValue(buildSession({ id: 'pty_new' }))
 
-    handleWebSocketMessage(
+    await handleWebSocketMessage(
       ws,
       JSON.stringify({
         type: 'spawn',
@@ -225,7 +228,10 @@ describe('handleWebSocketMessage', () => {
       throw new Error('spawn failed')
     })
 
-    handleWebSocketMessage(ws, JSON.stringify({ type: 'spawn', command: 'echo', subscribe: true }))
+    await handleWebSocketMessage(
+      ws,
+      JSON.stringify({ type: 'spawn', command: 'echo', subscribe: true })
+    )
     await new Promise(setImmediate)
 
     expect(lastError(sent).error.message).toBe('spawn failed')

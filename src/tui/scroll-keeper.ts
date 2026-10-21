@@ -20,7 +20,13 @@ export interface ScrollCanvas {
   /** The reader's position; writable, because a keeper test moves it like they would. */
   scrollTop: number
   readonly scrollHeight: number
-  readonly viewport: { readonly height: number }
+  /**
+   * The visible area.
+   *
+   * The width is optional because the keeper only needs it to tell the panel how wide
+   * its console is, and a test's fake canvas does not have to answer it.
+   */
+  readonly viewport: { readonly height: number; readonly width?: number }
 
   /** True when the renderable is gone; the keeper must not write into it after. */
   readonly isDestroyed: boolean
@@ -79,6 +85,8 @@ export interface ScrollKeeper {
 export interface ScrollKeeperObserver {
   /** Fired from `attach`, with the canvas that just arrived. */
   onAttach?: () => void
+  /** Fired when the canvas reports a width, and it changed. */
+  onWidth?: (width: number | undefined) => void
   /** Fired from each tick that evaluated a live canvas, before the decision applied. */
   onTick?: (reading: {
     readonly stickyScroll: boolean
@@ -103,6 +111,7 @@ export function startScrollKeeper(observe: ScrollKeeperObserver = {}): ScrollKee
       isDestroyed: canvas.isDestroyed,
     })
     if (canvas.isDestroyed) return
+    observe.onWidth?.(canvas.viewport.width)
     settleSticky(canvas)
   }
   const timer = setInterval(tick, SCROLL_KEEPER_MS)
@@ -110,6 +119,7 @@ export function startScrollKeeper(observe: ScrollKeeperObserver = {}): ScrollKee
     attach: (next) => {
       canvas = next
       observe.onAttach?.()
+      observe.onWidth?.(next.viewport.width)
       // The same renderable arrives on every claim render, so attach arrives while the
       // reader may be mid-scroll on the PREVIOUS screen: their position rules, and
       // attach does not move it - it only applies the position's rule. A canvas that is

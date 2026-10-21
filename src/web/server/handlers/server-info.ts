@@ -1,4 +1,4 @@
-import { manager } from '../../../plugin/pty/manager.ts'
+import { getPtyManager } from '../../../plugin/pty/manager.ts'
 import { currentBuildInfo } from '../../../plugin/pty/read-build-info.ts'
 import { JsonResponse } from './responses.ts'
 
@@ -14,9 +14,9 @@ import { JsonResponse } from './responses.ts'
  * listening, and a stale bundle next to a freshly built server would report the
  * wrong commit - which is worse than reporting none, because it looks right.
  */
-export function handleServerInfo(server: Bun.Server<undefined>) {
-  const store = manager.getSessionStore()
-  const description = manager.describeServer()
+export async function handleServerInfo(server: Bun.Server<undefined>) {
+  const store = await getPtyManager().getSessionStore()
+  const description = await getPtyManager().describeServer()
 
   return new JsonResponse({
     build: currentBuildInfo(),
@@ -30,7 +30,7 @@ export function handleServerInfo(server: Bun.Server<undefined>) {
     },
     persist: {
       enabled: description.persist,
-      retention: store.getRetention(),
+      retention: await store.getRetention(),
     },
   })
 }

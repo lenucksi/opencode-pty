@@ -183,7 +183,9 @@ describe('the send dialog', () => {
     const frame = setup.captureCharFrame()
     const row = frame.split('\n').findIndex((line) => line.includes('✕ close'))
     if (row < 0) throw new Error('the dialog draws no close control')
-    const column = frame.split('\n')[row]!.indexOf('✕')
+    const rowText = frame.split('\n')[row]
+    if (rowText === undefined) throw new Error('the close row vanished between the two reads')
+    const column = rowText.indexOf('✕')
     await setup.mockMouse.click(column, row)
     await setup.renderOnce()
     await Bun.sleep(5)

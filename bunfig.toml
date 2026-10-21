@@ -18,6 +18,10 @@ coveragePathIgnorePatterns = [
   "test/e2e/**",
   "test/utils.ts",
   "test/start-server.ts",
+  # The daemon-survival driver starts real opencode hosts and spends tokens.
+  # Its decisions and paths live in test/llm/daemon-survival.ts, which is
+  # unit-tested in test/daemon-survival-harness.test.ts.
+  "test/llm/daemon-survival-run.ts",
   "src/web/client/components/**",
   "src/web/client/hooks/**",
   "src/web/client/addons/**",

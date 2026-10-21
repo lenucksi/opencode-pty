@@ -16,6 +16,7 @@ import {
 } from './output-manager.ts'
 import { logPtyEvent } from './plugin-log.ts'
 import { type BoundedRawResult, buildBoundedRaw } from './read-budget.ts'
+import { renderScreen, type ScreenSnapshot } from './screen.ts'
 import { SessionLifecycleManager } from './session-lifecycle.ts'
 import {
   mergePersistedSessions,
@@ -319,6 +320,47 @@ export class PTYManager {
    * UTF-8 byte length of `raw` (not the UTF-16 code-unit count), matching the
    * plain-buffer endpoint.
    */
+  /**
+   * The session's screen, rendered from its own output.
+   *
+   * The WHOLE retained buffer is replayed, not a window. A full-screen program does
+   * not repaint the whole screen: htop writes its header once and then only the
+   * parts that move, so a window that covers the last few hundred kilobytes leaves
+   * every row that was painted before it blank. Measured on a live htop: the last
+   * 256 kB produced a screen whose top rows were fragments, the whole 1.2 MB buffer
+   * produced the real one - for about the same cost.
+   *
+   * The transfer is the caller's concern: this runs wherever the buffer lives, so a
+   * daemon answers with the screen instead of shipping the bytes.
+   */
+  async screen(
+    id: string,
+    options: { cols?: number; rows?: number; scrollback?: number } = {}
+  ): Promise<ScreenSnapshot | null> {
+    const info = await this.get(id)
+    if (info === null) return null
+    const live = withSession(
+      this.lifecycleManager,
+      id,
+      (session) => session.buffer.sliceSince(0).raw,
+      null
+    )
+    // An archived session is bounded separately: its transcript has no ring buffer
+    // to cap it, and the screen is at the end.
+    const archive = live === null ? (this.sessionStore.readRaw(id) ?? '') : ''
+    const raw = live ?? archive.slice(-ARCHIVE_REPLAY_WINDOW)
+    const snapshot = await renderScreen(
+      raw,
+      options.cols ?? info.cols,
+      options.rows ?? info.rows,
+      raw.length,
+      options.scrollback ?? 0
+    )
+    // A transcript longer than the archive window: the screen is from its end, and
+    // the snapshot says how much of the session it accounts for.
+    return archive.length > raw.length ? { ...snapshot, totalChars: archive.length } : snapshot
+  }
+
   getRawBuffer(
     id: string,
     since?: number
@@ -481,6 +523,16 @@ export class PTYManager {
   }
 }
 
+/**
+ * How much of an ARCHIVED transcript is replayed for a screen.
+ *
+ * A live session is bounded by its ring buffer, so it is replayed whole. An archive
+ * has no such cap, and the screen is at its end - but it also cannot be replayed
+ * from a few hundred kilobytes, or a program that painted its header once would
+ * come back with a blank top.
+ */
+const ARCHIVE_REPLAY_WINDOW = 4 * 1024 * 1024
+
 export const manager = new PTYManager()
 
 export function initManager(opcClient: OpencodeClient): void {
@@ -489,4 +541,46 @@ export function initManager(opcClient: OpencodeClient): void {
 
 export function setManagerNotifier(notifier: SessionNotifier | null): void {
   manager.setNotifier(notifier)
+}
+
+// Daemon mode: the plugin can delegate to a daemon process over IPC.
+import { PtyClient } from '../../client/pty-client.ts'
+
+let _ptyClient: PtyClient | null = null
+let _daemonMode = false
+
+export function enableDaemonMode(
+  options: { socketPath?: string; stateDir?: string; daemonBin?: string } = {}
+): void {
+  _ptyClient = new PtyClient(options)
+  _daemonMode = true
+}
+
+export function getPtyManager(): PTYManager | PtyClient {
+  return _daemonMode && _ptyClient ? _ptyClient : manager
+}
+
+export async function connectToDaemon(
+  options: { socketPath?: string; stateDir?: string; daemonBin?: string } = {}
+): Promise<void> {
+  if (!_ptyClient) {
+    _ptyClient = new PtyClient(options)
+  }
+  await _ptyClient.connect()
+  _ptyClient.startHeartbeat()
+  _daemonMode = true
+}
+
+/**
+ * Stop the daemon and start a fresh one.
+ *
+ * In-process mode has no daemon to restart, and says so with two nulls rather than
+ * pretending it did something. The command surfaces that difference.
+ */
+export async function restartDaemon(): Promise<{
+  oldPid: number | null
+  newPid: number | null
+}> {
+  if (!_daemonMode || !_ptyClient) return { oldPid: null, newPid: null }
+  return _ptyClient.restartDaemon()
 }

@@ -5,9 +5,9 @@ import {
   MIN_TERMINAL_COLS,
   MIN_TERMINAL_ROWS,
 } from '../../constants.ts'
-import { manager } from '../manager.ts'
+import { getPtyManager } from '../manager.ts'
 import { logPtyEvent } from '../plugin-log.ts'
-import { type ColorSpan, fitScreenSize, renderScreen, type ScreenSnapshot } from '../screen.ts'
+import { type ColorSpan, fitScreenSize, type ScreenSnapshot } from '../screen.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './screen.txt'
@@ -77,9 +77,9 @@ export const ptyScreen = tool({
       ),
   },
   async execute(args) {
-    const session: PTYSessionInfo | null = manager.get(args.id)
+    const session: PTYSessionInfo | null = await getPtyManager().get(args.id)
     if (!session) {
-      throw buildSessionNotFoundError(args.id)
+      throw await buildSessionNotFoundError(args.id)
     }
 
     // Per-dimension first, so an absurd axis is rejected on its own terms, then a
@@ -101,21 +101,12 @@ export const ptyScreen = tool({
     const cols = fitted.cols
     const rows = fitted.rows
 
-    // Live sessions keep the raw stream in the ring buffer; an archived one only
-    // has the transcript on disk. Both go through `getRawBuffer` so the two
-    // render identically.
-    const raw = manager.getRawBuffer(args.id)?.raw
-    if (raw === undefined) {
-      return [
-        `<pty_screen id="${session.id}" cols="${cols}" rows="${rows}">`,
-        `(The retained output of this session is not available.)`,
-        `</pty_screen>`,
-      ].join('\n')
-    }
-
-    let snapshot: ScreenSnapshot
+    // Through the manager, so a daemon renders where the buffer lives: the screen
+    // is small, the raw stream is not, and a window over it cut the rows a
+    // full-screen program painted only once (htop's header).
+    let snapshot: ScreenSnapshot | null
     try {
-      snapshot = await renderScreen(raw, cols, rows)
+      snapshot = await getPtyManager().screen(args.id, { cols, rows })
     } catch (error) {
       // A failed screen render must not read as "the program printed nothing".
       logPtyEvent('error', 'pty_screen could not render the session screen', error)
@@ -127,12 +118,22 @@ export const ptyScreen = tool({
       ].join('\n')
     }
 
+    if (snapshot === null) {
+      return [
+        `<pty_screen id="${session.id}" cols="${cols}" rows="${rows}">`,
+        `(The retained output of this session is not available.)`,
+        `</pty_screen>`,
+      ].join('\n')
+    }
+
     // Zero-padded so rows stay aligned and sortable in the reader's view, and so
     // a span's row can be matched against a body row by string equality.
     const rowWidth = String(rows).length
     const body = snapshot.lines.map(
       (line, index) => `${(index + 1).toString().padStart(rowWidth, '0')}| ${line}`
     )
+
+    const total = snapshot.totalChars
 
     const attrs = [
       `id="${session.id}"`,
@@ -149,10 +150,10 @@ export const ptyScreen = tool({
       // the output against its expectations needs to know which it got.
       attrs.push(`requested="${requestedCols}x${requestedRows}"`)
     }
-    if (snapshot.replayedChars < snapshot.totalChars) {
+    if (snapshot.replayedChars < total) {
       // Stated in the attribute as well as the body: a partial replay is a
       // reconstruction, and a reader must not treat it as the whole session.
-      attrs.push(`partial="${snapshot.replayedChars}/${snapshot.totalChars}"`)
+      attrs.push(`partial="${snapshot.replayedChars}/${total}"`)
     }
 
     const parts = [
@@ -174,10 +175,10 @@ export const ptyScreen = tool({
         `(Rendered at ${cols}x${rows} instead of the requested ${requestedCols}x${requestedRows}: a screen that large costs too much to build. The layout below is the real layout, scaled.)`
       )
     }
-    if (snapshot.replayedChars < snapshot.totalChars) {
+    if (snapshot.replayedChars < total) {
       parts.push(
         '',
-        `(Rendered from the last ${snapshot.replayedChars} of ${snapshot.totalChars} retained characters. Rows painted earlier and never touched again may be missing.)`
+        `(Rendered from the last ${snapshot.replayedChars} of ${total} retained characters. Rows painted earlier and never touched again may be missing.)`
       )
     }
     if (body.every((line) => line.endsWith('| ')) && snapshot.totalChars === 0) {

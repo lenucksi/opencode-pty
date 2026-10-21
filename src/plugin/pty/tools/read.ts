@@ -1,158 +1,27 @@
 import { tool } from '@opencode-ai/plugin'
 import {
-  charsForTokens,
   DEFAULT_READ_LIMIT,
   DEFAULT_READ_MAX_TOKENS,
   MAX_READ_MAX_TOKENS,
-  READ_MAX_TOKENS_CEILING_ENV,
-  READ_MAX_TOKENS_ENV,
-  readTokenBudget,
 } from '../../../shared/constants.ts'
-import {
-  formatLine,
-  formatPtyOutputBlock,
-  type OutputBlockMeta,
-  TRUNCATION_MARKER,
-} from '../formatters.ts'
-import { manager } from '../manager.ts'
+import { formatLine, formatPtyOutputBlock, TRUNCATION_MARKER } from '../formatters.ts'
+import type { BoundedSearchResult } from '../output-manager.ts'
+import { getPtyManager } from '../manager.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './read.txt'
-
-const NOTIFY_ON_EXIT_REMINDER = [
-  `<system_reminder>`,
-  `This session was started with \`notifyOnExit=true\`.`,
-  `Completion signal is the future \`<pty_exited>\` message, not repeated \`pty_read\` calls.`,
-  `If you only need to know whether the command finished, stop polling and wait for \`<pty_exited>\`.`,
-  `Do not use sleep plus \`pty_read\` loops to check completion.`,
-  `Use \`pty_read\` only when you need live output now, the user explicitly asks for logs, or the exit notification reports a non-zero status and you need to investigate.`,
-  `If no \`<pty_exited>\` arrives (exit notifications are unavailable on some hosts), do not wait indefinitely: call \`pty_wait\` to block until the session exits.`,
-  `</system_reminder>`,
-].join('\n')
-
-function buildTimeoutReminder(session: PTYSessionInfo): string {
-  return [
-    `<system_reminder>`,
-    `This session was auto-killed after reaching \`timeoutSeconds=${session.timeoutSeconds ?? 'unknown'}\`.`,
-    `Use \`pty_read\` to inspect the final output or \`pty_list\` to review other sessions.`,
-    `</system_reminder>`,
-  ].join('\n')
-}
-
-interface ReadArgs {
-  id: string
-  offset?: number
-  limit?: number
-  pattern?: string
-  ignoreCase?: boolean
-  maxTokens?: number
-  all?: boolean
-  since?: number
-}
-
-/** Highest token budget a caller may request, after env and the hard ceiling. */
-function resolveCeiling(): number {
-  return readTokenBudget(process.env, READ_MAX_TOKENS_CEILING_ENV, MAX_READ_MAX_TOKENS)
-}
-
-function resolveDefaultBudget(): number {
-  return readTokenBudget(process.env, READ_MAX_TOKENS_ENV, DEFAULT_READ_MAX_TOKENS)
-}
-
-/**
- * Character budget for this call, or `undefined` when the caller asked for
- * everything.
- */
-function resolveBudget(args: ReadArgs): number | undefined {
-  if (args.all === true) return undefined
-  const ceiling = resolveCeiling()
-  const requested = args.maxTokens ?? resolveDefaultBudget()
-  return charsForTokens(Math.min(Math.max(1, requested), ceiling))
-}
-
-/**
- * Formats PTY output with XML tags and pagination
- */
-function formatPtyOutput(
-  id: string,
-  status: string,
-  pattern: string | undefined,
-  formattedLines: string[],
-  hasMore: boolean,
-  paginationMessage: string,
-  endMessage: string,
-  meta: OutputBlockMeta = {}
-): string {
-  const attrs: string[] = [`id="${id}"`, `status="${status}"`]
-  if (pattern) attrs.push(`pattern="${pattern}"`)
-  if (meta.truncatedLines) {
-    attrs.push(`truncated="true"`, `truncatedLines="${meta.truncatedLines}"`)
-  }
-  if (meta.nextSince !== undefined && meta.nextSince !== null) {
-    attrs.push(`nextSince="${meta.nextSince}"`)
-  }
-  if (meta.chars) attrs.push(`chars="${meta.chars.shown}/${meta.chars.total}"`)
-  if (meta.all) attrs.push('all="true"')
-
-  const notes: string[] = []
-  if (meta.all) {
-    notes.push(
-      '(You asked for the complete buffer. This is unbounded and can overflow your context; prefer a bounded read unless you truly need everything.)'
-    )
-  }
-
-  return [
-    `<pty_output ${attrs.join(' ')}>`,
-    ...formattedLines,
-    '',
-    hasMore ? paginationMessage : endMessage,
-    ...notes,
-    `</pty_output>`,
-  ].join('\n')
-}
-
-function appendNotifyOnExitReminder(output: string, session: PTYSessionInfo): string {
-  if (!session.notifyOnExit || session.status !== 'running') {
-    return output
-  }
-
-  return `${output}\n\n${NOTIFY_ON_EXIT_REMINDER}`
-}
-
-function appendTimeoutReminder(output: string, session: PTYSessionInfo): string {
-  if (!session.timedOut) {
-    return output
-  }
-
-  return `${output}\n\n${buildTimeoutReminder(session)}`
-}
-
-function appendSessionReminders(output: string, session: PTYSessionInfo): string {
-  return appendTimeoutReminder(appendNotifyOnExitReminder(output, session), session)
-}
-
-/**
- * Validates and creates a RegExp from pattern string
- */
-function validateAndCreateRegex(pattern: string, ignoreCase?: boolean): RegExp {
-  if (!validateRegex(pattern)) {
-    throw new Error(
-      `Potentially dangerous regex pattern rejected: '${pattern}'. Please use a safer pattern.`
-    )
-  }
-
-  try {
-    return new RegExp(pattern, ignoreCase ? 'i' : '')
-  } catch (e) {
-    const error = e instanceof Error ? e.message : String(e)
-    throw new Error(`Invalid regex pattern '${pattern}': ${error}`)
-  }
-}
+import {
+  appendSessionReminders,
+  formatPtyOutput,
+  resolveBudget,
+  validateAndCreateRegex,
+  type ReadArgs,
+} from './read-support.ts'
 
 /**
  * Handles pattern-based reading and formatting
  */
-function handlePatternRead(
+async function handlePatternRead(
   args: ReadArgs,
   id: string,
   pattern: string,
@@ -161,12 +30,18 @@ function handlePatternRead(
   offset: number,
   limit: number,
   budget: number | undefined
-): string {
+): Promise<string> {
   const regex = validateAndCreateRegex(pattern, ignoreCase)
 
-  const result = manager.search(id, regex, offset, limit, budget)
+  const result: BoundedSearchResult | null = await getPtyManager().search(
+    id,
+    regex,
+    offset,
+    limit,
+    budget
+  )
   if (!result) {
-    throw buildSessionNotFoundError(id)
+    throw await buildSessionNotFoundError(id)
   }
 
   if (result.matches.length === 0) {
@@ -213,16 +88,16 @@ function handlePatternRead(
 /**
  * Handles plain reading and formatting
  */
-function handlePlainRead(
+async function handlePlainRead(
   args: ReadArgs,
   session: PTYSessionInfo,
   offset: number,
   limit: number,
   budget: number | undefined
-): string {
-  const result = manager.read(args.id, offset, limit, budget)
+): Promise<string> {
+  const result = await getPtyManager().read(args.id, offset, limit, budget)
   if (!result) {
-    throw buildSessionNotFoundError(args.id)
+    throw await buildSessionNotFoundError(args.id)
   }
 
   if (result.lines.length === 0) {
@@ -286,15 +161,15 @@ function handlePlainRead(
  * can walk the stream character by character and end up with exactly the bytes
  * the process produced, including the tail of a line an earlier call cut.
  */
-function handleSinceRead(
+async function handleSinceRead(
   args: ReadArgs,
   session: PTYSessionInfo,
   budget: number | undefined
-): string {
+): Promise<string> {
   const since = Math.max(0, Math.floor(args.since ?? 0))
-  const result = manager.readSince(args.id, since, budget)
+  const result = await getPtyManager().readSince(args.id, since, budget)
   if (!result) {
-    throw buildSessionNotFoundError(args.id)
+    throw await buildSessionNotFoundError(args.id)
   }
 
   if (result.totalChars === 0) {
@@ -335,25 +210,6 @@ function handleSinceRead(
     ].join('\n'),
     session
   )
-}
-
-/**
- * Rejects regexes that look like catastrophic backtracking.
- */
-function validateRegex(pattern: string): boolean {
-  try {
-    new RegExp(pattern)
-    // Check for potentially dangerous patterns that can cause exponential backtracking
-    // This is a basic check - more sophisticated validation could be added
-    const dangerousPatterns = [
-      /\(\?:.*\)\*.*\(\?:.*\)\*/, // nested optional groups with repetition
-      /.*\(\.\*\?\)\{2,\}.*/, // overlapping non-greedy quantifiers
-      /.*\(.*\|.*\)\{3,\}.*/, // complex alternation with repetition
-    ]
-    return !dangerousPatterns.some((dangerous) => dangerous.test(pattern))
-  } catch {
-    return false
-  }
 }
 
 export const ptyRead = tool({
@@ -402,9 +258,9 @@ export const ptyRead = tool({
       ),
   },
   async execute(args) {
-    const session = manager.get(args.id)
+    const session = await getPtyManager().get(args.id)
     if (!session) {
-      throw buildSessionNotFoundError(args.id)
+      throw await buildSessionNotFoundError(args.id)
     }
 
     const budget = resolveBudget(args)
@@ -412,14 +268,14 @@ export const ptyRead = tool({
     // `since` is a character cursor and `offset` a line cursor; they answer
     // different questions and cannot be combined. `since` wins, and says so.
     if (args.since !== undefined) {
-      return handleSinceRead(args, session, budget)
+      return await handleSinceRead(args, session, budget)
     }
 
     const offset = args.offset ?? 0
     const limit = args.limit ?? DEFAULT_READ_LIMIT
 
     if (args.pattern) {
-      return handlePatternRead(
+      return await handlePatternRead(
         args,
         args.id,
         args.pattern,
@@ -430,7 +286,7 @@ export const ptyRead = tool({
         budget
       )
     } else {
-      return handlePlainRead(args, session, offset, limit, budget)
+      return await handlePlainRead(args, session, offset, limit, budget)
     }
   },
 })

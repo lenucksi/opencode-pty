@@ -90,7 +90,7 @@ describe('web permission enforcement', () => {
     const spawnSpy = spyOn(manager, 'spawn').mockReturnValue(buildSpawnInfo())
     const sentMessages: string[] = []
 
-    handleWebSocketMessage(
+    await handleWebSocketMessage(
       createFakeWebSocket(sentMessages),
       JSON.stringify({
         type: 'spawn',

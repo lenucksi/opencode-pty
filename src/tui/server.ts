@@ -11,7 +11,7 @@ import { decodeScreen, isPtyHealth, type PanelSession, type ScreenContent } from
  */
 
 /** A hung server must not stall a panel that is otherwise fine. */
-const FETCH_TIMEOUT_MS = 2000
+const FETCH_TIMEOUT_MS = 5000
 
 async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController()

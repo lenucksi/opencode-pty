@@ -5,7 +5,7 @@ import {
   emptyListLabel,
   endedBadly,
   FILTER_CHIP_MAX,
-  FINISHED_FAILURE_LIMIT,
+  FINISHED_LIMIT,
   failedFinished,
   failureCount,
   filterChipLabel,
@@ -127,13 +127,17 @@ describe('noteNoServer', () => {
     expect(state.startFailures).toBe(1)
   })
 
-  test('drops a stale list, because the server it came from is gone', () => {
+  test('keeps the last list and says the server is gone', () => {
+    // The rows are the last answer, not a claim about now: the status line carries
+    // the "gone" part. Emptying the list here made the sidebar blank and refill on
+    // every failed refresh, which a reader sees as the list reloading.
     const state = initialPanelState()
     noteListSuccess(state, 'http://127.0.0.1:1', [session({ id: 'a' })])
     expect(state.sessions).toHaveLength(1)
     noteNoServer(state, false)
-    expect(state.sessions).toEqual([])
+    expect(state.sessions).toHaveLength(1)
     expect(state.origin).toBeNull()
+    expect(state.status).not.toBe(sessionCountLabel(1))
   })
 })
 
@@ -268,11 +272,14 @@ describe('noteUnreachable', () => {
   })
 
   // Showing sessions next to an error invites the reading that the list is current.
-  test('drops the list rather than showing it beside the error', () => {
+  test('keeps the rows and says the list is stale', () => {
+    // Same reason as noteNoServer: a failed refresh does not delete processes, and
+    // clearing the list is what made the sidebar flicker on every timeout.
     const state = initialPanelState()
     noteListSuccess(state, 'http://x', [session({ id: 'a' })])
     noteUnreachable(state, 'nope')
-    expect(state.sessions).toEqual([])
+    expect(state.sessions).toHaveLength(1)
+    expect(state.status).toBe('server unreachable')
   })
 })
 
@@ -381,18 +388,26 @@ describe('visibleSessions', () => {
 
   // Additive on purpose: expanding the archive must never hide the process that is
   // alive, so the running rows come first and are not replaced.
-  test('expanding the archive appends the failed ones and keeps the live one', () => {
-    expect(visibleSessions(archive(), true).map((s) => s.id)).toEqual(['live', 'bad-2', 'bad-1'])
+  test('expanding the archive appends the finished ones and keeps the live one', () => {
+    // All finished rows, newest first - not only the failures. A clean exit is still
+    // the run the reader just made.
+    expect(visibleSessions(archive(), true).map((s) => s.id)).toEqual([
+      'live',
+      'ok-2',
+      'bad-2',
+      'bad-1',
+      'ok-1',
+    ])
   })
 
   // Newest first within the failed group. The order is inherited from
   // `orderForDisplay`, and this is what catches it if that stops sorting.
-  test('the failed rows come newest first', () => {
+  test('the finished rows come newest first', () => {
     expect(
       visibleSessions(archive(), true)
         .slice(1)
         .map((s) => s.id)
-    ).toEqual(['bad-2', 'bad-1'])
+    ).toEqual(['ok-2', 'bad-2', 'bad-1', 'ok-1'])
   })
 
   // `killing` is the transient state before the exit callback reports `killed`, and
@@ -438,14 +453,14 @@ describe('failureCount and failedFinished', () => {
   // The count is the archive's, not the visible rows'. If the count were capped like
   // the list, the footer would describe the screen instead of the state.
   test('the count is uncapped while the rows are capped', () => {
-    const list = manyFailures(FINISHED_FAILURE_LIMIT + 7)
-    expect(failureCount(list)).toBe(FINISHED_FAILURE_LIMIT + 7)
-    expect(failedFinished(list)).toHaveLength(FINISHED_FAILURE_LIMIT)
+    const list = manyFailures(FINISHED_LIMIT + 7)
+    expect(failureCount(list)).toBe(FINISHED_LIMIT + 7)
+    expect(failedFinished(list)).toHaveLength(FINISHED_LIMIT)
   })
 
   test('keeps the newest failures when it has to cut', () => {
-    const rows = failedFinished(orderForDisplay(manyFailures(FINISHED_FAILURE_LIMIT + 3)))
-    expect(rows[0]?.id).toBe(`bad-${FINISHED_FAILURE_LIMIT + 2}`)
+    const rows = failedFinished(orderForDisplay(manyFailures(FINISHED_LIMIT + 3)))
+    expect(rows[0]?.id).toBe(`bad-${FINISHED_LIMIT + 2}`)
     expect(rows.at(-1)?.id).toBe('bad-3')
   })
 
