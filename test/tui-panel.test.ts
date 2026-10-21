@@ -171,6 +171,14 @@ interface Observed {
    * to the origin record rather than breaking the poll.
    */
   rpcOrigin?: string
+  /**
+   * The handlers the plugin subscribed to the plugin's own RPC events with.
+   *
+   * A holder, because the subscription is the only thing that turns what the server
+   * half did into a toast - and a test that only read the field would pass on a
+   * panel that never showed anything.
+   */
+  noticeHandlers: { name: string; handler: (event: { data: unknown }) => void }[]
 }
 
 let runtimeDir: string
@@ -253,6 +261,13 @@ function makeContext(observed: Observed): TuiContext {
       origin: async (): Promise<{ url: string }> => {
         if (observed.rpcOrigin === undefined) throw new Error('not_running')
         return { url: observed.rpcOrigin }
+      },
+      // The plugin's own events: how the server half says what a command did.
+      events: {
+        on: (name: string, handler: (event: { data: unknown }) => void): (() => void) => {
+          observed.noticeHandlers.push({ name, handler })
+          return () => {}
+        },
       },
     }),
   }
@@ -404,6 +419,7 @@ function observed(onCommand?: () => Promise<void>): Observed {
     layers: [],
     activePanel: undefined,
     toasts: [],
+    noticeHandlers: [],
     dialogs: [],
     confirms: [],
     sessionCalls: [],
@@ -683,6 +699,43 @@ describe('the PTY sidebar panel', () => {
     expect(seen.claims).toHaveLength(1)
     // `replace` would take over a boundary every other sidebar item lives in.
     expect(seen.claims[0]?.claim).toHaveProperty('append', 'sidebar.content')
+  })
+
+  // The host executes a slash command and drops whatever it returned, so a command
+  // that worked and a command that did nothing look the same. The server half says
+  // what it did over the plugin's own RPC event, and the panel turns that into a
+  // toast - without this, `/pty-daemon-restart` is a command that answers nothing.
+  test('shows what a slash command did, as a toast', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+
+    const subscription = seen.noticeHandlers.find((entry) => entry.name === 'notice')
+    if (!subscription) throw new Error('the panel subscribed to nothing')
+    subscription.handler({
+      data: {
+        message: 'PTY daemon restarted: old pid 10050, new pid 1758332.',
+        variant: 'success',
+      },
+    })
+
+    const toast = seen.toasts.at(-1)
+    expect(toast?.message).toContain('PTY daemon restarted')
+    expect(toast?.message).toContain('1758332')
+    expect(toast?.variant).toBe('success')
+  })
+
+  // A notice that is not one is dropped rather than shown as "[object Object]".
+  test('drops a notice that carries no message', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    const before = seen.toasts.length
+
+    const subscription = seen.noticeHandlers.find((entry) => entry.name === 'notice')
+    if (!subscription) throw new Error('the panel subscribed to nothing')
+    subscription.handler({ data: { variant: 'success' } })
+    subscription.handler({ data: 'not an object' })
+
+    expect(seen.toasts.length).toBe(before)
   })
 
   test('says the server is not running, and starts nothing on its own', async () => {

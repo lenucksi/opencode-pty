@@ -30,7 +30,7 @@ import {
   setFilter,
   toggleGroup,
 } from './sidebar-prefs.ts'
-import { PtyServerRpc } from '../v2/rpc.ts'
+import { noticeFromData, PtyServerRpc } from '../v2/rpc.ts'
 
 /**
  * The PTY sidebar: this project's PTY sessions, listed where the built-in sidebar
@@ -97,12 +97,29 @@ export default Plugin.define({
     let startPending = false
     let relistPending = false
 
-    const notify = (message: string, variant: 'info' | 'warning' | 'error'): void => {
+    const notify = (message: string, variant: 'info' | 'success' | 'warning' | 'error'): void => {
       try {
         context.ui.toast.show({ title: 'opencode-pty', message, variant })
       } catch (_) {
         /* a toast is best-effort; failing to show one must not fail the action */
       }
+    }
+
+    /**
+     * What the server half's commands did.
+     *
+     * The host executes a slash command and drops whatever it returned, so a command
+     * that worked and a command that did nothing look the same. The server half says
+     * what it did over the plugin's own RPC event, and this is where that becomes a
+     * toast in front of the reader.
+     */
+    try {
+      context.client.rpc(PtyServerRpc).events.on('notice', (event) => {
+        const notice = noticeFromData(event.data)
+        if (notice) notify(notice.message, notice.variant)
+      })
+    } catch (error) {
+      debug('notice.subscribe.failed', { error: String(error) })
     }
 
     /**

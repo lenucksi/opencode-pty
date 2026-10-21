@@ -1,6 +1,7 @@
 import open from 'open'
 import { restartDaemon } from '../plugin/pty/manager.ts'
 import { PTYServer, type ServerOptions } from '../web/server/server.ts'
+import { notifyUser } from './rpc.ts'
 import type { CommandDraft, OpencodePtyOptions } from './types.ts'
 
 export const PTY_OPEN_CLIENT_COMMAND = 'pty-open-background-spy'
@@ -31,12 +32,16 @@ export async function handleOpenClientCommand(options?: ServerOptions): Promise<
   const server = await getOrCreateServer(options)
   const url = server.server.url.origin
   open(url)
-  return `PTY Sessions Web Interface opened at: ${url}`
+  const message = `PTY Sessions Web Interface opened at: ${url}`
+  notifyUser(message, 'success')
+  return message
 }
 
 export async function handleShowServerUrlCommand(options?: ServerOptions): Promise<string> {
   const server = await getOrCreateServer(options)
-  return `PTY Sessions Web Interface URL: ${server.server.url.origin}`
+  const message = `PTY Sessions Web Interface URL: ${server.server.url.origin}`
+  notifyUser(message, 'info')
+  return message
 }
 
 /**
@@ -45,13 +50,20 @@ export async function handleShowServerUrlCommand(options?: ServerOptions): Promi
  * The daemon outlives the host by design, which is also why a rebuilt daemon does
  * not take effect on a host restart - this is the way to roll it. It ends every
  * session the daemon owns, so the description says so.
+ *
+ * Every command here says what it did, because the host drops a command's result:
+ * a command that works and a command that did nothing look the same otherwise.
  */
 export async function handleRestartDaemonCommand(): Promise<string> {
   const { oldPid, newPid } = await restartDaemon()
   if (oldPid === null && newPid === null) {
-    return 'PTY sessions run in-process; there is no daemon to restart.'
+    const message = 'PTY sessions run in-process; there is no daemon to restart.'
+    notifyUser(message, 'warning')
+    return message
   }
-  return `PTY daemon restarted: old pid ${oldPid ?? 'none'}, new pid ${newPid ?? 'none'}.`
+  const message = `PTY daemon restarted: old pid ${oldPid ?? 'none'}, new pid ${newPid ?? 'none'}.`
+  notifyUser(message, 'success')
+  return message
 }
 
 /**
