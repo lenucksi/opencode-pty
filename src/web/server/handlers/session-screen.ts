@@ -99,7 +99,11 @@ export async function getSessionScreen(
   // spawn and updated by every resize, so this is the size the program was
   // actually given, not a size re-derived from whatever a client last mentioned.
   const session = await getPtyManager().get(req.params.id)
-  const bufferData = await getPtyManager().getRawBuffer(req.params.id)
+  // The TAIL of the buffer, not all of it: a full-screen program redraws, and its
+  // buffer is a megabyte of escape sequences by the minute. The replay window below
+  // discards most of it anyway, so transferring it was pure cost.
+  const since = session === null ? 0 : Math.max(0, session.charCount - DEFAULT_REPLAY_WINDOW)
+  const bufferData = await getPtyManager().getRawBuffer(req.params.id, since)
   // The same 404 as `getPlainBuffer`: no session, or no retained output for it.
   // A missing transcript is not a 200 with an empty screen - that reads as "the
   // program printed nothing", which is the opposite of the truth.
@@ -149,7 +153,14 @@ export async function getSessionScreen(
     )
   }
 
-  const body: SessionScreenResponse = { id: session.id, ...snapshot }
+  // The render only saw the TAIL of the buffer, so its own total is the tail's
+  // length. The session's total is what a reader needs: a partial replay has to say
+  // how much of the session it left out.
+  const body: SessionScreenResponse = {
+    id: session.id,
+    ...snapshot,
+    ...(since > 0 ? { totalChars: session.charCount } : {}),
+  }
   if (fitted.clamped) {
     body.requested = { cols: requestedCols, rows: requestedRows }
   }

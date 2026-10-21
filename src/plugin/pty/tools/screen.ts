@@ -7,7 +7,13 @@ import {
 } from '../../constants.ts'
 import { getPtyManager } from '../manager.ts'
 import { logPtyEvent } from '../plugin-log.ts'
-import { type ColorSpan, fitScreenSize, renderScreen, type ScreenSnapshot } from '../screen.ts'
+import {
+  type ColorSpan,
+  DEFAULT_REPLAY_WINDOW,
+  fitScreenSize,
+  renderScreen,
+  type ScreenSnapshot,
+} from '../screen.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './screen.txt'
@@ -104,7 +110,13 @@ export const ptyScreen = tool({
     // Live sessions keep the raw stream in the ring buffer; an archived one only
     // has the transcript on disk. Both go through `getRawBuffer` so the two
     // render identically.
-    const raw = (await getPtyManager().getRawBuffer(args.id))?.raw
+    //
+    // The TAIL, not the whole buffer: a full-screen program redraws, and its buffer
+    // is a megabyte of escape sequences by the minute. Transferring that on every
+    // screen read is what made the panel crawl - and the replay window below throws
+    // most of it away anyway.
+    const since = Math.max(0, session.charCount - DEFAULT_REPLAY_WINDOW)
+    const raw = (await getPtyManager().getRawBuffer(args.id, since))?.raw
     if (raw === undefined) {
       return [
         `<pty_screen id="${session.id}" cols="${cols}" rows="${rows}">`,
@@ -134,6 +146,11 @@ export const ptyScreen = tool({
       (line, index) => `${(index + 1).toString().padStart(rowWidth, '0')}| ${line}`
     )
 
+    // The render only saw the TAIL, so its own total is the tail's length. The
+    // session's total is what a reader needs: a partial replay has to say how much
+    // of the session it left out.
+    const total = since > 0 ? session.charCount : snapshot.totalChars
+
     const attrs = [
       `id="${session.id}"`,
       `cols="${snapshot.cols}"`,
@@ -149,10 +166,10 @@ export const ptyScreen = tool({
       // the output against its expectations needs to know which it got.
       attrs.push(`requested="${requestedCols}x${requestedRows}"`)
     }
-    if (snapshot.replayedChars < snapshot.totalChars) {
+    if (snapshot.replayedChars < total) {
       // Stated in the attribute as well as the body: a partial replay is a
       // reconstruction, and a reader must not treat it as the whole session.
-      attrs.push(`partial="${snapshot.replayedChars}/${snapshot.totalChars}"`)
+      attrs.push(`partial="${snapshot.replayedChars}/${total}"`)
     }
 
     const parts = [
@@ -174,10 +191,10 @@ export const ptyScreen = tool({
         `(Rendered at ${cols}x${rows} instead of the requested ${requestedCols}x${requestedRows}: a screen that large costs too much to build. The layout below is the real layout, scaled.)`
       )
     }
-    if (snapshot.replayedChars < snapshot.totalChars) {
+    if (snapshot.replayedChars < total) {
       parts.push(
         '',
-        `(Rendered from the last ${snapshot.replayedChars} of ${snapshot.totalChars} retained characters. Rows painted earlier and never touched again may be missing.)`
+        `(Rendered from the last ${snapshot.replayedChars} of ${total} retained characters. Rows painted earlier and never touched again may be missing.)`
       )
     }
     if (body.every((line) => line.endsWith('| ')) && snapshot.totalChars === 0) {
