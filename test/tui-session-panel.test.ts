@@ -312,7 +312,6 @@ describe('sessionPanelView', () => {
   const PANEL_ROWS = 20
   const PANEL_COLS = 60
   /** The footer's height, so the "fills the panel" case knows where the frame ends. */
-  const FOOTER_ROWS = 1
 
   async function setup(element: () => unknown): Promise<TestRendererSetup> {
     const created = await testRender(element as () => never, {
@@ -625,12 +624,12 @@ describe('sessionPanelView', () => {
     // `includes` instead of `startsWith`: the panel carries two columns of air on the
     // left (the inset that keeps the glyphs off the overlay's edge), so the frame's own
     // corner glyph sits inside the row, not at its head.
-    const bottom = lines.findIndex((line) => line.includes('└'))
-    // LAST is the list's folded header row, then the footer. Naming the three heights is
-    // the point: a screen box with a fixed height also ends its frame somewhere and leaves
-    // blank rows under it, so "the frame is the last thing drawn" would pass on exactly
-    // the code that is wrong here. The list is folded by default, so it is one row.
-    expect(bottom).toBe(PANEL_ROWS - FOOTER_ROWS - 1 - 1)
+    // The screen box uses flexGrow: 1, so it fills available space. Without a border
+    // (removed to avoid selectable cells confusing the terminal's selection), we
+    // verify the footer lands on the last row — if the screen didn't fill, there
+    // would be blank rows and the footer would sit higher.
+    const footerLine = lines[PANEL_ROWS - 1] ?? ''
+    expect(footerLine.trim().length).toBeGreaterThan(0)
   })
 
   // The sideways scrollbar. The screen belongs to a program that drew it for a much

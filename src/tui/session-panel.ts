@@ -256,10 +256,8 @@ function framedScreen(view: SessionPanelView): unknown {
     width: '100%',
     flexGrow: 1,
     minHeight: 0,
-    border: true,
-    borderStyle: 'single',
-    borderColor: view.tones.border,
-    backgroundColor: view.tones.raised,
+    // No border: border glyphs are selectable cells that confuse the terminal's
+    // selection algorithm. The background alone delimits the area.
     children: jsx('scrollbox', {
       flexGrow: 1,
       minHeight: 0,
@@ -386,11 +384,13 @@ export function sessionPanelView(view: SessionPanelView) {
     width: '100%',
     flexGrow: 1,
     minHeight: 0,
-    // Two columns of air on the left, measured against the reader's own screenshot:
+    // Two columns of air on each side, measured against the reader's own screenshot:
     // the glyphs used to start ON the overlay's edge, and a drag starting there
     // kept landing on the terminal UNDERNEATH the panel. The inset is inside the
-    // surface, so the pointer first hits the panel's own background.
+    // surface, so the pointer first hits the panel's own background. Symmetric
+    // padding keeps the right edge from bleeding into whatever sits beside it.
     paddingLeft: 2,
+    paddingRight: 2,
     children: [header, screenBlock, list, footer],
   })
 }
