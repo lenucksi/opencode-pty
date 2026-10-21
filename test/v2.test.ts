@@ -8,12 +8,16 @@ import {
   getOrCreateServer,
   handleRestartDaemonCommand,
   handleShowServerUrlCommand,
+  noticeFromData,
+  type Notice,
+  notifyUser,
   Plugin,
   PTY_OPEN_CLIENT_COMMAND,
   PTY_RESTART_DAEMON_COMMAND,
   PTY_SHOW_SERVER_URL_COMMAND,
   ptyTools,
   registerV2Commands,
+  setNoticeEmitter,
   stopActiveServer,
 } from '../src/v2/index.ts'
 import type {
@@ -180,10 +184,27 @@ describe('OpenCode V2 Plugin API', () => {
   })
 
   describe('Daemon restart command', () => {
+    afterEach(() => {
+      setNoticeEmitter(null)
+    })
+
     it('says there is nothing to restart when sessions run in-process', async () => {
       const message = await handleRestartDaemonCommand()
       expect(message).toContain('run in-process')
       expect(message).toContain('no daemon to restart')
+    })
+
+    // The host drops a command's result, so the message alone reaches nobody. The
+    // notice is what the reader sees.
+    it('says what it did, where a reader can see it', async () => {
+      const notices: Notice[] = []
+      setNoticeEmitter((notice) => notices.push(notice))
+
+      await handleRestartDaemonCommand()
+
+      expect(notices).toHaveLength(1)
+      expect(notices[0]?.message).toContain('no daemon to restart')
+      expect(notices[0]?.variant).toBe('warning')
     })
 
     it('is runnable through the registered command', async () => {
@@ -202,6 +223,55 @@ describe('OpenCode V2 Plugin API', () => {
 
     it('does nothing when the draft has no add()', () => {
       expect(() => registerV2Commands({} as CommandDraft)).not.toThrow()
+    })
+  })
+
+  describe('The notice channel', () => {
+    afterEach(() => {
+      setNoticeEmitter(null)
+    })
+
+    it('says the web interface address, where a reader can see it', async () => {
+      const notices: Notice[] = []
+      setNoticeEmitter((notice) => notices.push(notice))
+
+      const message = await handleShowServerUrlCommand()
+
+      expect(message).toContain('http')
+      expect(notices).toHaveLength(1)
+      expect(notices[0]?.message).toContain('http')
+    })
+
+    it('carries a message and a variant', () => {
+      expect(noticeFromData({ message: 'done', variant: 'success' })).toEqual({
+        message: 'done',
+        variant: 'success',
+      })
+    })
+
+    it('drops what is not a notice', () => {
+      expect(noticeFromData(undefined)).toBeNull()
+      expect(noticeFromData('a string')).toBeNull()
+      expect(noticeFromData({ variant: 'info' })).toBeNull()
+      expect(noticeFromData({ message: '' })).toBeNull()
+    })
+
+    it('falls back to info for a variant it does not know', () => {
+      expect(noticeFromData({ message: 'done', variant: 'chartreuse' })).toEqual({
+        message: 'done',
+        variant: 'info',
+      })
+    })
+
+    it('loses nothing when nobody is listening', () => {
+      expect(() => notifyUser('done')).not.toThrow()
+    })
+
+    it('does not fail the action when the channel throws', () => {
+      setNoticeEmitter(() => {
+        throw new Error('the channel is gone')
+      })
+      expect(() => notifyUser('done')).not.toThrow()
     })
   })
 

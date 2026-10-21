@@ -6,13 +6,14 @@ import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
 import { getActiveServer, getOrCreateServer, registerV2Commands } from './commands.ts'
 import { V2SessionNotifier } from './notifier.ts'
 import { announceRestart } from './restart-announce.ts'
-import { PtyServerRpc, serverOrigin } from './rpc.ts'
+import { PtyServerRpc, serverOrigin, setNoticeEmitter } from './rpc.ts'
 import { registerUsageSkill } from './skill.ts'
 import { registerV2Tools } from './tools.ts'
 import { define, type OpencodePtyOptions, type PluginContextV2, type PluginV2 } from './types.ts'
 
 export * from './commands.ts'
 export * from './notifier.ts'
+export * from './rpc.ts'
 export * from './skill.ts'
 export * from './tools.ts'
 export * from './types.ts'
@@ -79,15 +80,23 @@ export const Plugin: PluginV2 = define({
     // is filed under the directory THAT process was started in - which no panel can compute from
     // its own session. Registered even without `autostart`, because "not running" is an answer the
     // panel needs. `runRegistration` keeps a build without RPC loading everything else.
-    await runRegistration('rpc', () =>
-      ctx.rpc?.register(PtyServerRpc, {
+    await runRegistration('rpc', async () => {
+      const registration = await ctx.rpc?.register(PtyServerRpc, {
         origin: async (_input, context) => {
           const url = serverOrigin(getActiveServer())
           if (url === null) return context.error('not_running', 'No PTY server is running yet', {})
           return { url }
         },
       })
-    )
+      if (!registration) return
+      // What a slash command did, said out loud: the host drops a command's result,
+      // so this is the only way a reader learns that the command worked.
+      setNoticeEmitter((notice) => {
+        void registration.events.emit('notice', { ...notice }).catch(() => {
+          /* a notice that cannot be delivered is not a failure of the command */
+        })
+      })
+    })
 
     // Each registration step is optional and isolated: a host that does not
     // implement one of them must not lose the tools (a single failing
