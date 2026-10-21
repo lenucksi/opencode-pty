@@ -45,6 +45,7 @@ const tones = {
   error: RGBA.fromHex('#bf616a'),
   border: RGBA.fromHex('#3b4252'),
   raised: RGBA.fromHex('#242832'),
+  raisedHigh: RGBA.fromHex('#2e3440'),
 }
 
 beforeEach(() => {
@@ -176,7 +177,7 @@ function fixture(): Plugin.Context {
         },
       },
       border: { base: tones.border },
-      background: { raised: { base: tones.raised } },
+      background: { raised: { base: tones.raised, high: tones.raisedHigh } },
     },
     themeMode: 'dark',
     ui,

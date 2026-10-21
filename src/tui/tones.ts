@@ -13,4 +13,6 @@ export interface Tones {
   readonly error: unknown
   readonly border: unknown
   readonly raised: unknown
+  /** One step above `raised`: the scrollbar's thumb against its track. */
+  readonly raisedHigh: unknown
 }

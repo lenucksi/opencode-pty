@@ -21,6 +21,7 @@ const tones = {
   error: RGBA.fromHex('#bf616a'),
   border: RGBA.fromHex('#3b4252'),
   raised: RGBA.fromHex('#242832'),
+  raisedHigh: RGBA.fromHex('#2e3440'),
 }
 
 const session = (over: Partial<PanelSession> = {}): PanelSession => ({ id: 'pty_1', ...over })

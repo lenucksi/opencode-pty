@@ -118,6 +118,7 @@ export default Plugin.define({
       error: context.theme.text.feedback.error.base,
       border: context.theme.border.base,
       raised: context.theme.background.raised.base,
+      raisedHigh: context.theme.background.raised.high,
     })
 
     /**
