@@ -7,10 +7,17 @@
  * code first.
  */
 
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from 'node:fs'
+import { existsSync, unlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 import type { SessionNotifier } from '../adapters/types.ts'
+import {
+  defaultSocketPath,
+  isProcessAlive,
+  readPid,
+  socketAnswers,
+  startDaemon,
+} from './daemon-start.ts'
 import { type DaemonRequest, encodeMessage, isPush, parseMessage } from '../daemon/protocol.ts'
 import { SocketWriter } from '../daemon/socket-writer.ts'
 import {
@@ -25,6 +32,14 @@ export interface PtyClientOptions {
   socketPath?: string
   stateDir?: string
   daemonBin?: string
+  /**
+   * How long to wait for a daemon to answer before giving up.
+   *
+   * Ten seconds is a long time for a daemon to start, and it is the window in which
+   * a client waits rather than working. It is an option because a test must not
+   * spend ten seconds proving that a daemon that cannot start says so.
+   */
+  startTimeoutMs?: number
 }
 
 /**
@@ -41,22 +56,14 @@ function defaultDaemonEntry(): string {
   return new URL('../daemon/index.ts', import.meta.url).pathname
 }
 
-/** Signal 0: permission check plus liveness, without disturbing the process. */
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
-
 export class PtyClientTransport {
   private socket: Bun.Socket<undefined> | null = null
   private socketPath: string
   private pidFile: string
+  private lockFile: string
   private stateDir: string
   private daemonBin: string
+  private startTimeoutMs: number
   private requestId = 0
   private pending = new Map<
     number,
@@ -74,11 +81,12 @@ export class PtyClientTransport {
   private maxReconnectAttempts = 10
 
   constructor(options: PtyClientOptions = {}) {
-    this.socketPath =
-      options.socketPath ?? join(process.env.XDG_RUNTIME_DIR ?? '/tmp', 'opencode-pty', 'ptyd.sock')
+    this.socketPath = options.socketPath ?? defaultSocketPath()
     this.pidFile = join(dirname(this.socketPath), 'ptyd.pid')
+    this.lockFile = join(dirname(this.socketPath), 'ptyd.lock')
     this.stateDir = options.stateDir ?? sessionsRoot()
     this.daemonBin = options.daemonBin ?? defaultDaemonEntry()
+    this.startTimeoutMs = options.startTimeoutMs ?? 10_000
   }
 
   /** Connect to the daemon, auto-starting it if needed. */
@@ -86,19 +94,12 @@ export class PtyClientTransport {
     if (this.connected) return
     this.stopped = false
 
-    // Try to connect; if socket exists but connection fails, it's stale
+    // A socket that answers is a daemon's; a socket that does not is a leftover.
     if (existsSync(this.socketPath)) {
-      try {
-        // Probe connection
-        const probe = await Bun.connect({
-          unix: this.socketPath,
-          socket: { data: () => {}, close: () => {}, error: () => {} },
-        })
-        probe.end()
-      } catch {
+      if (!(await socketAnswers(this.socketPath))) {
         // Stale socket, remove and start daemon
         try {
-          ;(await import('node:fs')).unlinkSync(this.socketPath)
+          unlinkSync(this.socketPath)
         } catch {
           // Already removed by the daemon's shutdown.
         }
@@ -155,13 +156,21 @@ export class PtyClientTransport {
   private starting: Promise<void> | null = null
 
   /**
-   * Start the daemon once, even when two callers race (a reconnect and an explicit
-   * restart). Without this, both see the missing socket and both spawn; one binds
-   * and the other unlinks its socket and listens on an unreachable inode.
+   * Start the daemon, or wait for the one another client is starting.
+   *
+   * The lock and the spawn live in `daemon-start.ts`: starting the daemon is a
+   * machine-wide decision, and the code that makes it one belongs with the paths
+   * it is about.
    */
   private async startDaemon(): Promise<void> {
     if (this.starting !== null) return this.starting
-    this.starting = this.spawnDaemon()
+    this.starting = startDaemon({
+      daemonBin: this.daemonBin,
+      socketPath: this.socketPath,
+      stateDir: this.stateDir,
+      lockPath: this.lockFile,
+      steps: this.startSteps(),
+    })
     try {
       await this.starting
     } finally {
@@ -169,34 +178,9 @@ export class PtyClientTransport {
     }
   }
 
-  private async spawnDaemon(): Promise<void> {
-    const daemonEntry = this.daemonBin
-    const socket = this.socketPath
-    const stateDir = this.stateDir
-    const stateHome =
-      process.env.XDG_STATE_HOME ?? (process.env.HOME ? `${process.env.HOME}/.local/state` : '/tmp')
-    const logPath = `${stateHome}/opencode/opencode-pty.log`
-    // No shell: the paths are arguments, not text to be re-parsed. `setsid` is what
-    // detaches the daemon from this host's session so it outlives it; `nohup` is not
-    // needed once stdio points at a file.
-    mkdirSync(dirname(this.socketPath), { recursive: true, mode: 0o700 })
-    mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 })
-    const logFd = openSync(logPath, 'a', 0o600)
-    try {
-      const child = Bun.spawn(
-        ['setsid', 'bun', daemonEntry, '--socket', socket, '--state-dir', stateDir],
-        { stdin: 'ignore', stdout: logFd, stderr: logFd }
-      )
-      child.unref()
-    } finally {
-      closeSync(logFd)
-    }
-    // Wait for socket to appear
-    for (let i = 0; i < 40; i++) {
-      await new Promise((r) => setTimeout(r, 250))
-      if (existsSync(this.socketPath)) return
-    }
-    throw new Error('Daemon did not start')
+  /** How many quarter-second steps the start window is worth. */
+  private startSteps(): number {
+    return Math.max(1, Math.ceil(this.startTimeoutMs / 250))
   }
 
   private processBuffer() {
@@ -311,7 +295,7 @@ export class PtyClientTransport {
    * masters belong to that process - so callers have to say so.
    */
   async restartDaemon(): Promise<{ oldPid: number | null; newPid: number | null }> {
-    const oldPid = this.readDaemonPid()
+    const oldPid = await this.daemonPid()
     // Hold off the automatic reconnect: it would race the connect below.
     this.reconnecting = true
     if (oldPid !== null) {
@@ -322,8 +306,8 @@ export class PtyClientTransport {
       }
     }
     for (let attempt = 0; attempt < 40; attempt += 1) {
-      if (!existsSync(this.socketPath)) break
       if (oldPid !== null && !isProcessAlive(oldPid)) break
+      if (oldPid === null && !existsSync(this.socketPath)) break
       await Bun.sleep(250)
     }
 
@@ -338,8 +322,14 @@ export class PtyClientTransport {
     this.buffer = ''
     this.writer?.close()
     this.writer = null
-    // A daemon killed before it cleaned up leaves a socket that refuses connections.
-    if (existsSync(this.socketPath)) {
+    // A socket path with a live daemon behind it belongs to that daemon: removing it
+    // does not stop the daemon, it makes it unreachable - it keeps running on an
+    // inode nobody can reach, and the machine ends up with two daemons and one path.
+    // Another instance may have restarted the daemon in the meantime, and that
+    // daemon is the one to use.
+    if (existsSync(this.socketPath) && !(await socketAnswers(this.socketPath))) {
+      // A daemon killed before it cleaned up leaves a socket that refuses
+      // connections.
       try {
         unlinkSync(this.socketPath)
       } catch {
@@ -359,10 +349,28 @@ export class PtyClientTransport {
     return { oldPid, newPid }
   }
 
+  /**
+   * Which process is the daemon.
+   *
+   * Asked of the daemon itself, because the daemon knows and the pid file only
+   * guesses: a file left behind by a daemon that died names a process that is
+   * gone, and a file that was written by a daemon that lost the path names the
+   * wrong one. The file is the fallback for a daemon that does not answer.
+   */
+  private async daemonPid(): Promise<number | null> {
+    if (this.connected) {
+      try {
+        const pong = await this.request<{ pid?: number }>('ping')
+        if (typeof pong.pid === 'number' && pong.pid > 0) return pong.pid
+      } catch {
+        // The daemon did not answer; the pid file is what is left.
+      }
+    }
+    return this.readDaemonPid()
+  }
+
   private readDaemonPid(): number | null {
-    if (!existsSync(this.pidFile)) return null
-    const parsed = Number.parseInt(readFileSync(this.pidFile, 'utf8').trim(), 10)
-    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+    return readPid(this.pidFile)
   }
 
   disconnect(): void {

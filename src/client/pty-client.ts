@@ -25,6 +25,7 @@ import type {
 import { PtyClientTransport, type PtyClientOptions } from './pty-client-transport.ts'
 
 export type { PtyClientOptions }
+export { defaultSocketPath, sharedDaemonPid } from './daemon-start.ts'
 
 /**
  * The store as a daemon client can offer it.
@@ -98,8 +99,15 @@ export class PtyClient extends PtyClientTransport {
     return r?.success ?? false
   }
 
-  async ping(): Promise<{ pong: boolean; generation: string }> {
-    return this.request<{ pong: boolean; generation: string }>('ping')
+  /**
+   * Ask the daemon whether it is there.
+   *
+   * The answer carries its pid: the daemon knows who it is, and a restart needs to
+   * know that - a pid file is a note about the daemon, and a note can name a
+   * process that is gone or one that lost the path.
+   */
+  async ping(): Promise<{ pong: boolean; generation: string; pid?: number }> {
+    return this.request<{ pong: boolean; generation: string; pid?: number }>('ping')
   }
 
   async heartbeat(): Promise<void> {

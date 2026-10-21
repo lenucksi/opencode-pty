@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -184,14 +184,30 @@ describe('OpenCode V2 Plugin API', () => {
   })
 
   describe('Daemon restart command', () => {
-    afterEach(() => {
-      setNoticeEmitter(null)
+    // The daemon on this machine is shared by every opencode instance, so a test
+    // that looked for it would find the REAL one - and roll it. The runtime
+    // directory is what says where the daemon lives, so an empty one says "there
+    // is none".
+    let previousRuntimeDir: string | undefined
+    let emptyRuntimeDir: string
+
+    beforeEach(() => {
+      previousRuntimeDir = process.env.XDG_RUNTIME_DIR
+      emptyRuntimeDir = mkdtempSync(join(tmpdir(), 'opencode-pty-no-daemon-'))
+      process.env.XDG_RUNTIME_DIR = emptyRuntimeDir
     })
 
-    it('says there is nothing to restart when sessions run in-process', async () => {
+    afterEach(() => {
+      setNoticeEmitter(null)
+      if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR
+      else process.env.XDG_RUNTIME_DIR = previousRuntimeDir
+      rmSync(emptyRuntimeDir, { recursive: true, force: true })
+    })
+
+    it('says there is nothing to restart when the machine has no daemon', async () => {
       const message = await handleRestartDaemonCommand()
-      expect(message).toContain('run in-process')
-      expect(message).toContain('no daemon to restart')
+      expect(message).toContain('no PTY daemon on this machine')
+      expect(message).toContain('nothing to restart')
     })
 
     // The host drops a command's result, so the message alone reaches nobody. The
@@ -203,7 +219,7 @@ describe('OpenCode V2 Plugin API', () => {
       await handleRestartDaemonCommand()
 
       expect(notices).toHaveLength(1)
-      expect(notices[0]?.message).toContain('no daemon to restart')
+      expect(notices[0]?.message).toContain('nothing to restart')
       expect(notices[0]?.variant).toBe('warning')
     })
 
