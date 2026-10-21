@@ -5,6 +5,113 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-10-21
+
+### Added
+
+**The daemon can be rolled without a shell**
+
+A rebuilt daemon does not take effect on a host restart — outliving the host is the
+point — so rolling it meant finding the pid file and sending a signal by hand.
+`/pty-daemon-restart` (and `PtyClient.restartDaemon`) now stops the running daemon,
+waits for its socket to go, and connects again, which starts a fresh one. It reports
+both pids. It ends every session the daemon owns, and its description says so: the
+PTY masters belong to that process.
+
+**The TUI console scrolls sideways**
+
+A session draws its screen for the terminal it was started with. The panel is a
+fraction of that, and everything past its right edge was unreachable: opentui's
+scrollbox cannot scroll sideways, because its scroll size is the content's
+*computed* width — which is the viewport's, so it never has more to show than it
+already does. The offset is the panel's own now: the console is cut to a cell
+window, with the colour runs cut along with their characters and a double-width
+character at the edge kept whole. A bar under the console carries the position and
+two arrows, and appears only when the screen does not fit.
+
+The panel footer also names the keys that work while it is focused — `f3`
+fullscreen, `f4` send, `ctrl+y` close — and only then, because the host owns the
+input scope and an unfocused panel answers none of them.
+
+### Fixed
+
+**A response larger than the socket buffer was truncated**
+
+`pty_list` timed out with a few hundred archived sessions while `ping` answered:
+the daemon wrote its response with one `socket.write`, which accepts what fits and
+drops the rest. The session list is about 350 kB, so the client received a JSON
+object cut mid-string, never saw a newline, and gave up. Writes now go through a
+queue that flushes again on `drain`, on both sides, so a large `pty_list`, a large
+read or a large `pty_write` arrives whole.
+
+**Half the plugin still talked to the in-process manager**
+
+`pty_wait` asked the in-process manager for a session it had just spawned through
+the daemon, got nothing, and reported `<pty_session_lost>` for a process that was
+running the whole time. The WebSocket handler spawned, wrote and resized on the
+in-process manager as well, so a daemon-backed web UI streamed nothing; session
+deletion cleaned up the wrong store; and the notifier was installed where the
+daemon's exit pushes could not reach it. All four now go through the active
+manager.
+
+**Screens were rendered from the last 256 kB and lost the top**
+
+A full-screen program repaints only what changed, so a window over its output
+leaves every row painted before the window blank: a live htop showed its process
+table but not its header, and btop lost its left edge. Measured: 256 kB produced
+fragments, the whole 1.2 MB buffer produced the real screen, at about the same
+cost. The screen is rendered from the whole ring buffer now (archives: the last
+4 MB, and a shorter replay says so). It is also rendered where the buffer lives,
+so the wire carries cells rather than megabytes, and a slow read keeps the last
+frame of the session on screen instead of replacing it with an `AbortError`.
+
+**The sidebar list reloaded on every poll and emptied on a failure**
+
+Each poll replaced the session list with a freshly parsed array, so all rows were
+new objects and the sidebar rebuilt itself every 2.5 s; a failed poll replaced the
+list with nothing, which the reader saw as the list blanking and refilling. The
+identity merge that the panel had (with a guard that was dead code) is shared now,
+a failed refresh keeps the rows and says the server is unreachable, and the parent
+conversation titles are read untracked so the host's session store no longer
+rebuilds the list on every token of every conversation.
+
+**A client that reconnected inherited the previous connection's half-line**
+
+A truncated response left an unterminated line in the buffer, and every later
+response was appended to it and dropped. The buffer is cleared on close and on a
+successful connect.
+
+**Smaller ones**
+
+- `disconnect()` armed a reconnect, so every finished run started a fresh stray
+  daemon a second later; an intentional end no longer reconnects.
+- Two daemons starting at once could split-brain: the loser unlinked the winner's
+  socket. A daemon now probes an existing socket and exits if something answers,
+  and the client's start is single-flight.
+- The daemon entry resolved to a `.js` beside the client, which does not exist in a
+  source checkout; it falls back to the `.ts` entry.
+- The daemon launcher interpolated paths into `sh -c`, where a path containing
+  `$(...)` would expand. It spawns `setsid` with an argument vector now.
+
+### Changed
+
+- `@opencode/plugin` and `@opencode/theme` 2.0.29 → 2.0.32, the version the host
+  runs; the peer floor for `@opencode/theme` follows the SDK's.
+- The client is split into a transport half and an API half, and the daemon's
+  request switch is a handler table.
+- Screen reads ask the manager for the screen instead of transferring the raw
+  buffer, so the Web UI, the TUI and `pty_screen` all take the same path.
+
+### Tooling
+
+- Aislop 94 → 100/100 with no warnings, Biome warnings 47 → 0, and the `any` in the
+  IPC layer replaced by the manager's own types.
+- Coverage gaps closed where the daemon work landed (archive-trash, the v2
+  commands, the client API), held at the per-file 80 % gate.
+- New: an opencode-in-the-loop daemon survival harness — two real hosts, one
+  daemon — run with `bun run test:daemon`; `--dry-run` drives the daemon through
+  two clients without a model.
+
 ## [0.8.0] - 2026-10-19
 
 ### Added
