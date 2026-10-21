@@ -13,6 +13,7 @@
 import type { MissingSessionInfo, ServerDescription } from '../plugin/pty/manager.ts'
 import type { BoundedReadResult, BoundedSearchResult } from '../plugin/pty/output-manager.ts'
 import type { BoundedRawResult } from '../plugin/pty/read-budget.ts'
+import type { ScreenSnapshot } from '../plugin/pty/screen.ts'
 import type { PersistedSession, RetentionPolicy } from '../plugin/pty/session-store.ts'
 import type {
   BulkRemoveResult,
@@ -113,6 +114,13 @@ export class PtyClient extends PtyClientTransport {
   }
 
   /** The rest of the manager surface: methods the web UI and TUI need. */
+  async screen(
+    id: string,
+    options: { cols?: number; rows?: number; scrollback?: number } = {}
+  ): Promise<ScreenSnapshot | null> {
+    return this.request<ScreenSnapshot | null>('screen', { id, ...options })
+  }
+
   async getSession(id: string): Promise<PTYSession | null> {
     return this.request<PTYSession | null>('get_session', { id })
   }

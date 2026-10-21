@@ -127,13 +127,17 @@ describe('noteNoServer', () => {
     expect(state.startFailures).toBe(1)
   })
 
-  test('drops a stale list, because the server it came from is gone', () => {
+  test('keeps the last list and says the server is gone', () => {
+    // The rows are the last answer, not a claim about now: the status line carries
+    // the "gone" part. Emptying the list here made the sidebar blank and refill on
+    // every failed refresh, which a reader sees as the list reloading.
     const state = initialPanelState()
     noteListSuccess(state, 'http://127.0.0.1:1', [session({ id: 'a' })])
     expect(state.sessions).toHaveLength(1)
     noteNoServer(state, false)
-    expect(state.sessions).toEqual([])
+    expect(state.sessions).toHaveLength(1)
     expect(state.origin).toBeNull()
+    expect(state.status).not.toBe(sessionCountLabel(1))
   })
 })
 
@@ -268,11 +272,14 @@ describe('noteUnreachable', () => {
   })
 
   // Showing sessions next to an error invites the reading that the list is current.
-  test('drops the list rather than showing it beside the error', () => {
+  test('keeps the rows and says the list is stale', () => {
+    // Same reason as noteNoServer: a failed refresh does not delete processes, and
+    // clearing the list is what made the sidebar flicker on every timeout.
     const state = initialPanelState()
     noteListSuccess(state, 'http://x', [session({ id: 'a' })])
     noteUnreachable(state, 'nope')
-    expect(state.sessions).toEqual([])
+    expect(state.sessions).toHaveLength(1)
+    expect(state.status).toBe('server unreachable')
   })
 })
 

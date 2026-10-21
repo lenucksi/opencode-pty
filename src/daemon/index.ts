@@ -280,6 +280,12 @@ const handlers: Record<string, RequestHandler> = {
     manager.getSessionLog(params.id as string, { tail: params.tail as number }),
   describe_missing_session: (params) => manager.describeMissingSession(params.id as string),
   describe_server: () => manager.describeServer(),
+  screen: (params) =>
+    manager.screen(params.id as string, {
+      cols: params.cols as number | undefined,
+      rows: params.rows as number | undefined,
+      scrollback: params.scrollback as number | undefined,
+    }),
   get_raw_buffer: (params) => manager.getRawBuffer(params.id as string, params.since as number),
   read_since: (params) =>
     manager.readSince(params.id as string, params.since as number, params.budget as number),

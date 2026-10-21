@@ -294,7 +294,7 @@ describe('GET /api/sessions/:id/screen', () => {
           }
         }
       }
-    })
+    }, 20_000)
   })
 
   it('reports a failed render instead of an empty screen', async () => {

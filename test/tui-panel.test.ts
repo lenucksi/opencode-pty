@@ -1640,7 +1640,7 @@ describe('the PTY sidebar panel', () => {
   // The other half of the same question: when the server is gone the panel must not keep
   // a stale screen on display. Showing the last output of a process whose server no longer
   // answers reads as a live view of something that is not there.
-  test('a server that is gone leaves no stale screen behind', async () => {
+  test('a server that is gone keeps the last rows and says so', async () => {
     const server = await PTYServer.createServer({ hostname: '127.0.0.1', directory: project })
     try {
       await spawnSession('talker', 'sh', ['-c', 'printf "first output"; sleep 30'])
@@ -1660,17 +1660,20 @@ describe('the PTY sidebar panel', () => {
       }, 8000)
 
       server[Symbol.dispose]()
+      // The panel keeps what it last knew and says the server is gone. Emptying it
+      // was the other design, and it made every timeout look like the processes had
+      // vanished - the list blanked and refilled on each poll.
       await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
           | { screen?: ScreenContent; sessions?: unknown[] }
           | undefined
-        return (stored?.sessions?.length ?? 0) === 0 ? true : undefined
+        return (stored?.sessions?.length ?? 0) > 0 ? true : undefined
       }, 8000)
 
       const stored = seen.stores.get('opencode-pty.session-panel') as
         | { screen?: ScreenContent }
         | undefined
-      expect(stored?.screen?.text).not.toContain('first output')
+      expect(stored?.screen?.text).toContain('first output')
     } finally {
       server[Symbol.dispose]()
     }

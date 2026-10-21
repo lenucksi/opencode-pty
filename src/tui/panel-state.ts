@@ -6,6 +6,7 @@ import {
   sortSessionsByTime,
 } from '../web/shared/session-meta.ts'
 import { isFinished, type PanelSession, truncateText } from './lib.ts'
+import { mergeIdentical, sameGroup } from './row-identity.ts'
 
 /**
  * The panel's state, and every transition it can make.
@@ -340,7 +341,7 @@ export function noteNoServer(state: PanelState, asked: boolean): void {
   state.status = asked
     ? statusWhenUnavailable(state.startFailures, state.lastStartError)
     : IDLE_STATUS
-  state.sessions = []
+  // Same reason as `noteUnreachable`: the last list is the last list, not nothing.
   state.origin = null
 }
 
@@ -351,7 +352,11 @@ export function noteListSuccess(
   sessions: readonly PanelSession[]
 ): void {
   state.origin = origin
-  state.sessions = orderForDisplay(sessions)
+  // Preserve the rows' identity: the response is re-parsed on every tick, so without
+  // this every poll would hand the sidebar 380 new objects and make it rebuild the
+  // whole list - the reload a reader sees as flicker.
+  const merged = mergeIdentical(orderForDisplay(sessions), state.sessions)
+  if (!sameGroup(state.sessions, merged)) state.sessions = merged
   state.startFailures = 0
   state.lastStartError = null
   state.status = sessionCountLabel(sessions.length)
@@ -367,7 +372,9 @@ export function noteListSuccess(
  */
 export function noteUnreachable(state: PanelState, error: unknown): void {
   state.origin = null
-  state.sessions = []
+  // The rows stay. A failed refresh says the last answer is stale, not that the
+  // processes are gone - and emptying the list made the sidebar blank and refill on
+  // every timeout, which reads as a reload.
   state.status = 'server unreachable'
   state.lastStartError = String(error)
 }

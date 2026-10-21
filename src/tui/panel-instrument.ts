@@ -71,12 +71,26 @@ export async function readSelectedScreenInto(
       chars: screen.text.length,
     })
   } catch (error) {
-    // Said in the panel rather than only in the log: a screen that silently stayed on
-    // the previous session's output would read as the panel tracking the wrong process.
-    setState((draft) =>
-      noteSessionScreen(draft, screenContent(`(could not read the screen: ${String(error)})`), now)
-    )
-    deps.debug('panel.screen.failed', { id, error: String(error) })
+    // Keep the last frame of THIS session. It is stale, not wrong - and blanking the
+    // panel with an error every time the host is busy is what made a live htop flash
+    // an AbortError instead of the process list. A different session gets the error,
+    // because a screen that silently stayed on the previous process's output would
+    // read as the panel tracking the wrong one.
+    const belongsToSelection = before.text !== '' && state.selected === id
+    if (!belongsToSelection) {
+      setState((draft) =>
+        noteSessionScreen(
+          draft,
+          screenContent(`(could not read the screen: ${String(error)})`),
+          now
+        )
+      )
+    }
+    deps.debug('panel.screen.failed', {
+      id,
+      error: String(error),
+      kept: belongsToSelection,
+    })
   }
 }
 

@@ -7,13 +7,7 @@ import {
 } from '../../constants.ts'
 import { getPtyManager } from '../manager.ts'
 import { logPtyEvent } from '../plugin-log.ts'
-import {
-  type ColorSpan,
-  DEFAULT_REPLAY_WINDOW,
-  fitScreenSize,
-  renderScreen,
-  type ScreenSnapshot,
-} from '../screen.ts'
+import { type ColorSpan, fitScreenSize, type ScreenSnapshot } from '../screen.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './screen.txt'
@@ -107,27 +101,12 @@ export const ptyScreen = tool({
     const cols = fitted.cols
     const rows = fitted.rows
 
-    // Live sessions keep the raw stream in the ring buffer; an archived one only
-    // has the transcript on disk. Both go through `getRawBuffer` so the two
-    // render identically.
-    //
-    // The TAIL, not the whole buffer: a full-screen program redraws, and its buffer
-    // is a megabyte of escape sequences by the minute. Transferring that on every
-    // screen read is what made the panel crawl - and the replay window below throws
-    // most of it away anyway.
-    const since = Math.max(0, session.charCount - DEFAULT_REPLAY_WINDOW)
-    const raw = (await getPtyManager().getRawBuffer(args.id, since))?.raw
-    if (raw === undefined) {
-      return [
-        `<pty_screen id="${session.id}" cols="${cols}" rows="${rows}">`,
-        `(The retained output of this session is not available.)`,
-        `</pty_screen>`,
-      ].join('\n')
-    }
-
-    let snapshot: ScreenSnapshot
+    // Through the manager, so a daemon renders where the buffer lives: the screen
+    // is small, the raw stream is not, and a window over it cut the rows a
+    // full-screen program painted only once (htop's header).
+    let snapshot: ScreenSnapshot | null
     try {
-      snapshot = await renderScreen(raw, cols, rows)
+      snapshot = await getPtyManager().screen(args.id, { cols, rows })
     } catch (error) {
       // A failed screen render must not read as "the program printed nothing".
       logPtyEvent('error', 'pty_screen could not render the session screen', error)
@@ -139,6 +118,14 @@ export const ptyScreen = tool({
       ].join('\n')
     }
 
+    if (snapshot === null) {
+      return [
+        `<pty_screen id="${session.id}" cols="${cols}" rows="${rows}">`,
+        `(The retained output of this session is not available.)`,
+        `</pty_screen>`,
+      ].join('\n')
+    }
+
     // Zero-padded so rows stay aligned and sortable in the reader's view, and so
     // a span's row can be matched against a body row by string equality.
     const rowWidth = String(rows).length
@@ -146,10 +133,7 @@ export const ptyScreen = tool({
       (line, index) => `${(index + 1).toString().padStart(rowWidth, '0')}| ${line}`
     )
 
-    // The render only saw the TAIL, so its own total is the tail's length. The
-    // session's total is what a reader needs: a partial replay has to say how much
-    // of the session it left out.
-    const total = since > 0 ? session.charCount : snapshot.totalChars
+    const total = snapshot.totalChars
 
     const attrs = [
       `id="${session.id}"`,
