@@ -1,5 +1,6 @@
 import { jsx } from '@opentui/solid/jsx-runtime'
 import type { StyledRun } from '../plugin/pty/screen.ts'
+import { cellWidth, sliceCells } from './cell-width.ts'
 import type { ScreenContent } from './screen-content.ts'
 
 /**
@@ -23,26 +24,71 @@ import type { ScreenContent } from './screen-content.ts'
  * already fitted, so a long row must clip rather than wrap into a second line and
  * shift everything below it.
  */
-export function screenNodes(screen: ScreenContent): unknown[] {
+
+/**
+ * One row, cut to the sideways window.
+ *
+ * The runs are the row's colours; the plain text is the row itself. A row that lies
+ * entirely outside the window is dropped (null), and a row that overlaps it keeps
+ * only the runs inside - the colour of a run belongs to its own characters, so a run
+ * that is half out of the window is cut with them.
+ */
+function sliceRow(
+  line: string,
+  runs: StyledRun[] | undefined,
+  scrollLeft: number,
+  visibleWidth: number
+): { text: string; runs: StyledRun[] } | null {
+  if (scrollLeft <= 0 && visibleWidth <= 0) return { text: line, runs: runs ?? [] }
+  const to = visibleWidth > 0 ? scrollLeft + visibleWidth : Number.MAX_SAFE_INTEGER
+  if (runs === undefined || runs.length === 0) {
+    const text = sliceCells(line, scrollLeft, to)
+    return text === '' ? null : { text, runs: [] }
+  }
+  const out: StyledRun[] = []
+  let cell = 0
+  for (const run of runs) {
+    const start = cell
+    cell += cellWidth(run.text)
+    if (cell <= scrollLeft) continue
+    if (start >= to) break
+    out.push({ ...run, text: sliceCells(run.text, scrollLeft - start, to - start) })
+  }
+  if (out.length === 0) return null
+  return { text: out.map((run) => run.text).join(''), runs: out }
+}
+
+export function screenNodes(screen: ScreenContent, scrollLeft = 0, visibleWidth = 0): unknown[] {
   const lines = screen.text === '' ? [] : screen.text.split('\n')
   return lines.map((line, index) => {
     const runs = screen.runs[index]
+    // The sideways window: the panel shows a screen drawn for a wider terminal, and
+    // only the part the reader asked for is placed. A row outside the window is empty
+    // rather than clipped, so the column of runs stays aligned with the text.
+    const windowed = sliceRow(line, runs, scrollLeft, visibleWidth)
     const cells: unknown[] =
-      runs === undefined || runs.length === 0
-        ? [jsx('text', { wrapMode: 'none', flexShrink: 0, children: line })]
-        : runs.map((run) =>
-            jsx('text', {
-              wrapMode: 'none',
-              flexShrink: 0,
-              fg: run.fg,
-              bg: run.bg,
-              attributes: runAttributes(run),
-              children: run.text,
-            })
-          )
+      windowed === null
+        ? []
+        : windowed.runs.length === 0
+          ? [jsx('text', { wrapMode: 'none', flexShrink: 0, children: windowed.text })]
+          : windowed.runs.map((run) =>
+              jsx('text', {
+                wrapMode: 'none',
+                flexShrink: 0,
+                fg: run.fg,
+                bg: run.bg,
+                attributes: runAttributes(run),
+                children: run.text,
+              })
+            )
+    // `width: 'auto'`, not `'100%'`: a row that is exactly the viewport wide gives the
+    // scrollbox nothing to scroll, so a wide run was clipped at the right edge and
+    // could not be reached. Auto lets the row be as wide as its runs are, and the
+    // content box around them grows with it - which is what makes the horizontal
+    // scrollbar appear.
     return jsx('box', {
       flexDirection: 'row',
-      width: '100%',
+      width: 'auto',
       height: 1,
       flexShrink: 0,
       children: cells,

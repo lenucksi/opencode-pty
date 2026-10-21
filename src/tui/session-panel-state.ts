@@ -37,6 +37,24 @@ export interface SessionPanelState {
   scope: string | null
   /** This session's PTY sessions, in display order. */
   sessions: PanelSession[]
+  /**
+   * How far the console is scrolled sideways, in cells.
+   *
+   * The panel shows a screen the program drew for a much wider terminal, so the
+   * console has to be able to look at the part that does not fit. opentui's scrollbox
+   * cannot do that sideways - its scroll size is the content's COMPUTED width, which
+   * is the viewport's width, so it never has anything to scroll to - which is why
+   * this offset is ours.
+   */
+  scrollLeft: number
+  /**
+   * How wide the console is, in cells.
+   *
+   * The offset is measured against it, so the panel has to know it. It is measured
+   * on the canvas once it exists, and written here only when it changes: a write
+   * per tick would re-lay the panel out every 200 ms.
+   */
+  consoleWidth: number
   /** Which one is on screen, or null when the list is empty. */
   selected: string | null
   /**
@@ -66,6 +84,8 @@ export function initialSessionPanelState(): SessionPanelState {
     scope: null,
     sessions: [],
     selected: null,
+    scrollLeft: 0,
+    consoleWidth: 0,
     screen: screenContent(''),
     now: Date.now(),
     listExpanded: false,
@@ -182,6 +202,34 @@ export function noteSessionPanelList(
 }
 
 /** The row the panel is showing, or null when there is no selection. */
+/**
+ * Move the console sideways, and keep it inside the screen.
+ *
+ * The screen is at most as wide as its widest row, so an offset past that would
+ * show nothing at all.
+ */
+export function noteSessionPanelScrollLeft(
+  state: SessionPanelState,
+  cells: number,
+  widest: number
+): void {
+  const max = Math.max(0, widest - state.consoleWidth)
+  state.scrollLeft = Math.min(Math.max(0, cells), max)
+}
+
+/**
+ * The console's width, when the canvas reports a new one.
+ *
+ * Written only on a change: the keeper looks at the canvas every 200 ms, and a
+ * write per look would re-lay the panel out that often.
+ */
+export function noteSessionPanelConsoleWidth(state: SessionPanelState, width: number): void {
+  if (width <= 0 || width === state.consoleWidth) return
+  state.consoleWidth = width
+  // A narrower console can leave the offset past the new end.
+  if (state.scrollLeft > 0 && state.scrollLeft > width) state.scrollLeft = 0
+}
+
 export function selectedSession(state: SessionPanelState): PanelSession | null {
   if (state.selected === null) return null
   return state.sessions.find((session) => session.id === state.selected) ?? null

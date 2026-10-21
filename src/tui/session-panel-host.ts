@@ -13,12 +13,15 @@ import type { ScrollKeeper } from './scroll-keeper.ts'
 import { sessionPanelView } from './session-panel.ts'
 import {
   initialSessionPanelState,
+  noteSessionPanelConsoleWidth,
   noteSessionListToggled,
+  noteSessionPanelScrollLeft,
   noteScopeChosen,
   noteSessionSelected,
   selectedSession,
   type SessionPanelState,
 } from './session-panel-state.ts'
+import { widestRow } from './screen-content.ts'
 
 /** The state store's key this panel restores from. */
 const SESSION_PANEL_KEY = 'opencode-pty.session-panel'
@@ -87,7 +90,23 @@ export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanel
 
   // The instrument lives in panel-instrument.ts; both halves only run with
   // PTY_TUI_DEBUG, and counters are the last thing a decision file should carry.
-  const keeper: ScrollKeeper = createConsoleKeeper(deps.debug)
+  /**
+   * Move the console sideways.
+   *
+   * The offset is kept in the store, so it survives the panel being re-rendered, and
+   * it is clamped to the screen: past its end there is nothing left to show.
+   */
+  const scrollBy = (cells: number): void => {
+    setState((draft) =>
+      noteSessionPanelScrollLeft(draft, draft.scrollLeft + cells, widestRow(draft.screen))
+    )
+  }
+
+  const keeper: ScrollKeeper = createConsoleKeeper(deps.debug, (width) => {
+    // The console's width is what the sideways scrollbar is measured against, and it
+    // is only known once the canvas exists.
+    setState((draft) => noteSessionPanelConsoleWidth(draft, width))
+  })
   const countClaimRender = createClaimMeter(deps.debug)
 
   const select = (id: string): void => {
@@ -103,7 +122,7 @@ export function createSessionPanelHost(deps: SessionPanelHostDeps): SessionPanel
   const resetScope = (): void => setState((draft) => noteScopeChosen(draft, null))
 
   const register = (): void => {
-    claimSessionPanel(context, deps, state, select, sync, panel, keeper, countClaimRender)
+    claimSessionPanel(context, deps, state, select, sync, scrollBy, panel, keeper, countClaimRender)
     registerSessionPanelCommand(context, deps, resetScope)
   }
 
@@ -138,6 +157,8 @@ function claimSessionPanel(
   state: SessionPanelState,
   select: (id: string) => void,
   sync: () => Promise<void>,
+  /** Move the console sideways, in cells. */
+  scrollBy: (cells: number) => void,
   panel: PanelActions,
   keeper: ScrollKeeper,
   /** Counts one claim render; the instrument reads its cadence. */
@@ -167,6 +188,7 @@ function claimSessionPanel(
         // answers nothing and the line falls back to the id.
         parentName: (id) => (id === undefined ? undefined : context.data.session.get(id)?.title),
         onSend: deps.sendInput,
+        onScrollBy: scrollBy,
         onSelect: (id) => {
           select(id)
           void sync()

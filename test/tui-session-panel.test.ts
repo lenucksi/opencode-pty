@@ -9,7 +9,9 @@ import {
   LOADING_SCREEN,
   NO_SELECTION_SCREEN,
   noteScopeChosen,
+  noteSessionPanelConsoleWidth,
   noteSessionListToggled,
+  noteSessionPanelScrollLeft,
   noteSessionPanelInput,
   noteSessionPanelList,
   noteSessionScreen,
@@ -297,6 +299,7 @@ describe('sessionPanelView', () => {
     fullscreen: false,
     onClose: () => {},
     onSend: () => {},
+    onScrollBy: () => {},
     onSelect: () => {},
     onToggleList: () => {},
     // No host lookup in a frame case: a session with a parent then says `started by <id>`, which is
@@ -628,6 +631,96 @@ describe('sessionPanelView', () => {
     // blank rows under it, so "the frame is the last thing drawn" would pass on exactly
     // the code that is wrong here. The list is folded by default, so it is one row.
     expect(bottom).toBe(PANEL_ROWS - FOOTER_ROWS - 1 - 1)
+  })
+
+  // The sideways scrollbar. The screen belongs to a program that drew it for a much
+  // wider terminal, and a sidebar shows a fraction of that - so the console has to be
+  // able to look at the part that does not fit.
+  test('shows a sideways bar when the screen is wider than the console', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a', status: 'running' })], ME)
+    noteSessionSelected(state, 'a')
+    noteSessionScreen(state, screenContent('W'.repeat(200)), 1)
+    noteSessionPanelConsoleWidth(state, 60)
+    const text = await frame(() => sessionPanelView(view({ state })))
+    expect(text).toContain('of 200 cells')
+    expect(text).toContain('\u25c0')
+    expect(text).toContain('\u25b6')
+  })
+
+  test('shows no sideways bar when the screen fits', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a', status: 'running' })], ME)
+    noteSessionSelected(state, 'a')
+    noteSessionScreen(state, screenContent('short'), 1)
+    noteSessionPanelConsoleWidth(state, 60)
+    const text = await frame(() => sessionPanelView(view({ state })))
+    expect(text).not.toContain('of 200 cells')
+    expect(text).not.toContain('\u25c0')
+  })
+
+  test('the sideways bar names the window that is on screen', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a', status: 'running' })], ME)
+    noteSessionSelected(state, 'a')
+    noteSessionScreen(state, screenContent('W'.repeat(200)), 1)
+    noteSessionPanelConsoleWidth(state, 60)
+    noteSessionPanelScrollLeft(state, 40, 200)
+    const text = await frame(() => sessionPanelView(view({ state })))
+    expect(text).toContain('40-100 of 200 cells')
+  })
+
+  test('the console shows the part of the screen the offset names', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a', status: 'running' })], ME)
+    noteSessionSelected(state, 'a')
+    noteSessionScreen(state, screenContent('0123456789'), 1)
+    noteSessionPanelConsoleWidth(state, 4)
+    noteSessionPanelScrollLeft(state, 3, 10)
+    const text = await frame(() => sessionPanelView(view({ state })))
+    expect(text).toContain('3456')
+    expect(text).not.toContain('0123')
+  })
+
+  test('the sideways arrows ask for a scroll', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a', status: 'running' })], ME)
+    noteSessionSelected(state, 'a')
+    noteSessionScreen(state, screenContent('W'.repeat(200)), 1)
+    noteSessionPanelConsoleWidth(state, 60)
+    const moves: number[] = []
+    const rendered = await setup(() =>
+      sessionPanelView(view({ state, onScrollBy: (cells: number) => moves.push(cells) }))
+    )
+    const rows = rendered.captureCharFrame().split('\n')
+    const row = rows.findIndex((line) => line.includes('\u25b6'))
+    if (row < 0) throw new Error('the panel draws no sideways bar to click')
+    const column = (rows[row] ?? '').indexOf('\u25b6')
+    await rendered.mockMouse.click(column, row)
+    await rendered.renderOnce()
+    expect(moves.length).toBe(1)
+    expect(moves[0]).toBeGreaterThan(0)
+  })
+
+  // The keys, as text. A reader who does not know that f3 enlarges the panel will
+  // never find it, and the hint has to be where the panel is.
+  test('names the keys that work while the panel is focused', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a', status: 'running' })], ME)
+    noteSessionSelected(state, 'a')
+    const text = await frame(() => sessionPanelView(view({ state, focused: true })))
+    expect(text).toContain('f3 fullscreen')
+    expect(text).toContain('f4 send')
+  })
+
+  test('names no keys while the panel is not focused', async () => {
+    // The host owns the input scope: an unfocused panel answers none of these keys,
+    // so advertising them would be a promise the panel cannot keep.
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a', status: 'running' })], ME)
+    noteSessionSelected(state, 'a')
+    const text = await frame(() => sessionPanelView(view({ state, focused: false })))
+    expect(text).not.toContain('f3 fullscreen')
   })
 
   // The footer and the send control. Both exist because a screen with no numbers on it

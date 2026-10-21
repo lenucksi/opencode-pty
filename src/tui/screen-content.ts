@@ -1,4 +1,5 @@
 import type { StyledRun } from '../plugin/pty/screen.ts'
+import { cellWidth } from './cell-width.ts'
 
 /**
  * Decoding a session's rendered screen out of the server's response.
@@ -102,4 +103,19 @@ function isStyledRun(value: unknown): value is StyledRun {
   return (
     !!value && typeof value === 'object' && typeof (value as { text?: unknown }).text === 'string'
   )
+}
+
+/**
+ * The widest row of a screen, in cells.
+ *
+ * The panel shows a screen the program drew for a wider terminal, so this is what
+ * decides whether the console needs a sideways scrollbar at all.
+ */
+export function widestRow(screen: ScreenContent): number {
+  let widest = 0
+  for (const line of screen.text === '' ? [] : screen.text.split('\n')) {
+    const width = cellWidth(line)
+    if (width > widest) widest = width
+  }
+  return widest
 }

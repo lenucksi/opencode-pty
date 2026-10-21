@@ -99,8 +99,17 @@ export function createClaimMeter(debug: SessionPanelHostDeps['debug']): () => vo
  * applied, so a `stickyScroll` that flips back without an attach names the tree's own
  * re-assert.
  */
-export function createConsoleKeeper(debug: SessionPanelHostDeps['debug']): ScrollKeeper {
+export function createConsoleKeeper(
+  debug: SessionPanelHostDeps['debug'],
+  onWidth?: (width: number) => void
+): ScrollKeeper {
   let attach = 0
+  let lastWidth = 0
+  const report = (width: number | undefined): void => {
+    if (width === undefined || width === lastWidth) return
+    lastWidth = width
+    onWidth?.(width)
+  }
   return startScrollKeeper({
     onAttach: () => {
       attach += 1
@@ -109,5 +118,6 @@ export function createConsoleKeeper(debug: SessionPanelHostDeps['debug']): Scrol
     onTick: (reading) => {
       debug('panel.console.tick', reading)
     },
+    onWidth: report,
   })
 }
