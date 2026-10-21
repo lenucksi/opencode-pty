@@ -24,6 +24,7 @@ const tones = {
   error: '#bf616a',
   border: '#3b4252',
   raised: '#242832',
+  raisedHigh: '#2e3440',
 }
 
 /** The control bytes, spelled in JavaScript escapes rather than raw characters. */

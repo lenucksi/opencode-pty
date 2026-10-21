@@ -47,6 +47,7 @@ const tones = {
   error: '#bf616a',
   border: '#3b4252',
   raised: '#242832',
+  raisedHigh: '#2e3440',
 }
 
 describe('sessionsForSession', () => {
@@ -642,7 +643,7 @@ describe('sessionPanelView', () => {
     noteSessionScreen(state, screenContent('W'.repeat(200)), 1)
     noteSessionPanelConsoleWidth(state, 60)
     const text = await frame(() => sessionPanelView(view({ state })))
-    expect(text).toContain('of 200 cells')
+    expect(text).toContain('0-60/200')
     expect(text).toContain('\u25c0')
     expect(text).toContain('\u25b6')
   })
@@ -654,7 +655,7 @@ describe('sessionPanelView', () => {
     noteSessionScreen(state, screenContent('short'), 1)
     noteSessionPanelConsoleWidth(state, 60)
     const text = await frame(() => sessionPanelView(view({ state })))
-    expect(text).not.toContain('of 200 cells')
+    expect(text).not.toContain('0-60/200')
     expect(text).not.toContain('\u25c0')
   })
 
@@ -666,7 +667,31 @@ describe('sessionPanelView', () => {
     noteSessionPanelConsoleWidth(state, 60)
     noteSessionPanelScrollLeft(state, 40, 200)
     const text = await frame(() => sessionPanelView(view({ state })))
-    expect(text).toContain('40-100 of 200 cells')
+    expect(text).toContain('40-100/200')
+  })
+
+  // The bar has to LOOK like a scrollbar, and that is a property of the pixels, not of
+  // the text: a track with a background across the row and a thumb in a different one.
+  // Without this case the row could go back to being a line of text between two arrows
+  // - which is what it was, and what a reader could not recognise.
+  test('the sideways bar is drawn as a track with a thumb on it', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a', status: 'running' })], ME)
+    noteSessionSelected(state, 'a')
+    noteSessionScreen(state, screenContent('W'.repeat(200)), 1)
+    noteSessionPanelConsoleWidth(state, 60)
+    const rendered = await setup(() => sessionPanelView(view({ state })))
+    const line = rendered
+      .captureSpans()
+      .lines.find((l) => l.spans.some((s) => s.text.includes('\u25c0')))
+    if (!line) throw new Error('the panel draws no sideways bar')
+    const painted = line.spans.filter((s) => s.bg.a > 0)
+    // The track covers the row, not just the thumb.
+    const covered = painted.reduce((n, s) => n + s.width, 0)
+    expect(covered).toBeGreaterThan(PANEL_COLS - 8)
+    // And the thumb is a different colour from the track it sits on.
+    const colours = new Set(painted.map((s) => s.bg.toString()))
+    expect(colours.size).toBe(2)
   })
 
   test('the console shows the part of the screen the offset names', async () => {
@@ -699,6 +724,28 @@ describe('sessionPanelView', () => {
     await rendered.renderOnce()
     expect(moves.length).toBe(1)
     expect(moves[0]).toBeGreaterThan(0)
+  })
+
+  // The left arrow scrolls back, and it is the same control as the right one: a
+  // reader who has scrolled away needs to be able to come back.
+  test('the left sideways arrow asks for a scroll back', async () => {
+    const state = initialSessionPanelState()
+    noteSessionPanelList(state, [session({ id: 'a', status: 'running' })], ME)
+    noteSessionSelected(state, 'a')
+    noteSessionScreen(state, screenContent('W'.repeat(200)), 1)
+    noteSessionPanelConsoleWidth(state, 60)
+    const moves: number[] = []
+    const rendered = await setup(() =>
+      sessionPanelView(view({ state, onScrollBy: (cells: number) => moves.push(cells) }))
+    )
+    const rows = rendered.captureCharFrame().split('\n')
+    const row = rows.findIndex((line) => line.includes('\u25c0'))
+    if (row < 0) throw new Error('the panel draws no sideways bar to click')
+    const column = (rows[row] ?? '').indexOf('\u25c0')
+    await rendered.mockMouse.click(column, row)
+    await rendered.renderOnce()
+    expect(moves.length).toBe(1)
+    expect(moves[0]).toBeLessThan(0)
   })
 
   // The keys, as text. A reader who does not know that f3 enlarges the panel will
