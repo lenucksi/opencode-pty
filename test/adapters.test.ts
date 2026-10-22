@@ -5,6 +5,7 @@ import {
   type PermissionAuthorizer,
   type SessionNotifier,
 } from '../src/adapters/index.ts'
+import { RoutePermissionAuthorizer } from '../src/adapters/route-permissions.ts'
 import { createV2Adapter } from '../src/adapters/v2/index.ts'
 import { V2PermissionAuthorizer } from '../src/adapters/v2/permissions.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
@@ -215,7 +216,9 @@ describe('Adapter Layer', () => {
 
       expect(adapter.id).toBe('opencode-v2')
       expect(adapter.notifier).toBe(notifier)
-      expect(adapter.permissions).toBe(permissions)
+      // The given authorizer is the host half of the gate: what is installed is the
+      // route's gate, which asks the host where there is a session to ask about.
+      expect(adapter.permissions).toBeInstanceOf(RoutePermissionAuthorizer)
 
       adapter.onSessionDeleted?.('parent-2')
 
@@ -226,7 +229,62 @@ describe('Adapter Layer', () => {
       const permission = hostPermission()
       const adapter = createV2Adapter({ permission })
 
-      expect(adapter.permissions).toBeInstanceOf(V2PermissionAuthorizer)
+      expect(adapter.permissions).toBeInstanceOf(RoutePermissionAuthorizer)
+    })
+  })
+
+  describe('The gate of a route', () => {
+    it('asks the host where there is a session to ask about', async () => {
+      const host = hostPermission()
+      const policy = {
+        checkCommand: mock(async () => {
+          throw new Error('the policy should not have been asked')
+        }),
+        checkWorkdir: mock(async () => {}),
+      }
+      const authorizer = new RoutePermissionAuthorizer(new V2PermissionAuthorizer(host), policy)
+
+      await authorizer.checkCommand('git', ['status'], { sessionID: 'ses_1' })
+
+      expect(host.assert).toHaveBeenCalled()
+      expect(policy.checkCommand).not.toHaveBeenCalled()
+    })
+
+    // A browser has no conversation, so the host cannot be asked about it. The
+    // policy is what answers then.
+    it('enforces the policy where there is no session', async () => {
+      const host = hostPermission()
+      const policy = {
+        checkCommand: mock(async () => {
+          throw new Error('denied by the policy')
+        }),
+        checkWorkdir: mock(async () => {}),
+      }
+      const authorizer = new RoutePermissionAuthorizer(new V2PermissionAuthorizer(host), policy)
+
+      await expect(authorizer.checkCommand('git', ['status'])).rejects.toThrow(
+        'denied by the policy'
+      )
+      expect(host.assert).not.toHaveBeenCalled()
+      expect(policy.checkCommand).toHaveBeenCalled()
+    })
+
+    it('applies the same choice to a working directory', async () => {
+      const host = hostPermission()
+      const policy = {
+        checkCommand: mock(async () => {}),
+        checkWorkdir: mock(async () => {
+          throw new Error('denied by the policy')
+        }),
+      }
+      const authorizer = new RoutePermissionAuthorizer(new V2PermissionAuthorizer(host), policy)
+
+      await authorizer.checkWorkdir('/elsewhere', { sessionID: 'ses_1' })
+      expect(host.assert).toHaveBeenCalled()
+      expect(policy.checkWorkdir).not.toHaveBeenCalled()
+
+      await expect(authorizer.checkWorkdir('/elsewhere')).rejects.toThrow('denied by the policy')
+      expect(policy.checkWorkdir).toHaveBeenCalled()
     })
   })
 })

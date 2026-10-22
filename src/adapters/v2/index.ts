@@ -1,6 +1,8 @@
 import { getPtyManager } from '../../plugin/pty/manager.ts'
+import { PolicyAuthorizer } from '../../plugin/pty/policy-authorizer.ts'
 import { logPtyEvent } from '../../plugin/pty/plugin-log.ts'
 import type { HostAdapter, PermissionAuthorizer, SessionNotifier } from '../types.ts'
+import { RoutePermissionAuthorizer } from '../route-permissions.ts'
 import { V2PermissionAuthorizer } from './permissions.ts'
 
 export interface V2AdapterOptions {
@@ -20,6 +22,8 @@ export interface V2AdapterOptions {
       readonly resources: readonly string[]
     }) => Promise<void>
   }
+  /** The project directory, whose configuration the policy reads. */
+  projectDirectory?: string
 }
 
 export class V2HostAdapter implements HostAdapter {
@@ -29,15 +33,18 @@ export class V2HostAdapter implements HostAdapter {
 
   constructor(options: V2AdapterOptions = {}) {
     this.notifier = options.notifier
-    // The host's own gate, when the host has one. Without it the plugin has no
-    // gate, and the log says so instead of pretending.
-    this.permissions =
+    // The gate of a route: the host where there is a session to ask about, the
+    // policy where there is not. A host without a permission domain leaves the
+    // policy in charge, and the log says so instead of pretending.
+    const host =
       options.permissions ??
-      (options.permission ? new V2PermissionAuthorizer(options.permission) : undefined)
-    if (!this.permissions) {
+      (options.permission ? new V2PermissionAuthorizer(options.permission) : null)
+    const policy = new PolicyAuthorizer({ projectDirectory: options.projectDirectory })
+    this.permissions = host === null ? policy : new RoutePermissionAuthorizer(host, policy)
+    if (host === null) {
       logPtyEvent(
         'warn',
-        'host exposes no permission domain: PTY commands run without a permission check'
+        'host exposes no permission domain: PTY commands are checked against the permission policy instead'
       )
     }
   }
