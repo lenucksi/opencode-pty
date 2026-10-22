@@ -5,6 +5,85 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-10-22
+
+### Added
+
+**A slash command that says what it did**
+
+The host executes a command and drops whatever it returned - the contract is
+`Effect<void>` - so `/pty-daemon-restart` did its work and said nothing, and
+`/pty-show-server-url` published a URL nobody could see. The two halves of this
+plugin already meet over its own RPC, so that is where the answer goes now: the
+server half emits a notice, the TUI half turns it into a toast. A command that
+works and a command that did nothing look the same from the outside; they do not
+any more.
+
+### Fixed
+
+**The daemon rolls once, and the machine is left with one daemon**
+
+A restart ended in `Daemon did not start` and a red toast, and the machine was
+left with three daemons: one holding the socket path, two listening on an inode
+nobody can reach. The cause was a race, and every part of it was a decision made
+twice:
+
+- The restart removed the socket path without asking whether a daemon was
+  listening on it. A path with a live daemon behind it belongs to that daemon:
+  removing it does not stop the daemon, it makes it unreachable.
+- Every opencode instance on the machine talks to the same daemon, and every one
+  of them started one when the socket was missing. Two clients that each spawn a
+  daemon leave a loser behind - and the loser is the one that unlinks the
+  winner's socket.
+- The daemon that lost the path could not notice: it cannot see the path any
+  more, and the pid file is a note about it rather than the truth. The inode
+  under the name is the truth, and it is what the daemon compares itself against
+  now. A daemon that was superseded retires instead of holding on.
+- The second daemon's bind could fail with `EADDRINUSE` and take the machine's
+  log down with a crash dump. It steps aside now.
+
+Starting the daemon is a machine-wide decision, so it is locked across processes:
+one client starts, the others wait for the socket. The daemon says who it is, so
+the restart asks it for its pid instead of believing a file, and a daemon that
+owns the path keeps that file in step.
+
+The failure names the socket and the log instead of saying `did not start`, and
+the command reports what it did - with the daemon's new pid, which is the only
+way to tell a restart from a no-op.
+
+### Changed
+
+**The sideways bar is a bar, not a line of text between two arrows**
+
+A reader could not tell the row for a scrollbar: it said `0-82 of 200 cells`
+between two arrow glyphs, and nothing about that said "this moves". The row is
+now a track across the whole width with a thumb on it at the position the reader
+is at, the counter on the track, and the arrows at the ends - all on the track's
+own background, so it reads as one control. The track is a box with a background
+rather than a run of spaces, so it covers the row whatever the measured width
+turns out to be; only the thumb's geometry is computed, and that is a pure
+function now - a thumb one cell off is a picture that still looks like a
+picture.
+
+**The console has neither a border nor a background**
+
+The border glyphs around the framed screen are selectable cells, and they
+confused the terminal's selection algorithm; the raised background made empty
+cells count as non-empty for the same reason. Both are gone, the padding is
+symmetric, and the console gained the two columns that the frame used to take.
+
+### Tooling
+
+- Publishing is a repository's own decision again: the release workflow asks the
+  repository whether it publishes, so a fork is not shut out of its own releases
+  by a hardcoded name.
+- The daemon's request table and the client's start logic moved into modules of
+  their own, because both files had grown past the size the repository asks for.
+- New: cases for the daemon that outlives a restart - a daemon whose path was
+  taken over retires, two clients that connect at once start one daemon, a
+  restart does not take the socket away from the daemon that answers on it, and
+  the daemon that answers is the one that gets stopped.
+
 ## [0.9.0] - 2026-10-21
 
 ### Added
