@@ -32,7 +32,7 @@
     "patches"
   ],
   "bin": {
-    "opencode-pty-mcp": "dist/src/mcp/index.js"
+    "opencode-pty-mcp": "dist/src/mcp/entry.js"
   },
   "license": "MIT",
   "packageManager": "bun@1.4.2",

@@ -3,6 +3,7 @@ import { checkExecutable } from '../command-check.ts'
 import { getPtyManager } from '../manager.ts'
 import { checkCommandPermission, checkWorkdirPermission } from '../permissions.ts'
 import { describeError } from '../utils.ts'
+import { getToolRoute, type ToolRoute } from './description.ts'
 import DESCRIPTION from './spawn.txt'
 
 /**
@@ -23,15 +24,33 @@ async function spawnOrExplain<R>(command: string, run: () => Promise<R>): Promis
   }
 }
 
-const NOTIFY_ON_EXIT_INSTRUCTIONS = [
-  `<system_reminder>`,
-  `Completion signal for this session is the future \`<pty_exited>\` message.`,
-  `If you only need to know whether the command finished, do not call \`pty_read\`; wait for \`<pty_exited>\`.`,
-  `Never use sleep plus \`pty_read\` loops to check completion for this session.`,
-  `Call \`pty_read\` before exit only if you need live output now, the user explicitly asks for logs, or the exit notification reports a non-zero status and you need to investigate.`,
-  `If no \`<pty_exited>\` arrives (exit notifications are unavailable on some hosts), do not wait indefinitely: call \`pty_wait\` to block until the session exits.`,
-  `</system_reminder>`,
-].join('\n')
+/**
+ * What the route says about the exit, when the session asked to be told.
+ *
+ * The OpenCode route has a conversation to deliver the message into, so the
+ * message is the signal. The MCP route has none, so the wait is - and the text
+ * says so, because a model that was told to expect a message and gets none waits
+ * for nothing.
+ */
+const NOTIFY_ON_EXIT_INSTRUCTIONS: Record<ToolRoute, string> = {
+  opencode: [
+    `<system_reminder>`,
+    `Completion signal for this session is the future \`<pty_exited>\` message.`,
+    `If you only need to know whether the command finished, do not call \`pty_read\`; wait for \`<pty_exited>\`.`,
+    `Never use sleep plus \`pty_read\` loops to check completion for this session.`,
+    `Call \`pty_read\` before exit only if you need live output now, the user explicitly asks for logs, or the exit notification reports a non-zero status and you need to investigate.`,
+    `If no \`<pty_exited>\` arrives (exit notifications are unavailable on some hosts), do not wait indefinitely: call \`pty_wait\` to block until the session exits.`,
+    `</system_reminder>`,
+  ].join('\n'),
+  mcp: [
+    `<system_reminder>`,
+    `\`notifyOnExit\` has NO effect on this route: the exit is not delivered as a message, because there is no conversation to deliver it into.`,
+    `Completion signal for this session is \`pty_wait\`: call it with the id and it answers when the session ends, or it answers with a timeout and you call it again.`,
+    `Never use sleep plus \`pty_read\` loops to check completion for this session.`,
+    `Call \`pty_read\` before exit only if you need live output now, the user explicitly asks for logs, or the wait reports a non-zero status and you need to investigate.`,
+    `</system_reminder>`,
+  ].join('\n'),
+}
 
 export const ptySpawn = tool({
   description: DESCRIPTION,
@@ -154,7 +173,7 @@ export const ptySpawn = tool({
       `Size: ${info.cols}x${info.rows}`,
       `Raw: ${info.raw === true}`,
       `</pty_spawned>`,
-      ...(info.notifyOnExit ? ['', NOTIFY_ON_EXIT_INSTRUCTIONS] : []),
+      ...(info.notifyOnExit ? ['', NOTIFY_ON_EXIT_INSTRUCTIONS[getToolRoute()]] : []),
     ].join('\n')
 
     return output

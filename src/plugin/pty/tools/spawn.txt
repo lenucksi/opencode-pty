@@ -5,7 +5,7 @@ Use it instead of the built-in bash tool for dev servers, watch modes, local API
 Usage:
 - `command` (required), `args`, `workdir`, `env`, `title`
 - `description` (required): a clear, concise 5-10 word description
-- `notifyOnExit`: receive a `<pty_exited>` message when the process exits
+- `notifyOnExit`: {{notifyOnExit}}
 - `timeoutSeconds`: hard cap. Skip it for processes meant to keep running unless the user asks; set it for builds, tests, e2e runs or migrations you are waiting on
 - `cols`, `rows`: terminal geometry. Defaults to the size the web UI last reported, or 240x80 when no client is attached. Set it when the program formats for a width, prints wide lines or draws a full-screen UI
 - `raw`: run with the PTY line discipline disabled (`stty raw -echo`). Set it for a serial console (`virsh console`) or any program that wants a `\r` to stay a `\r` - otherwise the kernel turns Enter into `\n` and the program ignores it. Do NOT use it for a shell: it turns off echo, line editing and the interrupt key. When it is set, write only after the program has produced output, because the discipline is switched by a wrapper just before your command starts.
@@ -21,6 +21,6 @@ Output folded onto the wrong line is a geometry problem until proven otherwise.
 size at startup will not react to that - respawn with `cols`/`rows` instead.
 
 Then use `pty_write` (input), `pty_read` (output), `pty_wait` (block until it exits), `pty_list`, `pty_resize`, `pty_kill`.
-To wait for completion prefer `pty_wait`, or `notifyOnExit` + `<pty_exited>`; never sleep+poll.
+{{completion}}
 
-See the `pty-usage` skill for the full guide.
+{{skill}}

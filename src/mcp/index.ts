@@ -1,25 +1,28 @@
-#!/usr/bin/env bun
 /**
- * The MCP server's entry point.
+ * The MCP server's library.
  *
- * A harness launches this and talks to it over stdio. The startup does three
- * things and nothing else: it connects to the daemon (starting it if the machine
- * has none), it installs the gate of this route, and it serves the tools.
- *
- * stdout belongs to the protocol. Every line on it is a JSON-RPC message, because
- * a harness parses that stream and nothing else - a stray line is a broken
- * session, not a log line. The log goes to its own file, and what has to reach
- * the console goes to stderr.
+ * The server, the gate of this route and the way a route waits. The entry point
+ * that puts them on a stdio transport is `entry.ts`, because a process that only
+ * ever runs as a process cannot be measured by a test that imports it.
  */
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js'
 
-import { connectToDaemon } from '../plugin/pty/manager.ts'
 import { PolicyAuthorizer } from '../plugin/pty/policy-authorizer.ts'
 import { setPermissionAuthorizer } from '../plugin/pty/permissions.ts'
-import { createMcpServer } from './server.ts'
+import { setToolRoute } from '../plugin/pty/tools/description.ts'
+import { setWaitPolicy } from '../plugin/pty/wait-policy.ts'
 
-export { createMcpServer, toolList } from './server.ts'
+export { createMcpServer, serverContext, serverSessionId, toolList } from './server.ts'
+
+/**
+ * How long a wait may take on this route.
+ *
+ * Below the transport's own request timeout: a call that is cut is a call that
+ * says nothing about the session it was waiting for. The model asks again - a
+ * wait is a poll, and a poll that was cut is a poll that said nothing.
+ */
+export const MCP_WAIT_CAP_SECONDS = 50
 
 /**
  * The gate of this route.
@@ -29,30 +32,44 @@ export { createMcpServer, toolList } from './server.ts'
  * *tool* by configuring this server; they did not say yes to every command it can
  * start.
  */
-function installPolicy(): void {
+export function installPolicy(): void {
   setPermissionAuthorizer(new PolicyAuthorizer({ defaultEffect: 'deny' }))
 }
 
 /**
- * Serve the tools over stdio.
+ * The route this process serves.
  *
- * The daemon is connected first: a tool call that finds no daemon would start one
- * per call, and the sessions would not be shared with the other routes.
+ * The texts are written for the route: this one has no conversation to deliver
+ * an exit into, and its texts have to say so.
  */
-export async function main(): Promise<void> {
-  installPolicy()
-  await connectToDaemon()
-  const server = createMcpServer()
-  const transport = new StdioServerTransport()
-  await server.connect(transport)
+export function installRoute(): void {
+  setToolRoute('mcp')
 }
 
-// The entry is a module with a side effect only when it is the program being run:
-// the harness starts it, and the tests import the server instead.
-if (import.meta.main) {
-  main().catch((error: unknown) => {
-    // stderr, never stdout: the protocol owns that stream.
-    console.error('[opencode-pty-mcp] failed to start:', error)
-    process.exit(1)
+/**
+ * How a wait talks to the transport.
+ *
+ * A transport that cuts a call that says nothing cuts a wait of a minute. The
+ * progress notification is what keeps the line open, and it needs the token of
+ * the call in flight - which is why the route puts it in the tool's context.
+ */
+export function installWaitPolicy(server: Server): void {
+  setWaitPolicy({
+    maxSeconds: MCP_WAIT_CAP_SECONDS,
+    heartbeat: (elapsedMs, progressToken) => {
+      if (progressToken === undefined) return
+      void server
+        .notification({
+          method: 'notifications/progress',
+          params: {
+            progressToken,
+            progress: Math.floor(elapsedMs / 1000),
+            message: 'still waiting for the session to end',
+          },
+        })
+        .catch(() => {
+          // A heartbeat that cannot be delivered is not a failure of the wait.
+        })
+    },
   })
 }

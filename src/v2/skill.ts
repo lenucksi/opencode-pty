@@ -1,5 +1,6 @@
 import { FALLBACK_TERMINAL_COLS, FALLBACK_TERMINAL_ROWS } from '../plugin/constants.ts'
 import { logPtyEvent, type PtyLogger } from '../plugin/pty/plugin-log.ts'
+import { describeForRoute } from '../plugin/pty/tools/description.ts'
 import {
   CHARS_PER_TOKEN,
   DEFAULT_READ_MAX_TOKENS,
@@ -145,18 +146,7 @@ output) over babysitting it.
 
 ## Waiting for completion
 
-Two supported strategies. Pick one; never invent a third.
-
-1. **\`pty_wait({ id, timeoutSeconds? })\` - preferred.** It blocks inside the
-   tool call until the session exits and returns the exit code plus the tail of
-   the output. This is the right choice when you need the result to continue:
-   the agent stays busy, so the parent session never sees an idle subagent.
-   \`timeoutSeconds\` turns it into \`<pty_wait_timeout>\` instead of blocking
-   forever.
-2. **\`notifyOnExit: true\` + the future \`<pty_exited>\` message.** Use this for
-   fire-and-forget processes while you do other work. Do not poll while you
-   wait. If the message never arrives (notifications are unavailable on some
-   hosts), do not wait indefinitely - use \`pty_wait\` instead.
+{{completionSection}}
 
 **Anti-patterns**
 - \`sleep\` + \`pty_read\` loops to detect completion - always wrong.
@@ -296,8 +286,15 @@ export function registerUsageSkill(
   draft: SkillDraft,
   log: PtyLogger = logPtyEvent
 ): 'source' | 'add' | 'none' {
+  // The skill is one text for every route, with the part that differs filled in by
+  // the route. This is the OpenCode route, and it has a conversation to deliver an
+  // exit into.
+  const skill = {
+    ...PTY_USAGE_SKILL,
+    content: describeForRoute(PTY_USAGE_SKILL.content, 'opencode'),
+  }
   if (typeof draft.source === 'function') {
-    draft.source({ type: 'embedded', skill: PTY_USAGE_SKILL })
+    draft.source({ type: 'embedded', skill })
     log('info', 'pty-usage skill registered via draft.source()')
     return 'source'
   }
@@ -305,12 +302,10 @@ export function registerUsageSkill(
   if (typeof draft.add === 'function') {
     draft.add({
       id: PTY_USAGE_SKILL_ID,
-      name: PTY_USAGE_SKILL.name,
-      ...(PTY_USAGE_SKILL.description === undefined
-        ? {}
-        : { description: PTY_USAGE_SKILL.description }),
-      path: PTY_USAGE_SKILL.location,
-      content: PTY_USAGE_SKILL.content,
+      name: skill.name,
+      ...(skill.description === undefined ? {} : { description: skill.description }),
+      path: skill.location,
+      content: skill.content,
     })
     log('info', 'pty-usage skill registered via draft.add()')
     return 'add'
