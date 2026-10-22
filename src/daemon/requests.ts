@@ -20,7 +20,17 @@ export interface WireClient {
 }
 
 type WireParams = Record<string, unknown>
-type RequestHandler = (params: WireParams, socket: Bun.Socket<undefined>) => unknown
+/**
+ * A handler's answer.
+ *
+ * It may be a promise: the screen renderer is asynchronous, and a handler that
+ * returned one without waiting for it would put the PROMISE on the wire - and
+ * `JSON.stringify` turns a promise into `{}`.
+ */
+type RequestHandler = (
+  params: WireParams,
+  socket: Bun.Socket<undefined>
+) => unknown | Promise<unknown>
 
 /**
  * The dispatcher, with the table behind it.
@@ -107,13 +117,13 @@ export function createRequestHandler(
       store.read(params.id as string, params.offset as number, params.limit as number),
   }
 
-  return function handleRequest(socket: Bun.Socket<undefined>, request: DaemonRequest) {
+  return async function handleRequest(socket: Bun.Socket<undefined>, request: DaemonRequest) {
     const handler = handlers[request.method]
     let result: unknown
     let error: string | undefined
     try {
       if (handler === undefined) error = `unknown method: ${request.method}`
-      else result = handler(request.params ?? {}, socket)
+      else result = await handler(request.params ?? {}, socket)
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught)
     }

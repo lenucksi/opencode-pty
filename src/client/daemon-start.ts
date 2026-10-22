@@ -177,6 +177,11 @@ export async function startDaemon(options: {
   readonly lockPath: string
   readonly steps: number
 }): Promise<void> {
+  // The lock lives beside the socket, and the lock cannot be taken in a directory
+  // that does not exist yet. On a machine where the daemon has never run, that
+  // directory is missing - and a lock that cannot be taken is a lock that is
+  // never held, which is a daemon nobody starts.
+  mkdirSync(dirname(options.socketPath), { recursive: true, mode: 0o700 })
   if (!acquireStartLock(options.lockPath)) {
     // Another client is starting one. Waiting for its socket is the whole
     // cooperation: a second daemon would only fight the first for the path.

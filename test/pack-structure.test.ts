@@ -57,4 +57,27 @@ describe('package pack structure', () => {
     // 4) Cleanup the pack file
     await run(['rm', '-f', tgz as string])
   }, 20000)
+
+  it('ships the MCP server and the tool descriptions it needs', async () => {
+    // The MCP server is a bin, and it reads the descriptions from the text files
+    // beside the compiled tools. A package without them starts and then answers
+    // every call with nothing.
+    const pack = await run(['bun', 'pm', 'pack'])
+    expect(pack.code).toBe(0)
+    const tgz = findPackFileFromOutput(pack.stdout)
+    expect(typeof tgz).toBe('string')
+
+    const list = await run(['tar', '-tf', tgz as string])
+    expect(list.code).toBe(0)
+    const files = list.stdout.split(/\r?\n/).filter(Boolean)
+
+    expect(files).toContain('package/dist/src/mcp/index.js')
+    expect(files).toContain('package/dist/src/mcp/server.js')
+    // Every description the tools import.
+    for (const name of ['spawn', 'write', 'read', 'list', 'kill', 'wait', 'resize', 'screen']) {
+      expect(files).toContain(`package/dist/src/plugin/pty/tools/${name}.txt`)
+    }
+
+    await run(['rm', '-f', tgz as string])
+  }, 20000)
 })

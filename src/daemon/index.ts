@@ -270,7 +270,9 @@ function listen(): ReturnType<typeof Bun.listen<undefined>> {
             const msg = parseMessage(line)
             if (!msg) continue
             if (isRequest(msg)) {
-              handleRequest(_socket, msg as DaemonRequest)
+              // Not awaited: the answer goes out when the handler is done, and it
+              // carries the request's id, so the client pairs them.
+              void handleRequest(_socket, msg as DaemonRequest)
             }
           }
           resetIdleTimer()
