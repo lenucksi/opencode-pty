@@ -1,8 +1,6 @@
-import type { PermissionAuthorizer } from '../../adapters/types.ts'
-import { V1PermissionAuthorizer } from '../../adapters/v1/permissions.ts'
-import type { PluginClient } from '../types.ts'
+import type { PermissionAuthorizer, PermissionSubject } from '../../adapters/types.ts'
 
-export type { PermissionAuthorizer }
+export type { PermissionAuthorizer, PermissionSubject }
 
 let _authorizer: PermissionAuthorizer | null = null
 
@@ -21,28 +19,32 @@ export function getPermissionAuthorizer(): PermissionAuthorizer | null {
 }
 
 /**
- * Backward-compatible initialization using V1 PluginClient.
- */
-export function initPermissions(client: PluginClient, directory: string): void {
-  _authorizer = new V1PermissionAuthorizer(client, directory)
-}
-
-/**
  * Checks command execution permission against the active authorizer.
- * Defaults to allowing if no authorizer is set.
+ *
+ * The subject is who is asking: the host knows its rules per session, so a caller
+ * that has a session says which one. No authorizer means no gate - a host that
+ * has none is a host this plugin cannot ask.
  */
-export async function checkCommandPermission(command: string, args: string[]): Promise<void> {
+export async function checkCommandPermission(
+  command: string,
+  args: string[],
+  subject?: PermissionSubject
+): Promise<void> {
   if (_authorizer) {
-    await _authorizer.checkCommand(command, args)
+    await _authorizer.checkCommand(command, args, subject)
   }
 }
 
 /**
  * Checks working directory access permission against the active authorizer.
+ *
  * Defaults to allowing if no authorizer is set.
  */
-export async function checkWorkdirPermission(workdir: string): Promise<void> {
+export async function checkWorkdirPermission(
+  workdir: string,
+  subject?: PermissionSubject
+): Promise<void> {
   if (_authorizer) {
-    await _authorizer.checkWorkdir(workdir)
+    await _authorizer.checkWorkdir(workdir, subject)
   }
 }

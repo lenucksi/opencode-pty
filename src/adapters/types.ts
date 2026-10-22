@@ -22,11 +22,30 @@ export interface SessionNotifier {
 }
 
 /**
+ * Who asks for a permission.
+ *
+ * The host knows its rules per session, so a caller that has one says which
+ * session the question is about. A caller that has none (the web interface, which
+ * a browser talks to) leaves it out, and the authorizer decides what to do
+ * without one.
+ */
+export interface PermissionSubject {
+  /** The session the decision belongs to. */
+  readonly sessionID?: string
+  /** The agent asking. The host resolves the session's own agent when it is absent. */
+  readonly agent?: string
+}
+
+/**
  * Host-agnostic authorizer for validating command and workdir execution permissions.
+ *
+ * Each route asks its own context: inside OpenCode the host evaluates the rules
+ * and prompts the user, and outside it the caller enforces a policy of its own.
+ * The interface is what both answer to.
  */
 export interface PermissionAuthorizer {
-  checkCommand(command: string, args: string[]): Promise<void>
-  checkWorkdir(workdir: string): Promise<void>
+  checkCommand(command: string, args: string[], subject?: PermissionSubject): Promise<void>
+  checkWorkdir(workdir: string, subject?: PermissionSubject): Promise<void>
 }
 
 /**

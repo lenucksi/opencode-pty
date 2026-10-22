@@ -1,10 +1,25 @@
 import { getPtyManager } from '../../plugin/pty/manager.ts'
 import { logPtyEvent } from '../../plugin/pty/plugin-log.ts'
 import type { HostAdapter, PermissionAuthorizer, SessionNotifier } from '../types.ts'
+import { V2PermissionAuthorizer } from './permissions.ts'
 
 export interface V2AdapterOptions {
   notifier?: SessionNotifier
   permissions?: PermissionAuthorizer
+  /**
+   * The host's permission domain, when the build has one.
+   *
+   * Passed rather than read from a global: the domain is per plugin instance, and
+   * a global would hand one host's rules to another.
+   */
+  permission?: {
+    assert: (input: {
+      readonly sessionID: string
+      readonly agent?: string
+      readonly action: string
+      readonly resources: readonly string[]
+    }) => Promise<void>
+  }
 }
 
 export class V2HostAdapter implements HostAdapter {
@@ -14,7 +29,17 @@ export class V2HostAdapter implements HostAdapter {
 
   constructor(options: V2AdapterOptions = {}) {
     this.notifier = options.notifier
-    this.permissions = options.permissions
+    // The host's own gate, when the host has one. Without it the plugin has no
+    // gate, and the log says so instead of pretending.
+    this.permissions =
+      options.permissions ??
+      (options.permission ? new V2PermissionAuthorizer(options.permission) : undefined)
+    if (!this.permissions) {
+      logPtyEvent(
+        'warn',
+        'host exposes no permission domain: PTY commands run without a permission check'
+      )
+    }
   }
 
   onSessionDeleted(sessionId: string): void {

@@ -30,10 +30,13 @@ This plugin respects OpenCode's [permission settings](https://opencode.ai/docs/p
 ```
 
 > [!IMPORTANT]
-> **Limitations compared to built-in bash tool:**
+> **Where the gate applies, and where it does not:**
 >
-> - **"ask" permissions are treated as "deny"**: Since plugins cannot trigger OpenCode's permission prompt UI, commands matching an "ask" pattern will be denied. A toast notification will inform you when this happens. Configure explicit "allow" or "deny" for commands you want to use with PTY.
-> - **"external_directory" with "ask" is treated as "allow"**: When the working directory is outside the project and `permission.external_directory` is set to "ask", this plugin allows it (with a log message). Set to "deny" explicitly if you want to block external directories.
+> - **The model's tool calls** (`pty_spawn`, `pty_write`) go through the host's own permission system: the same rules the built-in `bash` tool obeys, and the same prompt. A command that needs approval asks the user, and a refusal stops the spawn. The plugin does not have to turn "ask" into "deny" any more - it asks the host, and the host asks you.
+> - **The web interface** is your own surface: a browser has no conversation for the rules to belong to, so the host cannot be asked about it, and the interface starts what you asked for in its form.
+> - **A host without a permission domain** (an older build) leaves the plugin without a gate. The plugin log says so rather than pretending otherwise.
+>
+> The rules are the host's: the agent's own rules, the session's rules and the ones you saved earlier all apply, and the command is matched the way the host's own `bash` tool matches it - `"git *"` covers `git status` and `git push`.
 
 #### Example: Allow specific commands for PTY
 

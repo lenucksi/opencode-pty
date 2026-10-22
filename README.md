@@ -39,11 +39,16 @@ OpenCode V2 (recommended):
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": [{ "package": "opencode-pty/v2", "options": { "port": 4200, "autostart": true } }]
+  "plugin": [{ "package": "opencode-pty", "options": { "port": 4200, "autostart": true } }]
 }
 ```
 
-V1 is deprecated and will disappear without further notice — use `opencode-pty/v2`.
+`opencode-pty` and `opencode-pty/v2` are the same plugin — the bare name loads the V2
+half, so a configuration that names either works. The TUI half is `opencode-pty/v2/tui`,
+and the host finds it by itself when the plugin directory has one.
+
+This plugin needs OpenCode 2.x: the V1 plugin shape is gone, and the V2 half is the
+only one there is.
 
 ## Try it
 
@@ -108,8 +113,10 @@ Plugin options (V2): `port`, `hostname`, `autostart`, `retention`. Archive reten
 (`maxSessions`, `maxAgeDays`, `maxBytesPerSession`) is enforced on the shared on-disk
 archive; see `docs/configuration.md`.
 
-Permissions: respects OpenCode's `permission.bash`. `"ask"` is treated as `"deny"`
-(plugins cannot prompt). See `docs/configuration.md`.
+Permissions: the model's `pty_spawn`/`pty_write` calls go through OpenCode's own
+permission system — the same rules and the same prompt the built-in `bash` tool uses.
+The web interface has no session to ask about, so it starts what you asked for.
+See `docs/configuration.md`.
 
 ## Status, versioning, upgrade
 
@@ -183,5 +190,6 @@ Contributions welcome. Open an issue or PR. See [`CONTRIBUTING.md`](CONTRIBUTING
 
 ---
 
-V1 (`index.ts`) is deprecated and will disappear without further notice — use `opencode-pty/v2`.
+The V1 plugin is gone: the bare package name loads the V2 half, and OpenCode 1.x is no
+longer supported.
 ```

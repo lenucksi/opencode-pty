@@ -1,11 +1,12 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test'
+import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import {
-  createV1Adapter,
   type HostAdapter,
   installHostAdapter,
   type PermissionAuthorizer,
   type SessionNotifier,
 } from '../src/adapters/index.ts'
+import { createV2Adapter } from '../src/adapters/v2/index.ts'
+import { V2PermissionAuthorizer } from '../src/adapters/v2/permissions.ts'
 import { manager } from '../src/plugin/pty/manager.ts'
 import {
   checkCommandPermission,
@@ -14,7 +15,25 @@ import {
   setPermissionAuthorizer,
 } from '../src/plugin/pty/permissions.ts'
 import type { PTYSession } from '../src/plugin/pty/types.ts'
-import type { PluginContext } from '../src/plugin/types.ts'
+
+/**
+ * A host that evaluates its own rules.
+ *
+ * The point of the V2 route is that the question is asked of the host: it knows
+ * the rules per session, and it prompts the user when approval is required. A
+ * plugin cannot do either.
+ */
+function hostPermission() {
+  const assert = mock(
+    async (_input: {
+      readonly sessionID: string
+      readonly agent?: string
+      readonly action: string
+      readonly resources: readonly string[]
+    }) => {}
+  )
+  return { assert }
+}
 
 describe('Adapter Layer', () => {
   afterEach(() => {
@@ -37,10 +56,22 @@ describe('Adapter Layer', () => {
       expect(getPermissionAuthorizer()).toBe(customAuthorizer)
 
       await checkCommandPermission('ls', ['-la'])
-      expect(checkCommand).toHaveBeenCalledWith('ls', ['-la'])
+      expect(checkCommand).toHaveBeenCalledWith('ls', ['-la'], undefined)
 
       await checkWorkdirPermission('/some/dir')
-      expect(checkWorkdir).toHaveBeenCalledWith('/some/dir')
+      expect(checkWorkdir).toHaveBeenCalledWith('/some/dir', undefined)
+    })
+
+    it('passes the subject along, so the host can answer for that session', async () => {
+      const checkCommand = mock(async (_cmd: string, _args: string[]) => {})
+      setPermissionAuthorizer({ checkCommand, checkWorkdir: async () => {} })
+
+      await checkCommandPermission('ls', ['-la'], { sessionID: 'ses_1', agent: 'build' })
+
+      expect(checkCommand).toHaveBeenCalledWith('ls', ['-la'], {
+        sessionID: 'ses_1',
+        agent: 'build',
+      })
     })
 
     it('propagates authorization errors from custom authorizer', async () => {
@@ -64,6 +95,59 @@ describe('Adapter Layer', () => {
 
       await expect(checkCommandPermission('echo', ['hello'])).resolves.toBeUndefined()
       await expect(checkWorkdirPermission('/anywhere')).resolves.toBeUndefined()
+    })
+  })
+
+  describe('The V2 authorizer asks the host', () => {
+    it('asks the host about the command, with the session it belongs to', async () => {
+      const permission = hostPermission()
+      const authorizer = new V2PermissionAuthorizer(permission)
+
+      await authorizer.checkCommand('git', ['status'], { sessionID: 'ses_1', agent: 'build' })
+
+      expect(permission.assert).toHaveBeenCalledWith({
+        sessionID: 'ses_1',
+        agent: 'build',
+        action: 'bash',
+        resources: ['git status'],
+      })
+    })
+
+    it('asks the host about a working directory outside the project', async () => {
+      const permission = hostPermission()
+      const authorizer = new V2PermissionAuthorizer(permission)
+
+      await authorizer.checkWorkdir('/elsewhere', { sessionID: 'ses_1' })
+
+      expect(permission.assert).toHaveBeenCalledWith({
+        sessionID: 'ses_1',
+        action: 'external_directory',
+        resources: ['/elsewhere'],
+      })
+    })
+
+    // A host knows its rules per session, so a caller with no session has nothing
+    // to ask about - and a rule nobody can be asked about is not a rule.
+    it('asks nothing when the caller has no session', async () => {
+      const permission = hostPermission()
+      const authorizer = new V2PermissionAuthorizer(permission)
+
+      await authorizer.checkCommand('git', ['status'])
+      await authorizer.checkWorkdir('/elsewhere')
+
+      expect(permission.assert).not.toHaveBeenCalled()
+    })
+
+    it("lets the host's refusal through", async () => {
+      const permission = hostPermission()
+      permission.assert.mockImplementation(async () => {
+        throw new Error('rejected permission')
+      })
+      const authorizer = new V2PermissionAuthorizer(permission)
+
+      await expect(
+        authorizer.checkCommand('rm', ['-rf', '/'], { sessionID: 'ses_1' })
+      ).rejects.toThrow('rejected permission')
     })
   })
 
@@ -120,42 +204,29 @@ describe('Adapter Layer', () => {
       expect(manager.getNotifier()).toBe(customNotifier)
     })
 
-    it('createV1Adapter creates a V1-compatible HostAdapter', async () => {
-      const fakeClient = {
-        config: {
-          get: async () => ({
-            data: {
-              permission: {
-                bash: 'deny',
-              },
-            },
-          }),
-        },
-        tui: {
-          showToast: async () => {},
-        },
-        session: {
-          get: async () => ({ data: {} }),
-          promptAsync: async () => {},
-        },
+    it('createV2Adapter forwards session deletion and options', () => {
+      const notifier = { sendExitNotification: () => {} }
+      const permissions = {
+        checkCommand: async () => {},
+        checkWorkdir: async () => {},
       }
+      const adapter = createV2Adapter({ notifier, permissions })
+      const cleanupSpy = spyOn(manager, 'cleanupBySession').mockImplementation(() => {})
 
-      const v1Context = {
-        client: fakeClient,
-        directory: '/test/workspace',
-      } as unknown as PluginContext
+      expect(adapter.id).toBe('opencode-v2')
+      expect(adapter.notifier).toBe(notifier)
+      expect(adapter.permissions).toBe(permissions)
 
-      const adapter = createV1Adapter(v1Context)
-      expect(adapter.id).toBe('opencode-v1')
-      expect(adapter.notifier).toBeDefined()
-      expect(adapter.permissions).toBeDefined()
+      adapter.onSessionDeleted?.('parent-2')
 
-      installHostAdapter(adapter)
+      expect(cleanupSpy).toHaveBeenCalledWith('parent-2')
+    })
 
-      // Permission check should be active and reject bash commands because bash is 'deny'
-      expect(checkCommandPermission('ls', [])).rejects.toThrow(
-        'All bash commands are disabled by user configuration'
-      )
+    it("createV2Adapter takes the host's permission domain when it has one", () => {
+      const permission = hostPermission()
+      const adapter = createV2Adapter({ permission })
+
+      expect(adapter.permissions).toBeInstanceOf(V2PermissionAuthorizer)
     })
   })
 })

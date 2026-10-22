@@ -77,10 +77,13 @@ export const ptySpawn = tool({
       ),
   },
   async execute(args, ctx) {
-    await checkCommandPermission(args.command, args.args ?? [])
+    // The host knows its permission rules per session, so the question carries the
+    // session it is about: the tool context is where that comes from.
+    const subject = { sessionID: ctx.sessionID, agent: ctx.agent }
+    await checkCommandPermission(args.command, args.args ?? [], subject)
 
     if (args.workdir) {
-      await checkWorkdirPermission(args.workdir)
+      await checkWorkdirPermission(args.workdir, subject)
     }
 
     // `args.env` is documented - in the schema, to the model - as ADDITIONAL

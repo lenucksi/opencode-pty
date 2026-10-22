@@ -72,7 +72,7 @@ export const Plugin: PluginV2 = define({
       logPtyEvent('info', 'v2 exit notifications enabled')
     }
 
-    const adapter = createV2Adapter({ notifier })
+    const adapter = createV2Adapter({ notifier, permission: ctx.permission })
     installHostAdapter(adapter)
 
     // The TUI half asks this for the address instead of deriving it from the origin record: one
