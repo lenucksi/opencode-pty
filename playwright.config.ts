@@ -35,17 +35,19 @@ export default defineConfig({
   timeout: 15000,
   expect: { timeout: 5000 },
   /* Configure projects for major browsers */
+  // Chromium only, and the reason is the suite rather than the browser: the copy
+  // tests ask for the `clipboard-read` permission, which is a Chromium feature -
+  // Firefox answers "Unknown permission: clipboard-read" and takes the worker with
+  // it, so a Firefox project fails the whole file and then the tests that shared
+  // the worker.
+  //
+  // The local gate has always run `--project=chromium` for the same reason. The
+  // project list said otherwise, and the CI believed the project list.
   projects: [
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-      },
-    },
-    {
-      name: 'firefox',
-      use: {
-        ...devices['Desktop Firefox'],
       },
     },
   ],
