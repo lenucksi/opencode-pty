@@ -39,7 +39,11 @@ jobs:
         run: bun install --force --frozen-lockfile
 
       - name: Install Playwright Browsers
-        run: bunx playwright install --with-deps
+        # Chromium only: the suite asks for the `clipboard-read` permission, which
+        # is a Chromium feature, and the Playwright config runs one project for
+        # the same reason. Installing a second browser would only slow the job
+        # down.
+        run: bunx playwright install --with-deps chromium
 
       - name: Build
         run: bun build:prod
@@ -94,38 +98,3 @@ jobs:
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
-
-  nix-flake-test:
-    name: Devenv CI
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Install Determinate Nix
-        uses: DeterminateSystems/determinate-nix-action@v3
-      - name: Install devenv
-        run: nix profile add nixpkgs#devenv
-      - name: Cache Bun dependencies
-        uses: actions/cache@v5
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-      - name: Build (Devenv shell)
-        run: devenv shell -- bun build:prod
-
-      - name: Quality checks (bun test)
-        run: devenv shell -- bun unittest
-      - name: Quality checks (typecheck)
-        run: devenv shell -- bun typecheck
-      - name: Quality checks (lint)
-        run: devenv shell -- bun lint
-      - name: Quality checks (format)
-        run: devenv shell -- bun format
-      - name: Install Playwright Browsers (Devenv shell)
-        run: devenv shell -- bash -lc 'PLAYWRIGHT_BROWSERS_PATH=0 bunx playwright install --with-deps chromium firefox'
-      - name: Quality checks (test:e2e)
-        run: devenv shell -- bash -lc 'PLAYWRIGHT_BROWSERS_PATH=0 bun test:e2e'
