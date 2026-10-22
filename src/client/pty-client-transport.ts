@@ -90,8 +90,28 @@ export class PtyClientTransport {
   }
 
   /** Connect to the daemon, auto-starting it if needed. */
+  /**
+   * Connect to the daemon, auto-starting it if needed.
+   *
+   * One connection at a time. A request that finds the client disconnected and the
+   * reconnect that is already on its way would otherwise both connect - and the
+   * second connection would replace the first, so the answer to the request would
+   * arrive on a socket nobody reads any more.
+   */
   async connect(): Promise<void> {
     if (this.connected) return
+    if (this.connecting !== null) return this.connecting
+    this.connecting = this.connectOnce()
+    try {
+      await this.connecting
+    } finally {
+      this.connecting = null
+    }
+  }
+
+  private connecting: Promise<void> | null = null
+
+  private async connectOnce(): Promise<void> {
     this.stopped = false
 
     // A socket that answers is a daemon's; a socket that does not is a leftover.
@@ -130,6 +150,14 @@ export class PtyClientTransport {
               this.writer?.close()
               this.writer = null
               console.warn('[PtyClient] daemon disconnected')
+              // The requests that were in flight will never be answered: the
+              // daemon is gone, and the socket they went out on is closed. Saying
+              // so now beats leaving the caller waiting for a timeout that says
+              // nothing about what happened.
+              for (const [, pending] of this.pending) {
+                pending.reject(new Error('the daemon disconnected before it answered'))
+              }
+              this.pending.clear()
               // A disconnect the caller asked for is not a lost daemon. Without
               // this, every `disconnect()` armed a reconnect that started a new
               // daemon about a second later.
@@ -266,7 +294,7 @@ export class PtyClientTransport {
         this.reconnecting = false
         this.reconnectAttempts = 0
         this.registerPushHandlers()
-        console.log('[PtyClient] reconnected to daemon')
+        console.warn('[PtyClient] reconnected to daemon')
       } catch (err) {
         console.warn('[PtyClient] reconnect failed:', err)
         this.reconnecting = false
