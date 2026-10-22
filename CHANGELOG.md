@@ -5,6 +5,98 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-10-22
+
+The line that makes the daemon the core and everything else a client of it. The
+claim is the one the README has been making for a while: **tmux, but
+agent-native** - a real terminal, a session that outlives the agent, and the same
+tools whichever harness asks.
+
+### Added
+
+**The PTY tools over MCP**
+
+A harness that speaks MCP cannot use a plugin, so the tools are served over
+stdio: `opencode-pty-mcp`, a bin next to the plugin. It is a dispatcher and a
+startup hook, not a rewrite - the handlers are the same modules the plugin
+registers, the schema of every tool comes out of the tool's own zod shape, and the
+daemon is what they talk to. A session an MCP client starts is a session the
+OpenCode plugin lists, because it is the same daemon.
+
+What differs is the route's own: the texts, the permission gate and the
+completion signal. The tool descriptions come from one file per tool with the
+differing parts filled in by the route, so the OpenCode route keeps telling a
+model about the `<pty_exited>` message and the MCP route tells it that there is
+none - a model that was told to expect a message and gets none waits for
+nothing. The usage guide follows the route too, and is offered as an MCP prompt.
+
+**The web interface on its own**
+
+`opencode-pty-web` serves the existing interface against the daemon and prints
+the address once, for a human who wants to watch a harness that is not OpenCode.
+The daemon is the state, so it shows the same sessions an OpenCode instance
+would, and a machine with no daemon gets one started rather than an error.
+
+**A version on the wire**
+
+The daemon outlives the host, so a new plugin can meet a daemon that was started
+long ago. The protocol carries a version, and a client that meets a daemon of
+another version says so instead of discovering it as a missing method.
+
+### Fixed
+
+**The permission gate asked nobody**
+
+The V2 route had **no** gate: the adapter was never given an authorizer, so the
+check was a no-op and the plugin could start anything. The README's claim that it
+respects `permission.bash` was true of the V1 plugin only.
+
+Inside OpenCode the model's tool calls now go through the host's own permission
+system: the same rules the built-in `bash` tool obeys, and the same prompt. "Ask"
+asks the user instead of being turned into "deny" - the V1 route had to deny,
+because a plugin could not ask a human anything.
+
+A route that cannot ask the host - the web interface, a browser - enforces a
+policy of its own: the same patterns and the same semantics, read from the user's
+own OpenCode configuration, with "ask" refused because there is nobody to ask.
+
+**A screen read over the socket was empty**
+
+The daemon did not await an asynchronous handler, and the screen renderer is one.
+A promise on the wire is `{}` after `JSON.stringify`, so every `pty_screen` over
+the daemon answered with an empty object. The in-process route never noticed,
+because there the tool awaits the manager itself.
+
+**A request that arrived during a reconnect went nowhere**
+
+Two connections at once - the reconnect and the request - and the second replaced
+the first, so the answer arrived on a socket nobody read. And the requests that
+were in flight when the daemon died waited for their timeout, which says nothing
+about what happened; they are refused now, with the reason.
+
+**A machine on which the daemon had never run could not start one**
+
+The start lock lives beside the socket, and on such a machine that directory does
+not exist - so the lock could not be taken, and a lock that is never held is a
+daemon nobody starts.
+
+### Changed
+
+- **The V1 plugin is gone.** The bare package name loads the V2 half, so
+  `"plugin": ["opencode-pty"]` and `"plugin": ["opencode-pty/v2"]` are the same
+  plugin, and OpenCode 1.x is no longer supported. One shape of one plugin, and
+  the configuration that named the wrong one cannot break silently any more.
+- **`pty_screen` takes a bound.** The default is the whole live ring buffer - a
+  program that painted a row once and never touched it again must still be in the
+  replay - and an archived transcript is replayed from the last 4 MB. A narrower
+  window is a reconstruction, and the result says how much of the session it
+  covered. The buffer is untouched either way.
+- **A wait answers.** On MCP the wait is the completion signal, and it is capped
+  below the transport's own limit, with a progress notification while it runs. The
+  OpenCode route is unchanged: it blocks, as it always did.
+- `notifyOnExit` is accepted on the MCP route and has no effect there, and the
+  spawn result says so.
+
 ## [0.9.1] - 2026-10-22
 
 ### Added

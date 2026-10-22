@@ -13,7 +13,7 @@ run dev servers, watchers, REPLs and TUIs in the background, send them input, re
 their output on demand, and get notified when they exit. Multiple sessions, real
 terminal emulation, a web UI and a TUI panel.
 
-**Status:** actively maintained on `local/modernized` (0.7.1). Fork of
+**Status:** actively maintained on `local/modernized` (1.0.0). Fork of
 [shekohex/opencode-pty](https://github.com/shekohex/opencode-pty); features are kept in a
 shape that can be contributed upstream.
 
@@ -49,6 +49,23 @@ and the host finds it by itself when the plugin directory has one.
 
 This plugin needs OpenCode 2.x: the V1 plugin shape is gone, and the V2 half is the
 only one there is.
+
+### Not OpenCode? MCP.
+
+The same eight tools, over MCP, for a harness that speaks it — Claude Code, Codex:
+
+```json
+{
+  "mcpServers": {
+    "pty": { "command": "bunx", "args": ["opencode-pty-mcp"] }
+  }
+}
+```
+
+Same daemon, same sessions, same result tags — a session an MCP client starts is a
+session the OpenCode plugin lists. The texts, the permission gate and the completion
+signal are the route's own: see [`docs/mcp.md`](docs/mcp.md). The web interface is
+also a binary of its own (`bunx opencode-pty-web`) for a human who wants to watch.
 
 ## Try it
 
@@ -120,7 +137,7 @@ See `docs/configuration.md`.
 
 ## Status, versioning, upgrade
 
-- **Status**: actively maintained on `local/modernized` (0.7.1). Fork of
+- **Status**: actively maintained on `local/modernized` (1.0.0). Fork of
   [shekohex/opencode-pty](https://github.com/shekohex/opencode-pty); features are kept in a
   shape that can be contributed upstream.
 - **Versioning**: SemVer. Breaking changes get a major bump.
