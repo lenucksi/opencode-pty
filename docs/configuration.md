@@ -33,8 +33,8 @@ This plugin respects OpenCode's [permission settings](https://opencode.ai/docs/p
 > **Where the gate applies, and where it does not:**
 >
 > - **The model's tool calls** (`pty_spawn`, `pty_write`) go through the host's own permission system: the same rules the built-in `bash` tool obeys, and the same prompt. A command that needs approval asks the user, and a refusal stops the spawn. The plugin does not have to turn "ask" into "deny" any more - it asks the host, and the host asks you.
-> - **The web interface** is your own surface: a browser has no conversation for the rules to belong to, so the host cannot be asked about it, and the interface starts what you asked for in its form.
-> - **A host without a permission domain** (an older build) leaves the plugin without a gate. The plugin log says so rather than pretending otherwise.
+> - **The web interface** has no conversation for the rules to belong to, so the host cannot be asked about it. The interface enforces the policy itself: the rules from your configuration above, read from the same file, with the same patterns. A command your rules do not mention runs, as it always did; a rule that needs approval is refused, because there is nobody to ask.
+> - **A host without a permission domain** (an older build) leaves the policy in charge for every route. The plugin log says so rather than pretending otherwise.
 >
 > The rules are the host's: the agent's own rules, the session's rules and the ones you saved earlier all apply, and the command is matched the way the host's own `bash` tool matches it - `"git *"` covers `git status` and `git push`.
 
