@@ -8,10 +8,32 @@ import {
 } from '../manager-notifications.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
+import { getWaitPolicy } from '../wait-policy.ts'
 import DESCRIPTION from './wait.txt'
 
 const WAIT_TAIL_LINES = 20
 const TIMEOUT = Symbol('pty_wait_timeout')
+
+/**
+ * How often the route is told that the wait is still running.
+ *
+ * A transport that cuts a call that says nothing would cut a wait of a minute, and
+ * the cut says nothing about the session it was waiting for. Fifteen seconds is
+ * inside every idle window a transport is known to have.
+ */
+const WAIT_HEARTBEAT_MS = 15_000
+
+/**
+ * The progress token of the call in flight, when the route has one.
+ *
+ * The token belongs to the request, and the tool is called with it: a route that
+ * wants progress notifications cannot ask for one without it.
+ */
+function progressTokenOf(context: unknown): string | number | undefined {
+  if (typeof context !== 'object' || context === null) return undefined
+  const token = (context as { progressToken?: unknown }).progressToken
+  return typeof token === 'string' || typeof token === 'number' ? token : undefined
+}
 
 function isTerminal(session: PTYSessionInfo): boolean {
   return session.status === 'exited' || session.status === 'killed'
@@ -94,7 +116,7 @@ export const ptyWait = tool({
         'Maximum time to wait in seconds. If the session is still running after this, returns a <pty_wait_timeout> result instead of blocking forever. Default: no limit.'
       ),
   },
-  async execute(args) {
+  async execute(args, ctx) {
     const tailBudget = charsForTokens(DEFAULT_READ_MAX_TOKENS)
     const _g1 = getPtyManager().get(args.id)
     const initial = _g1 instanceof Promise ? await _g1 : _g1
@@ -132,7 +154,11 @@ export const ptyWait = tool({
     }
 
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined
-    const timeoutSeconds = args.timeoutSeconds
+    const policy = getWaitPolicy()
+    // The cap belongs to the route, not to the tool: a caller that names a
+    // timeout gets it, and a caller that does not gets the route's cap - or none
+    // at all, which is what the OpenCode route says.
+    const timeoutSeconds = args.timeoutSeconds ?? policy.maxSeconds
     let timeout: Promise<typeof TIMEOUT>
     if (timeoutSeconds === undefined) {
       timeout = new Promise<typeof TIMEOUT>(() => {})
@@ -148,9 +174,22 @@ export const ptyWait = tool({
       })
     }
 
+    // A transport that cuts a call that says nothing cuts a long wait. The
+    // heartbeat is what keeps the line open while the session runs.
+    let heartbeatHandle: ReturnType<typeof setInterval> | undefined
+    if (policy.heartbeat !== undefined && timeoutSeconds !== undefined) {
+      const started = Date.now()
+      heartbeatHandle = setInterval(() => {
+        policy.heartbeat?.(Date.now() - started, progressTokenOf(ctx))
+      }, policy.heartbeatMs ?? WAIT_HEARTBEAT_MS)
+    }
+
     const winner = await Promise.race([done, timeout])
     if (timeoutHandle !== undefined) {
       clearTimeout(timeoutHandle)
+    }
+    if (heartbeatHandle !== undefined) {
+      clearInterval(heartbeatHandle)
     }
     if (winner === TIMEOUT) {
       return [

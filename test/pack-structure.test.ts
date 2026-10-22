@@ -71,6 +71,7 @@ describe('package pack structure', () => {
     expect(list.code).toBe(0)
     const files = list.stdout.split(/\r?\n/).filter(Boolean)
 
+    expect(files).toContain('package/dist/src/mcp/entry.js')
     expect(files).toContain('package/dist/src/mcp/index.js')
     expect(files).toContain('package/dist/src/mcp/server.js')
     // Every description the tools import.

@@ -1,5 +1,6 @@
 import { tool } from '@opencode-ai/plugin'
 import { ptyTools, type PTYToolName } from '../plugin/pty/tools/all.ts'
+import { describeForRoute } from '../plugin/pty/tools/description.ts'
 import type { ToolDraft, ToolInfoV2 } from './types.ts'
 
 export { ptyTools }
@@ -44,7 +45,7 @@ export function registerV2Tools(draft: ToolDraft): void {
   for (const [name, definition] of Object.entries(ptyTools)) {
     const info: ToolInfoV2 = {
       name,
-      description: definition.description,
+      description: describeForRoute(definition.description, 'opencode'),
       input: toolInputSchema(definition),
       execute: async (input, context) => {
         const result = await definition.execute(input as never, context as never)

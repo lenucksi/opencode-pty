@@ -33,5 +33,4 @@ A large character count with almost no lines means the program is repainting a
 screen rather than printing lines. `pty_screen` returns that screen; this output
 cannot express its layout.
 
-To wait for a process to finish instead of polling, use `pty_wait`. See the
-`pty-usage` skill for the full guide.
+To wait for a process to finish instead of polling, use `pty_wait`. {{skill}}

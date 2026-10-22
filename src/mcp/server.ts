@@ -18,10 +18,17 @@
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import {
+  CallToolRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js'
 
 import { ptyTools, type PTYToolName } from '../plugin/pty/tools/all.ts'
+import { describeForRoute } from '../plugin/pty/tools/description.ts'
 import { toolInputSchema } from '../v2/tools.ts'
+import { PTY_USAGE_SKILL } from '../v2/skill.ts'
 
 /** The conversation the sessions of this server belong to. */
 export function serverSessionId(): string {
@@ -33,9 +40,11 @@ export function serverSessionId(): string {
  *
  * The tools were written against the plugin's context, and they read two things
  * from it: the session a session belongs to and the agent that asked. Here the
- * session is the server's own name and the agent is the route's.
+ * session is the server's own name and the agent is the route's. The progress
+ * token is the route's third thing: it belongs to the request, and a wait needs
+ * it to say that it is still running.
  */
-export function serverContext(): {
+export function serverContext(progressToken?: string | number): {
   sessionID: string
   agent: string
   messageID: string
@@ -44,6 +53,7 @@ export function serverContext(): {
   ask: () => Promise<void>
   directory: string
   worktree: string
+  progressToken?: string | number
 } {
   return {
     sessionID: serverSessionId(),
@@ -54,6 +64,7 @@ export function serverContext(): {
     ask: async () => {},
     directory: process.cwd(),
     worktree: process.cwd(),
+    ...(progressToken === undefined ? {} : { progressToken }),
   }
 }
 
@@ -71,7 +82,7 @@ export function toolList(): {
 }[] {
   return Object.entries(ptyTools).map(([name, definition]) => ({
     name,
-    description: definition.description,
+    description: describeForRoute(definition.description, 'mcp'),
     inputSchema: toolInputSchema(definition),
   }))
 }
@@ -89,10 +100,34 @@ export function createMcpServer(): Server {
       name: 'opencode-pty',
       version: '1.0.0',
     },
-    { capabilities: { tools: {} } }
+    { capabilities: { tools: {}, prompts: {} } }
   )
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: toolList() }))
+
+  // The usage guide, as a prompt. The OpenCode route offers it as a skill; here
+  // it is a prompt, and it is this route's text - the guide tells a model how to
+  // wait for an exit, and this route has no exit message to wait for.
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: [
+      {
+        name: PTY_USAGE_SKILL.name,
+        description: PTY_USAGE_SKILL.description,
+      },
+    ],
+  }))
+  server.setRequestHandler(GetPromptRequestSchema, async () => ({
+    description: PTY_USAGE_SKILL.description,
+    messages: [
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text: describeForRoute(PTY_USAGE_SKILL.content, 'mcp'),
+        },
+      },
+    ],
+  }))
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const name = request.params.name
@@ -103,10 +138,13 @@ export function createMcpServer(): Server {
         content: [{ type: 'text', text: `unknown tool: ${name}` }],
       }
     }
+    // The progress token of this call: a wait that says nothing is a wait the
+    // transport may cut, and a cut says nothing about the session.
+    const progressToken = request.params._meta?.progressToken
     try {
       const result = await definition.execute(
         request.params.arguments as never,
-        serverContext() as never
+        serverContext(progressToken) as never
       )
       return { content: [{ type: 'text', text: result }] }
     } catch (error) {

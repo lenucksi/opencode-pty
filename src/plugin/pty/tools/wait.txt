@@ -1,8 +1,6 @@
 Waits for a PTY session to finish running and returns once it has completed.
 
-Use this tool when you cannot go idle and wait for the `<pty_exited>` completion message, e.g., when
-- Used with a `/goal` plugin which automatically resumes idle agents
-- Used by a subagent whose parent interprets idleness as task completion
+{{waitIntro}}
 
 Usage:
 - `id`: The PTY session ID (from `pty_spawn` or `pty_list`)
