@@ -12,6 +12,12 @@ import type {
 import { routes } from './routes'
 import type { UsageDocsResponse } from './usage-docs.ts'
 
+/** What a roll of the daemon answered. */
+export interface DaemonRestartResponse {
+  readonly oldPid: number
+  readonly newPid: number
+  readonly restarted: boolean
+}
 // Extract path parameters from route pattern at compile time
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- infer _ is intentional for type pattern matching
 type ExtractParams<T extends string> = T extends `${infer _}:${infer Param}/${infer Rest}`
@@ -236,6 +242,21 @@ export function createApiClient(baseUrl: string) {
         method: 'GET',
         baseUrl,
       }),
+
+    /**
+     * Roll the daemon.
+     *
+     * The daemon is machine state that every opencode instance on the machine
+     * shares, so the roll ends every session it owns - the PTY masters belong to
+     * that process. The answer says which pids were involved.
+     */
+    daemon: {
+      restart: () =>
+        apiFetchJson<typeof routes.daemon, 'POST', DaemonRestartResponse>(routes.daemon, {
+          method: 'POST',
+          baseUrl,
+        }),
+    },
   } as const
 }
 

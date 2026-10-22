@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import type { BunRequest } from 'bun'
 import { manager } from '../src/plugin/pty/manager.ts'
+import * as managerModule from '../src/plugin/pty/manager.ts'
 import { setParentSessionTitleResolver } from '../src/plugin/pty/parent-session-title.ts'
 import { setPermissionAuthorizer } from '../src/plugin/pty/permissions.ts'
 import { currentBuildInfo, resetBuildInfoCache } from '../src/plugin/pty/read-build-info.ts'
 import { describeBuild } from '../src/shared/build-info.ts'
+import { restartDaemonRoute } from '../src/web/server/handlers/daemon.ts'
 import { handleHealth } from '../src/web/server/handlers/health.ts'
 import { getParentSessions } from '../src/web/server/handlers/parent-sessions.ts'
 import { handleServerInfo } from '../src/web/server/handlers/server-info.ts'
@@ -27,6 +29,33 @@ afterEach(() => {
   setPermissionAuthorizer(null)
   setParentSessionTitleResolver(null)
   mock.restore()
+})
+
+describe('the daemon route', () => {
+  it('rolls the daemon and says which pids were involved', async () => {
+    const rolled = { oldPid: 100, newPid: 200 }
+    const restart = spyOn(managerModule, 'restartDaemon').mockResolvedValue(rolled)
+
+    const response = await restartDaemonRoute()
+
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      oldPid: number
+      newPid: number
+      restarted: boolean
+    }
+    expect(body).toEqual({ oldPid: 100, newPid: 200, restarted: true })
+    expect(restart).toHaveBeenCalled()
+  })
+
+  it('says so when the roll failed, rather than pretending it worked', async () => {
+    spyOn(managerModule, 'restartDaemon').mockRejectedValue(new Error('no daemon'))
+
+    const response = await restartDaemonRoute()
+
+    expect(response.status).toBe(500)
+    expect(await response.text()).toContain('no daemon')
+  })
 })
 
 describe('handleHealth', () => {

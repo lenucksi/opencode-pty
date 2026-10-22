@@ -1,6 +1,6 @@
 import { installHostAdapter } from '../adapters/index.ts'
 import { createV2Adapter } from '../adapters/v2/index.ts'
-import { getPtyManager } from '../plugin/pty/manager.ts'
+import { getPtyManager, restartDaemon } from '../plugin/pty/manager.ts'
 import { setParentSessionTitleResolver } from '../plugin/pty/parent-session-title.ts'
 import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
 import { getActiveServer, getOrCreateServer, registerV2Commands } from './commands.ts'
@@ -90,6 +90,21 @@ export const Plugin: PluginV2 = define({
           const url = serverOrigin(getActiveServer())
           if (url === null) return context.error('not_running', 'No PTY server is running yet', {})
           return { url }
+        },
+        // The roll, for a surface that wants it without being the server: the TUI
+        // half and the web interface both ask the half that owns the client.
+        restartDaemon: async (_input, context) => {
+          try {
+            const { oldPid, newPid } = await restartDaemon()
+            return {
+              oldPid: oldPid ?? 0,
+              newPid: newPid ?? 0,
+              restarted: oldPid !== null || newPid !== null,
+            }
+          } catch (error) {
+            logPtyEvent('error', 'the daemon could not be restarted', error)
+            return context.error('failed', 'The PTY daemon could not be restarted', {})
+          }
         },
       })
       if (!registration) return

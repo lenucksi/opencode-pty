@@ -22,6 +22,7 @@ import {
 } from './handlers/sessions.ts'
 import { buildStaticRoutes, serveIndexHtml } from './handlers/static.ts'
 import { handleUpgrade } from './handlers/upgrade.ts'
+import { restartDaemonRoute } from './handlers/daemon.ts'
 import { handleUsageDocs } from './handlers/usage-docs.ts'
 import { handleWebSocketMessage } from './handlers/websocket.ts'
 
@@ -211,6 +212,9 @@ export class PTYServer implements Disposable {
         [routes.server.path]: () => handleServerInfo(this.server),
         [routes.docs.path]: {
           GET: () => handleUsageDocs(),
+        },
+        [routes.daemon.path]: {
+          POST: () => restartDaemonRoute(),
         },
         [routes.parentSessions.path]: {
           GET: getParentSessions,

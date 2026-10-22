@@ -45,6 +45,23 @@ and one click copies it. The value is served by the server rather than baked int
 the page bundle, so a stale bundle sitting next to a freshly built server cannot
 report a commit that is not running. The same identity is on `GET /api/server`.
 
+### The daemon
+
+Settings has a **Daemon** section with a *Restart the daemon* button. It rolls
+the daemon — the same roll the TUI's sidebar footer offers — and reports the
+result under the button, next to the action that caused it.
+
+The daemon is machine state that every OpenCode instance on the machine shares:
+one socket, one pid file, one process that owns every PTY. So a roll is a
+decision about the machine, not about the browser tab that asked for it.
+
+**A roll ends every session the daemon owns.** The PTY masters belong to that
+process, so the sessions in the list disappear with it; the archive on disk
+survives and stays restorable.
+
+The button is disabled while a roll runs: two rolls at once are how a machine
+ends up with two daemons.
+
 ### Features
 
 - **Session List**: View all PTY sessions with status indicators, split into running and finished

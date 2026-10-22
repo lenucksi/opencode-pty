@@ -13,6 +13,31 @@ import { expect, test as extendedTest } from './fixtures'
 /** The Settings button is named by its text, not an aria-label. */
 const settingsButton = (page: Page) => page.getByRole('button', { name: 'Settings', exact: true })
 
+/**
+ * The daemon's roll, from the settings.
+ *
+ * The daemon is machine state that every opencode instance shares, so the button
+ * asks the half that owns the client. The answer has to be ON SCREEN: a roll that
+ * silently does nothing is the failure this button exists to end.
+ */
+extendedTest.describe('the daemon', () => {
+  extendedTest('the settings offer the roll, and it answers', async ({ page }) => {
+    await page.waitForSelector('.connection-status.connected', { timeout: 10_000 })
+
+    await settingsButton(page).click()
+    await page.waitForSelector('dialog.settings-dialog[open]', { timeout: 5000 })
+
+    const button = page.getByRole('button', { name: /Restart the daemon/ })
+    await expect(button).toBeVisible()
+    await button.click()
+
+    // The answer, whatever it is: this server-under-test has no daemon of its own,
+    // so it says so - and saying so is the point.
+    const answer = page.locator('.settings-daemon-message')
+    await expect(answer).toContainText(/daemon/i, { timeout: 15_000 })
+  })
+})
+
 extendedTest.describe('build identity', () => {
   extendedTest('shows the version and commit in settings', async ({ page, api }) => {
     await page.waitForSelector('.connection-status.connected', { timeout: 10_000 })

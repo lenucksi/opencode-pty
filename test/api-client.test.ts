@@ -152,4 +152,19 @@ describe('createApiClient', () => {
       'GET',
     ])
   })
+
+  // The roll of the daemon, from the web interface. It is a POST because it changes
+  // something - the daemon, and every session it owns.
+  it('rolls the daemon over POST', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async () =>
+      jsonResponse({ oldPid: 100, newPid: 200, restarted: true })) as unknown as typeof fetch)
+    const client = createApiClient('http://localhost:4321')
+
+    const answer = await client.daemon.restart()
+
+    expect(answer).toEqual({ oldPid: 100, newPid: 200, restarted: true })
+    const [url, init] = fetchSpy.mock.calls[0] ?? []
+    expect(url).toBe('http://localhost:4321/api/daemon/restart')
+    expect((init as RequestInit | undefined)?.method).toBe('POST')
+  })
 })

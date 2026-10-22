@@ -56,6 +56,9 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           // Keep the archived sessions of a test run out of the developer's
           // real state directory.
           OPENCODE_PTY_STATE_DIR: `/tmp/opencode-pty-e2e/state-${workerIndex}`,
+          // And the daemon's namespace with it: a test that rolls the daemon must
+          // not roll the one the developer is using.
+          XDG_RUNTIME_DIR: `/tmp/opencode-pty-e2e/run-${workerIndex}`,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       })

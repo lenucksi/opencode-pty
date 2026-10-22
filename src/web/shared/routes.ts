@@ -11,6 +11,18 @@ export const routes = {
     path: '/api/server',
     methods: ['GET'] as const,
   },
+  /**
+   * The daemon, rolled.
+   *
+   * The daemon is machine state that every opencode instance shares, and the web
+   * interface is one of the surfaces that reaches it. It ends every session the
+   * daemon owns - the PTY masters belong to that process - so the answer says
+   * which pids were involved.
+   */
+  daemon: {
+    path: '/api/daemon/restart',
+    methods: ['POST'] as const,
+  },
   docs: {
     path: '/api/docs',
     methods: ['GET'] as const,

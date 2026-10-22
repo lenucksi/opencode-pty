@@ -913,6 +913,38 @@ body {
   color: var(--fg);
   border-color: var(--border);
 }
+/* The daemon's roll: a real control, unlike the version above it, which is a
+   value to copy. Its own class, so a locator that means "the version" does not
+   find this one too. */
+.settings-daemon-action {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease;
+}
+.settings-daemon-action:hover:not(:disabled),
+.settings-daemon-action:focus-visible {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+.settings-daemon-action:disabled {
+  color: var(--fg-muted);
+  opacity: 0.6;
+  cursor: progress;
+}
+/* The roll's report. Muted rather than the accent the copy confirmation uses:
+   this is an outcome to read, not a confirmation to flash. */
+.settings-daemon-message {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
 /* The value doubles as its own affordance, so it must not look disabled while
    the lookup is in flight. */
 span.settings-build-value {
