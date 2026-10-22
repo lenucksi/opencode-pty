@@ -14,6 +14,7 @@ import {
   type BoundedSearchResult,
   OutputManager,
 } from './output-manager.ts'
+import { PROTOCOL_VERSION } from '../../daemon/protocol.ts'
 import { logPtyEvent } from './plugin-log.ts'
 import { type BoundedRawResult, buildBoundedRaw } from './read-budget.ts'
 import { ARCHIVE_REPLAY_WINDOW, renderScreen, type ScreenSnapshot } from './screen.ts'
@@ -563,6 +564,36 @@ export async function connectToDaemon(
   await _ptyClient.connect()
   _ptyClient.startHeartbeat()
   _daemonMode = true
+  await reportProtocolVersion(_ptyClient)
+}
+
+/**
+ * Say so when the daemon speaks another version of the protocol.
+ *
+ * The daemon outlives the host: a new plugin can meet a daemon that was started
+ * long ago. The version is what tells the two apart, and a mismatch that is only
+ * discovered as a missing method is a bad afternoon.
+ */
+async function reportProtocolVersion(client: PtyClient): Promise<void> {
+  try {
+    const pong = await client.ping()
+    const theirs = pong.protocolVersion
+    if (typeof theirs !== 'number') {
+      logPtyEvent(
+        'warn',
+        'the daemon speaks no protocol version; it predates the versioned protocol'
+      )
+      return
+    }
+    if (theirs !== PROTOCOL_VERSION) {
+      logPtyEvent('warn', 'the daemon speaks another version of the protocol', {
+        daemon: theirs,
+        client: PROTOCOL_VERSION,
+      })
+    }
+  } catch (error) {
+    logPtyEvent('warn', 'the daemon did not answer the version check', error)
+  }
 }
 
 /**

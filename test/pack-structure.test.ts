@@ -74,6 +74,7 @@ describe('package pack structure', () => {
     expect(files).toContain('package/dist/src/mcp/entry.js')
     expect(files).toContain('package/dist/src/mcp/index.js')
     expect(files).toContain('package/dist/src/mcp/server.js')
+    expect(files).toContain('package/dist/src/web/entry.js')
     // Every description the tools import.
     for (const name of ['spawn', 'write', 'read', 'list', 'kill', 'wait', 'resize', 'screen']) {
       expect(files).toContain(`package/dist/src/plugin/pty/tools/${name}.txt`)
@@ -81,4 +82,25 @@ describe('package pack structure', () => {
 
     await run(['rm', '-f', tgz as string])
   }, 20000)
+
+  it('declares the MCP SDK instead of merely having it', async () => {
+    // The SDK is in node_modules either way - the point is that the manifest says
+    // so, because an undeclared dependency is one `bun install` away from gone.
+    const read = await run(['bun', '-e', 'console.log(JSON.stringify(require("./package.json")))'])
+    const manifest = JSON.parse(read.stdout) as {
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+    const declared =
+      manifest.dependencies?.['@modelcontextprotocol/sdk'] ??
+      manifest.devDependencies?.['@modelcontextprotocol/sdk']
+    expect(declared).toBeTruthy()
+  })
+
+  it('ships the two binaries', async () => {
+    const read = await run(['bun', '-e', 'console.log(JSON.stringify(require("./package.json")))'])
+    const manifest = JSON.parse(read.stdout) as { bin?: Record<string, string> }
+    expect(manifest.bin?.['opencode-pty-mcp']).toBe('dist/src/mcp/entry.js')
+    expect(manifest.bin?.['opencode-pty-web']).toBe('dist/src/web/entry.js')
+  })
 })

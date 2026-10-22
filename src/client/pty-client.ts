@@ -106,8 +106,18 @@ export class PtyClient extends PtyClientTransport {
    * know that - a pid file is a note about the daemon, and a note can name a
    * process that is gone or one that lost the path.
    */
-  async ping(): Promise<{ pong: boolean; generation: string; pid?: number }> {
-    return this.request<{ pong: boolean; generation: string; pid?: number }>('ping')
+  async ping(): Promise<{
+    pong: boolean
+    generation: string
+    pid?: number
+    protocolVersion?: number
+  }> {
+    return this.request<{
+      pong: boolean
+      generation: string
+      pid?: number
+      protocolVersion?: number
+    }>('ping')
   }
 
   async heartbeat(): Promise<void> {

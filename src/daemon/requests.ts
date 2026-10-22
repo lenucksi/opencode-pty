@@ -10,7 +10,12 @@
 import { manager } from '../plugin/pty/manager.ts'
 import type { RetentionPolicy, SessionStore } from '../plugin/pty/session-store.ts'
 import type { SpawnOptions } from '../plugin/pty/types.ts'
-import { type DaemonRequest, type DaemonResponse, encodeMessage } from './protocol.ts'
+import {
+  type DaemonRequest,
+  type DaemonResponse,
+  encodeMessage,
+  PROTOCOL_VERSION,
+} from './protocol.ts'
 
 /** What a handler needs of a connected client. */
 export interface WireClient {
@@ -43,7 +48,12 @@ export function createRequestHandler(
   clients: Map<string, WireClient>
 ): (socket: Bun.Socket<undefined>, request: DaemonRequest) => void {
   const handlers: Record<string, RequestHandler> = {
-    ping: () => ({ pong: true, generation: store.getGeneration(), pid: process.pid }),
+    ping: () => ({
+      pong: true,
+      generation: store.getGeneration(),
+      pid: process.pid,
+      protocolVersion: PROTOCOL_VERSION,
+    }),
     list: () => manager.list(),
     spawn: (params) => manager.spawn(spawnFrom(params)),
     write: (params) => ({ success: manager.write(params.id as string, params.data as string) }),
