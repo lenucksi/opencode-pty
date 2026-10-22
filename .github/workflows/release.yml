@@ -14,10 +14,17 @@ permissions:
 
 jobs:
   publish:
-    # Publishing is bound to the upstream repository. npm trusted publishing is
-    # registered there, so a fork must never reach the publish step.
+    # Publishing is a repository's own decision, not a hardcoded repository name.
+    #
+    # The upstream uses npm's trusted publishing: the OIDC token of this workflow is
+    # exchanged for a publish token, so no secret is needed and the package belongs
+    # to the repository that owns it. A fork must never reach that path by accident
+    # - but it must also not be shut out of its own releases: a fork that has a name
+    # to publish under sets NPM_PUBLISH=true and NPM_TOKEN as repository variable
+    # and secret, and NPM_PACKAGE_NAME if the published name differs from the one
+    # in package.json.
     if: >-
-      github.repository == 'shekohex/opencode-pty' &&
+      (github.repository == 'shekohex/opencode-pty' || vars.NPM_PUBLISH == 'true') &&
       (github.event_name == 'workflow_dispatch' ||
        github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
@@ -140,7 +147,19 @@ jobs:
 
       - name: Publish to npm
         if: steps.determine.outputs.changed == 'true' && steps.determine.outputs.tag_exists == 'false'
-        run: npm publish --access public --provenance
+        run: |
+          # A fork may publish under a name of its own; the upstream keeps the one in
+          # package.json. `npm pkg set` changes the manifest in the workspace, not
+          # the repository, so nothing here can leak into a commit.
+          if [ -n "${{ vars.NPM_PACKAGE_NAME }}" ]; then
+            npm pkg set name="${{ vars.NPM_PACKAGE_NAME }}"
+          fi
+          npm publish --access public --provenance
+        env:
+          # Empty for the upstream: npm's trusted publishing exchanges this workflow's
+          # OIDC token instead. A fork sets NPM_TOKEN to an npm automation token -
+          # provenance requires one, and a classic token cannot attest.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub release
         if: steps.determine.outputs.changed == 'true' && steps.determine.outputs.tag_exists == 'false'
