@@ -5,6 +5,7 @@ import {
   type PTYSessionGroup,
   sortSessionsByTime,
 } from '../web/shared/session-meta.ts'
+import { DAEMON_IDLE, type DaemonStatus } from './daemon-state.ts'
 import { isFinished, type PanelSession, truncateText } from './lib.ts'
 import { mergeIdentical, sameGroup } from './row-identity.ts'
 
@@ -39,6 +40,8 @@ export interface PanelState {
   lastStartError: string | null
   /** The open output dialog, or null when none is showing. */
   dialog: DialogState | null
+  /** What the sidebar knows about the daemon behind the list. */
+  daemon: DaemonStatus
 }
 
 /**
@@ -83,6 +86,7 @@ export function initialPanelState(): PanelState {
     startFailures: 0,
     lastStartError: null,
     dialog: null,
+    daemon: DAEMON_IDLE,
   }
 }
 

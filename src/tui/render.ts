@@ -12,6 +12,7 @@ import {
   rowTail,
   rowTone,
 } from './lib.ts'
+import { daemonLabel, type DaemonStatus } from './daemon-state.ts'
 import {
   emptyListLabel,
   finishedRows,
@@ -74,6 +75,17 @@ export interface PanelView {
   readonly collapsedGroups: readonly string[]
   /** Whether the footer has asked for the failed finished rows. */
   readonly showFinished: boolean
+  /**
+   * What the daemon is doing, and the way to roll it.
+   *
+   * The daemon is machine state behind the list, and the footer is where the
+   * sidebar reports state that is not a session. A reader who wants to know
+   * whether the daemon is up - or to roll it after a rebuild - looks at the
+   * bottom, where the archive's size already lives.
+   */
+  readonly daemon: DaemonStatus
+  /** Roll the daemon. */
+  readonly onRestartDaemon: (event: MouseEvent) => void
   /** Fold or unfold one group's rows. */
   readonly onToggleGroup: (key: string) => void
   /** Clear the active filter. */
@@ -327,34 +339,55 @@ export function sidebarView(view: PanelView) {
 }
 
 /**
- * The footer contribution: one line carrying the archive's size.
+ * The footer contribution: the archive's size and the daemon.
  *
  * A separate slot rather than another header row, because the sidebar's bottom is the
  * one place a summary does not push the built-in items down - and the count is the
  * least interesting thing on the screen, so it should cost the least space.
+ *
+ * The daemon's line is the second row of it, and the reason it is HERE and not in
+ * the header: the header is about the list and its actions (the filter, the clear),
+ * and a roll of the daemon is not an action on the list. The footer is the one
+ * place in the sidebar that talks about the machine.
  */
 export function sidebarFooterView(view: PanelView) {
   return jsx('box', {
     width: '100%',
-    children: jsx('text', {
-      fg: view.tones.muted,
-      // `onMouseDown` ONLY, for the same reason as the header: a click delivers both
-      // events, so registering on each would toggle twice and appear to do nothing.
-      onMouseDown: (event: MouseEvent) => {
-        event.stopPropagation()
-        view.onToggleArchive(event)
-      },
-      // An accessor, so the line follows the poll. Empty rather than a placeholder when
-      // nothing is finished: a zero-width element presents no hit target, so the footer
-      // never offers a click that would expand an empty list.
-      children: (): string =>
-        archiveLabel({
-          finished: finishedSessions(view.sessions).length,
-          failed: failureCount(view.sessions),
-          shown: finishedRows(view.sessions).length,
-          expanded: view.showFinished,
-        }) ?? '',
-    }),
+    flexDirection: 'column',
+    children: [
+      jsx('text', {
+        fg: view.tones.muted,
+        // `onMouseDown` ONLY, for the same reason as the header: a click delivers both
+        // events, so registering on each would toggle twice and appear to do nothing.
+        onMouseDown: (event: MouseEvent) => {
+          event.stopPropagation()
+          view.onToggleArchive(event)
+        },
+        // An accessor, so the line follows the poll. Empty rather than a placeholder when
+        // nothing is finished: a zero-width element presents no hit target, so the footer
+        // never offers a click that would expand an empty list.
+        children: (): string =>
+          archiveLabel({
+            finished: finishedSessions(view.sessions).length,
+            failed: failureCount(view.sessions),
+            shown: finishedRows(view.sessions).length,
+            expanded: view.showFinished,
+          }) ?? '',
+      }),
+      jsx('text', {
+        fg: view.tones.muted,
+        wrapMode: 'none',
+        // `onMouseDown` ONLY, and stopped: this line sits under the archive's, and
+        // the click that rolls the daemon must not also expand the archive.
+        onMouseDown: (event: MouseEvent) => {
+          event.stopPropagation()
+          view.onRestartDaemon(event)
+        },
+        // An accessor, so the line follows the roll: it says "restarting…" while
+        // one runs, and names the daemon that answered the last one.
+        children: (): string => daemonLabel(view.daemon),
+      }),
+    ],
   })
 }
 

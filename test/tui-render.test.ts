@@ -3,6 +3,7 @@ import { RGBA } from '@opentui/core'
 import { testRender } from '@opentui/solid'
 
 import type { PanelSession } from '../src/tui/lib.ts'
+import { DAEMON_IDLE, type DaemonStatus } from '../src/tui/daemon-state.ts'
 import { groupsForDisplay } from '../src/tui/panel-state.ts'
 import { dialogRows, dialogSize, outputDialogView } from '../src/tui/output-dialog.ts'
 import { clearTargetCount, type PanelView, REMOVE_GLYPH, sidebarView } from '../src/tui/render.ts'
@@ -34,6 +35,7 @@ interface Handlers {
   onClear: () => void
   onOpen: (session: PanelSession) => void
   onRemove: (session: PanelSession) => void
+  onRestartDaemon: () => void
 }
 
 const handlers = (): Handlers & { calls: string[] } => {
@@ -47,6 +49,7 @@ const handlers = (): Handlers & { calls: string[] } => {
     onClear: () => calls.push('clear'),
     onOpen: (s) => calls.push(`open:${s.id}`),
     onRemove: (s) => calls.push(`remove:${s.id}`),
+    onRestartDaemon: () => calls.push('restart-daemon'),
   }
 }
 
@@ -65,6 +68,7 @@ interface ViewInput {
   readonly filter?: string
   readonly collapsedGroups?: readonly string[]
   readonly showFinished?: boolean
+  readonly daemon?: DaemonStatus
 }
 
 const view = (input: ViewInput = {}): PanelView => {
@@ -85,6 +89,7 @@ const view = (input: ViewInput = {}): PanelView => {
     filter: input.filter ?? '',
     collapsedGroups: input.collapsedGroups ?? [],
     showFinished: input.showFinished ?? false,
+    daemon: input.daemon ?? DAEMON_IDLE,
     ...handlers(),
   }
 }

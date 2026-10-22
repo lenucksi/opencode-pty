@@ -99,6 +99,8 @@ interface Observed {
   footers: RenderedFooter[]
   /** The session-panel claim, so the panel can be rendered. */
   sessionPanels: RenderedSessionPanel[]
+  /** How often the daemon was rolled from the sidebar. */
+  daemonRolls: number
   /** Names passed to `ui.panel.open`, in order. */
   opened: string[]
   /** Routes navigated to, as `type` values, in order. */
@@ -262,6 +264,15 @@ function makeContext(observed: Observed): TuiContext {
         if (observed.rpcOrigin === undefined) throw new Error('not_running')
         return { url: observed.rpcOrigin }
       },
+      // The roll of the daemon, asked of the half that owns the client.
+      restartDaemon: async (): Promise<{
+        oldPid: number
+        newPid: number
+        restarted: boolean
+      }> => {
+        observed.daemonRolls += 1
+        return { oldPid: 100, newPid: 200, restarted: true }
+      },
       // The plugin's own events: how the server half says what a command did.
       events: {
         on: (name: string, handler: (event: { data: unknown }) => void): (() => void) => {
@@ -412,6 +423,7 @@ function observed(onCommand?: () => Promise<void>): Observed {
     claims: [],
     footers: [],
     sessionPanels: [],
+    daemonRolls: 0,
     opened: [],
     navigated: [],
     fullscreenToggles: 0,
@@ -577,6 +589,24 @@ async function clickPanelClose(observed: Observed): Promise<void> {
 async function clickFooter(observed: Observed): Promise<void> {
   const setup = await renderFooter(observed)
   await setup.mockMouse.click(4, 0)
+  await setup.renderOnce()
+}
+
+/**
+ * Click the daemon's line in the footer.
+ *
+ * The line is the footer's second row, and the row comes out of the rendered frame
+ * rather than a constant - the archive's line is above it, and a hard-coded row
+ * would click that one instead.
+ */
+async function clickDaemonLine(observed: Observed): Promise<void> {
+  const setup = await renderFooter(observed)
+  const row = setup
+    .captureCharFrame()
+    .split('\n')
+    .findIndex((line) => line.includes('daemon'))
+  if (row < 0) throw new Error('the footer draws no daemon line')
+  await setup.mockMouse.click(4, row)
   await setup.renderOnce()
 }
 
@@ -1162,6 +1192,23 @@ describe('the PTY sidebar panel', () => {
     const prefs = seen.stores.get('opencode-pty.sidebar')
     expect(prefs?.showFinished).toBe(true)
     expect(seen.sessionCalls).not.toContain('create')
+  })
+
+  // The daemon's line is in the footer, and it rolls the daemon. The roll is asked
+  // of the half that owns the client - the server half, over the plugin's own RPC -
+  // because the TUI is a different process and the daemon belongs to the server.
+  test('the footer rolls the daemon when its line is clicked', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+    await waitFor(() =>
+      panelStore(seen).status === 'starting…' ? undefined : panelStore(seen).status
+    )
+
+    const frame = await footerFrame(seen)
+    expect(frame).toContain('daemon')
+
+    await clickDaemonLine(seen)
+    expect(seen.daemonRolls).toBe(1)
   })
 
   // The session panel is the host's own place for an extra view of a session, and a PTY

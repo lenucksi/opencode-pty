@@ -82,6 +82,29 @@ looks like a broken panel rather than a missing declaration.
 The panel is additive, so on a build without the V2 TUI API it simply does not
 appear.
 
+### The daemon line
+
+The footer's second line is the daemon: `daemon · restart`, and the pid of the
+daemon that answered the last roll once there is one. Clicking it rolls the
+daemon; while the roll runs the line says `daemon · restarting…`, and the
+result arrives as a toast.
+
+The daemon is **machine state, not panel state**. Every OpenCode instance on the
+machine talks to the same daemon over one socket, so a roll is a decision about
+the machine rather than about the list you happen to be looking at. That is why
+the line sits in the footer — the one place in the sidebar that talks about the
+machine — and not in the header, whose actions (the filter, *clear finished*)
+act on the list.
+
+The roll is asked of the half that owns the client: the panel cannot do it
+itself, because it is a different process and the daemon belongs to the server
+half. The panel asks over the host's plugin RPC, the same channel it uses to
+learn where the server listens.
+
+**A roll ends every session the daemon owns.** The PTY masters belong to that
+process, so a new daemon starts with an empty set of live sessions; the archive
+on disk survives and the sessions in it stay restorable.
+
 ## Session Panel
 
 The sidebar lists every PTY session. This panel shows the ones belonging to **the

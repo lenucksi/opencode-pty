@@ -34,6 +34,31 @@ export const PtyServerRpc = Rpc.define({
         not_running: { type: 'object', properties: {}, additionalProperties: false },
       },
     },
+    /**
+     * Roll the daemon.
+     *
+     * The daemon is machine state and the machine is shared: every opencode
+     * instance on it talks to the same socket. So the restart is the server half's
+     * job - it is the half that owns the client - and a surface that wants it asks
+     * for it here. It ends every session the daemon owns, which is the point of a
+     * restart: the PTY masters belong to that process.
+     */
+    restartDaemon: {
+      input: { type: 'object', properties: {}, additionalProperties: false },
+      output: {
+        type: 'object',
+        properties: {
+          oldPid: { type: 'number' },
+          newPid: { type: 'number' },
+          restarted: { type: 'boolean' },
+        },
+        required: ['oldPid', 'newPid', 'restarted'],
+        additionalProperties: false,
+      },
+      errors: {
+        failed: { type: 'object', properties: {}, additionalProperties: false },
+      },
+    },
   },
   events: {
     /**
@@ -111,6 +136,31 @@ export function noticeFromData(data: unknown): Notice | null {
   return {
     message: record.message,
     variant: known.includes(variant as NoticeVariant) ? (variant as NoticeVariant) : 'info',
+  }
+}
+
+/** What a roll of the daemon answered. */
+export interface DaemonRestart {
+  readonly restarted: boolean
+  readonly oldPid: number | null
+  readonly newPid: number | null
+}
+
+/**
+ * What a roll answered, or null when it is not an answer.
+ *
+ * The answer crosses a process boundary, so it is checked rather than trusted: a
+ * malformed answer is no answer, and the surface that asked says so.
+ */
+export function daemonRestartFromData(data: unknown): DaemonRestart | null {
+  if (typeof data !== 'object' || data === null) return null
+  const record = data as { restarted?: unknown; oldPid?: unknown; newPid?: unknown }
+  const pid = (value: unknown): number | null =>
+    typeof value === 'number' && value > 0 ? value : null
+  return {
+    restarted: record.restarted === true,
+    oldPid: pid(record.oldPid),
+    newPid: pid(record.newPid),
   }
 }
 

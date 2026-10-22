@@ -291,6 +291,80 @@ describe('OpenCode V2 Plugin API', () => {
     })
   })
 
+  describe('The daemon roll over the plugin RPC', () => {
+    // The daemon on this machine is shared by every opencode instance, so a test
+    // that looked for it would find the REAL one - and roll it. The runtime
+    // directory is what says where the daemon lives, so an empty one says "there
+    // is none".
+    let previousRuntimeDir: string | undefined
+    let emptyRuntimeDir: string
+
+    beforeEach(() => {
+      previousRuntimeDir = process.env.XDG_RUNTIME_DIR
+      emptyRuntimeDir = mkdtempSync(join(tmpdir(), 'opencode-pty-no-daemon-'))
+      process.env.XDG_RUNTIME_DIR = emptyRuntimeDir
+    })
+
+    afterEach(() => {
+      setNoticeEmitter(null)
+      if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR
+      else process.env.XDG_RUNTIME_DIR = previousRuntimeDir
+      rmSync(emptyRuntimeDir, { recursive: true, force: true })
+    })
+
+    /**
+     * The plugin's own RPC, with the handlers it registered.
+     *
+     * The TUI half and the web interface ask for the roll this way, so the
+     * methods are what those surfaces actually reach.
+     */
+    async function registeredMethods(): Promise<
+      Record<string, (input: unknown, context: unknown) => Promise<unknown>>
+    > {
+      const methods: Record<string, (input: unknown, context: unknown) => Promise<unknown>> = {}
+      const ctx: PluginContextV2 = {
+        options: {},
+        rpc: {
+          register: async (
+            _definition: unknown,
+            handlers: Record<string, (input: unknown, context: unknown) => Promise<unknown>>
+          ) => {
+            Object.assign(methods, handlers)
+            return { events: { emit: async () => {} } }
+          },
+        } as unknown as PluginContextV2['rpc'],
+      }
+      await Plugin.setup(ctx)
+      return methods
+    }
+
+    it('rolls the daemon for a surface that is not the server', async () => {
+      const methods = await registeredMethods()
+
+      const answer = await methods.restartDaemon?.({}, {})
+
+      // No daemon on this machine, so nothing was rolled - and the answer says so
+      // rather than claiming a pid.
+      expect(answer).toEqual({ oldPid: 0, newPid: 0, restarted: false })
+    })
+
+    it('says where the server is, or that there is none', async () => {
+      const methods = await registeredMethods()
+
+      const answer = await methods.origin?.(
+        {},
+        {
+          error: (name: string, message: string) => ({ error: name, message }),
+        }
+      )
+
+      expect(answer).toEqual({
+        error: 'not_running',
+        message: 'No PTY server is running yet',
+      })
+    })
+  })
+
   describe('Options Support (Custom Port & Hostname)', () => {
     it('creates server with custom port and hostname when specified', async () => {
       const server = await getOrCreateServer({ port: 0, hostname: '127.0.0.1' })

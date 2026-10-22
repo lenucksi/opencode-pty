@@ -1,6 +1,7 @@
 import type { ServerInfoResponse } from 'opencode-pty/web/shared/types'
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { type BuildInfo, describeBuild } from '../../../shared/build-info.ts'
+import { api } from '../../shared/api-client.ts'
 import { useDialog } from '../hooks/use-dialog.ts'
 import { copyTextToClipboard } from '../lib/clipboard.ts'
 import type { ThemePreference } from '../lib/theme.ts'
@@ -61,6 +62,37 @@ export function SettingsModal({
   // feedback the user cannot see.
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  /**
+   * The roll of the daemon, and what it answered.
+   *
+   * The daemon is machine state that every opencode instance on the machine shares,
+   * and a roll ends every session it owns - the PTY masters belong to that process.
+   * So the button says so, and the answer says which pids were involved.
+   */
+  const [daemonState, setDaemonState] = useState<'idle' | 'running' | 'done' | 'failed'>('idle')
+  const [daemonMessage, setDaemonMessage] = useState('')
+
+  const handleRestartDaemon = useCallback(() => {
+    setDaemonState('running')
+    setDaemonMessage('Restarting the daemon…')
+    void api.daemon
+      .restart()
+      .then((answer) => {
+        setDaemonState('done')
+        setDaemonMessage(
+          answer.restarted
+            ? `Daemon restarted: old pid ${answer.oldPid || 'none'}, new pid ${answer.newPid || 'none'}. The sessions it owned are gone.`
+            : 'There is no daemon to restart.'
+        )
+      })
+      .catch((error: unknown) => {
+        setDaemonState('failed')
+        setDaemonMessage(
+          `The daemon could not be restarted: ${error instanceof Error ? error.message : String(error)}`
+        )
+      })
+  }, [])
 
   const handleCopyBuild = useCallback(() => {
     if (buildInfo === null) return
@@ -192,6 +224,30 @@ export function SettingsModal({
               </span>
             </span>
           )}
+        </section>
+        <section className="settings-section settings-section-daemon">
+          <span className="settings-label">Daemon</span>
+          <span className="settings-build-row">
+            <button
+              type="button"
+              // Its own class, not the version's: that one is a value to copy,
+              // and a locator that finds both cannot tell them apart.
+              className="settings-daemon-action"
+              onClick={handleRestartDaemon}
+              // Disabled while a roll runs: a second one would race the first, and
+              // two rolls are how the machine ends up with two daemons.
+              disabled={daemonState === 'running'}
+              title="Restart the daemon. Every session it owns ends with it."
+            >
+              {daemonState === 'running' ? 'Restarting…' : 'Restart the daemon'}
+            </button>
+          </span>
+          {/* The answer belongs next to the button: the settings dialog is a modal
+              on top of the terminal header, so feedback shown there is feedback the
+              user cannot see. */}
+          <span className="settings-daemon-message" aria-live="polite">
+            {daemonMessage}
+          </span>
         </section>
       </div>
     </dialog>

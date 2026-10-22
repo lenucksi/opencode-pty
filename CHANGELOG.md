@@ -5,6 +5,34 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+**Rolling the daemon from both surfaces**
+
+The daemon is machine state that every OpenCode instance on the machine shares:
+one socket, one pid file, one process that owns every PTY. Until now the only
+way to roll it was the `/pty-daemon-restart` command, and only the server half
+answered it - so a surface that is not the server could not ask.
+
+There is now one roll, reachable from everywhere:
+
+- the **TUI sidebar footer** grows a second line, `daemon · restart`, with the
+  pid of the daemon that answered the last roll. Clicking it rolls the daemon;
+  the line says `daemon · restarting…` while the roll runs and the result
+  arrives as a toast.
+- the **web interface** gets a *Restart the daemon* button in the settings,
+  with the answer next to the button. The button is disabled while a roll runs:
+  two rolls at once are how a machine ends up with two daemons.
+
+Both ask the half that owns the client - the server half, over the plugin's own
+RPC and over `POST /api/daemon/restart` respectively - because the daemon
+belongs to the server, not to the surface that asks.
+
+A roll ends every session the daemon owns: the PTY masters belong to that
+process. The archive on disk survives.
+
 ## [1.0.0] - 2026-10-22
 
 The line that makes the daemon the core and everything else a client of it. The

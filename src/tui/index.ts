@@ -4,6 +4,7 @@ import { countSessions } from '../web/shared/session-search.ts'
 import { createActions } from './actions.ts'
 import { openSendDialog } from './send-dialog.ts'
 import { debug } from './debug.ts'
+import { restartDaemonAction } from './daemon-action.ts'
 import { registerFilterCommand } from './filter-command.ts'
 import { type PanelSession, resolveParentTitles } from './lib.ts'
 import {
@@ -328,6 +329,19 @@ export default Plugin.define({
     }
 
     /**
+     * Roll the daemon, from the sidebar's footer.
+     *
+     * The action itself lives in `daemon-action.ts`: it is the daemon's own
+     * business, and the wiring here only says where the pieces come from.
+     */
+    const onRestartDaemon = restartDaemonAction({
+      client: context.client,
+      update: setPanel,
+      notify,
+      debug,
+    })
+
+    /**
      * The parent conversations' titles, for the group headings.
      *
      * A synchronous lookup on the host rather than a request: the panel already holds a context,
@@ -372,6 +386,8 @@ export default Plugin.define({
         filter: prefs.filter,
         collapsedGroups: prefs.collapsedGroups,
         showFinished: prefs.showFinished,
+        daemon: panel.daemon,
+        onRestartDaemon,
         onToggle,
         onToggleArchive,
         onToggleGroup,
