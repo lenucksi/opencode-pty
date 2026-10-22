@@ -59,7 +59,7 @@ export const ptyWrite = tool({
     id: tool.schema.string().describe('The PTY session ID (e.g., pty_a1b2c3d4)'),
     data: tool.schema.string().describe('The input data to send to the PTY'),
   },
-  async execute(args) {
+  async execute(args, ctx) {
     const session = await getPtyManager().get(args.id)
     if (!session) {
       throw await buildSessionNotFoundError(args.id)
@@ -76,7 +76,11 @@ export const ptyWrite = tool({
     for (const commandLine of commands) {
       const { command, args: cmdArgs } = parseCommand(commandLine)
       if (command) {
-        await checkCommandPermission(command, cmdArgs)
+        // The session the write belongs to is the session the rules are about.
+        await checkCommandPermission(command, cmdArgs, {
+          sessionID: ctx.sessionID,
+          agent: ctx.agent,
+        })
       }
     }
 

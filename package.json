@@ -43,10 +43,6 @@
       "types": "./dist/src/tui/index.d.ts",
       "default": "./dist/src/tui/index.js"
     },
-    "./server": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
     "./tui": {
       "types": "./dist/src/tui/index.d.ts",
       "default": "./dist/src/tui/index.js"
@@ -123,7 +119,7 @@
   },
   "engines": {
     "bun": ">=1.4.2",
-    "opencode": ">=1.18.31"
+    "opencode": ">=2.0.0"
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.19.3",

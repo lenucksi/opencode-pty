@@ -132,6 +132,23 @@ export interface SkillDraft {
   list?(): readonly unknown[]
 }
 
+/**
+ * The host's permission domain, as far as this plugin uses it.
+ *
+ * `assert` evaluates the session's permission rules and, when approval is
+ * required, prompts the user and waits for the reply. That is the whole point of
+ * asking the host instead of reading a config: the rules are the host's, and the
+ * human is the host's.
+ */
+export interface HostPermissionDomain {
+  readonly assert: (input: {
+    readonly sessionID: string
+    readonly agent?: string
+    readonly action: string
+    readonly resources: readonly string[]
+  }) => Promise<void>
+}
+
 export interface PluginContextV2 {
   readonly options?: OpencodePtyOptions & Record<string, unknown>
   /**
@@ -192,6 +209,15 @@ export interface PluginContextV2 {
    * panel falls back to the record.
    */
   readonly rpc?: Plugin.Context['rpc']
+  /**
+   * The host's permission domain, when the build has one.
+   *
+   * This is how the plugin asks whether a command may run: the host evaluates its
+   * own rules and prompts the user when approval is required. A host without it
+   * leaves the plugin without a gate, which is why the check reports that rather
+   * than pretending.
+   */
+  readonly permission?: HostPermissionDomain
 }
 
 export interface PluginV2 {

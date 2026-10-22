@@ -1,30 +1,28 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import type { ServerWebSocket } from 'bun'
 import { manager } from '../src/plugin/pty/manager.ts'
-import { initPermissions } from '../src/plugin/pty/permissions.ts'
+import {
+  setPermissionAuthorizer,
+  type PermissionAuthorizer,
+} from '../src/plugin/pty/permissions.ts'
 import type { PTYSessionInfo } from '../src/plugin/pty/types.ts'
 import { createSession } from '../src/web/server/handlers/sessions.ts'
 import { handleWebSocketMessage } from '../src/web/server/handlers/websocket.ts'
 import type { WSMessageServerError } from '../src/web/shared/types.ts'
 
-type TestPermissionConfig = {
-  bash?: 'allow' | 'ask' | 'deny' | Record<string, 'allow' | 'ask' | 'deny'>
-  external_directory?: 'allow' | 'ask' | 'deny'
-}
-
-function initTestPermissions(permission: TestPermissionConfig = {}) {
-  initPermissions(
-    {
-      config: {
-        get: async () => ({ data: { permission } }),
-      },
-      tui: {
-        showToast: async () => {},
-      },
-    } as unknown as Parameters<typeof initPermissions>[0],
-    process.cwd()
-  )
-}
+/**
+ * The web interface and the permission gate.
+ *
+ * Inside OpenCode the gate is the host's: the model's tool calls carry a session,
+ * and the host evaluates its rules and prompts the user. A browser talking to the
+ * web interface has no session - there is no conversation the rules could belong
+ * to - so the host cannot be asked about it.
+ *
+ * The seam is what matters here: the web interface asks the same question every
+ * other route asks, so a policy of its own (the one the MCP route and the
+ * standalone binary will use) drops into the same place and refuses what it
+ * refuses.
+ */
 
 function buildSpawnInfo(overrides: Partial<PTYSessionInfo> = {}): PTYSessionInfo {
   return {
@@ -58,14 +56,24 @@ function createFakeWebSocket(sentMessages: string[]): ServerWebSocket<undefined>
   } as unknown as ServerWebSocket<undefined>
 }
 
-describe('web permission enforcement', () => {
+/** A policy that refuses everything, standing in for the one the MCP route will use. */
+function refusingPolicy(): PermissionAuthorizer {
+  return {
+    checkCommand: async () => {
+      throw new Error('PTY spawn denied: the policy refuses this command.')
+    },
+    checkWorkdir: async () => {},
+  }
+}
+
+describe('the web interface and the permission gate', () => {
   afterEach(() => {
-    initTestPermissions()
+    setPermissionAuthorizer(null)
     mock.restore()
   })
 
-  it('rejects REST session creation when bash permissions deny commands', async () => {
-    initTestPermissions({ bash: 'deny' })
+  it('refuses REST session creation when the policy refuses the command', async () => {
+    setPermissionAuthorizer(refusingPolicy())
     const spawnSpy = spyOn(manager, 'spawn').mockReturnValue(buildSpawnInfo())
 
     const response = await createSession(
@@ -81,12 +89,12 @@ describe('web permission enforcement', () => {
     )
 
     expect(response.status).toBe(400)
-    expect(await response.text()).toContain('All bash commands are disabled')
+    expect(await response.text()).toContain('the policy refuses this command')
     expect(spawnSpy).not.toHaveBeenCalled()
   })
 
-  it('rejects WebSocket session creation when bash permissions deny commands', async () => {
-    initTestPermissions({ bash: 'deny' })
+  it('refuses WebSocket session creation when the policy refuses the command', async () => {
+    setPermissionAuthorizer(refusingPolicy())
     const spawnSpy = spyOn(manager, 'spawn').mockReturnValue(buildSpawnInfo())
     const sentMessages: string[] = []
 
@@ -106,6 +114,28 @@ describe('web permission enforcement', () => {
     expect(sentMessages).toHaveLength(1)
     const message = JSON.parse(sentMessages[0] ?? '{}') as WSMessageServerError
     expect(message.type).toBe('error')
-    expect(message.error.message).toContain('All bash commands are disabled')
+    expect(message.error.message).toContain('the policy refuses this command')
+  })
+
+  // The host cannot answer for a session it does not know, and a browser has no
+  // session. That is the whole reason the web interface asks a policy of its own
+  // rather than the host.
+  it('starts what the user asked for, because the host has no session to ask about', async () => {
+    const spawnSpy = spyOn(manager, 'spawn').mockReturnValue(buildSpawnInfo())
+
+    const response = await createSession(
+      new Request('http://localhost/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: 'echo',
+          args: ['allowed'],
+          description: 'Web session',
+        }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(spawnSpy).toHaveBeenCalled()
   })
 })
