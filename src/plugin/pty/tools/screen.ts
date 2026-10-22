@@ -7,7 +7,12 @@ import {
 } from '../../constants.ts'
 import { getPtyManager } from '../manager.ts'
 import { logPtyEvent } from '../plugin-log.ts'
-import { type ColorSpan, fitScreenSize, type ScreenSnapshot } from '../screen.ts'
+import {
+  ARCHIVE_REPLAY_WINDOW,
+  type ColorSpan,
+  fitScreenSize,
+  type ScreenSnapshot,
+} from '../screen.ts'
 import type { PTYSessionInfo } from '../types.ts'
 import { buildSessionNotFoundError } from '../utils.ts'
 import DESCRIPTION from './screen.txt'
@@ -75,6 +80,12 @@ export const ptyScreen = tool({
       .describe(
         `Render at this many rows instead of the session's own height (${MIN_TERMINAL_ROWS}-${MAX_TERMINAL_ROWS}). Does not change the session.`
       ),
+    chars: tool.schema
+      .number()
+      .optional()
+      .describe(
+        `Replay at most this many characters of the retained output - the tail of it. The default is the whole ring buffer of a live session and the last ${ARCHIVE_REPLAY_WINDOW} characters of an archived one. A narrower window is a reconstruction: rows painted earlier and never touched again may be missing, and the result says how much it covered. Does not change the session.`
+      ),
   },
   async execute(args) {
     const session: PTYSessionInfo | null = await getPtyManager().get(args.id)
@@ -106,7 +117,7 @@ export const ptyScreen = tool({
     // full-screen program painted only once (htop's header).
     let snapshot: ScreenSnapshot | null
     try {
-      snapshot = await getPtyManager().screen(args.id, { cols, rows })
+      snapshot = await getPtyManager().screen(args.id, { cols, rows, chars: args.chars })
     } catch (error) {
       // A failed screen render must not read as "the program printed nothing".
       logPtyEvent('error', 'pty_screen could not render the session screen', error)

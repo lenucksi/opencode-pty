@@ -16,7 +16,7 @@ import {
 } from './output-manager.ts'
 import { logPtyEvent } from './plugin-log.ts'
 import { type BoundedRawResult, buildBoundedRaw } from './read-budget.ts'
-import { renderScreen, type ScreenSnapshot } from './screen.ts'
+import { ARCHIVE_REPLAY_WINDOW, renderScreen, type ScreenSnapshot } from './screen.ts'
 import { SessionLifecycleManager } from './session-lifecycle.ts'
 import {
   mergePersistedSessions,
@@ -335,7 +335,7 @@ export class PTYManager {
    */
   async screen(
     id: string,
-    options: { cols?: number; rows?: number; scrollback?: number } = {}
+    options: { cols?: number; rows?: number; scrollback?: number; chars?: number } = {}
   ): Promise<ScreenSnapshot | null> {
     const info = await this.get(id)
     if (info === null) return null
@@ -348,17 +348,21 @@ export class PTYManager {
     // An archived session is bounded separately: its transcript has no ring buffer
     // to cap it, and the screen is at the end.
     const archive = live === null ? (this.sessionStore.readRaw(id) ?? '') : ''
-    const raw = live ?? archive.slice(-ARCHIVE_REPLAY_WINDOW)
-    const snapshot = await renderScreen(
-      raw,
+    const retained = live ?? archive
+    // The replay bound. The whole live ring buffer by default - a program that
+    // painted a row once and never touched it again must still be in the replay,
+    // or the screen is a reconstruction of what is still changing. A transcript has
+    // no ring buffer, so it is bounded by a named window. A caller that asks for
+    // less gets exactly that, and the result says how much of the session it
+    // covered.
+    const bound = options.chars ?? (live === null ? ARCHIVE_REPLAY_WINDOW : retained.length)
+    return renderScreen(
+      retained,
       options.cols ?? info.cols,
       options.rows ?? info.rows,
-      raw.length,
+      bound,
       options.scrollback ?? 0
     )
-    // A transcript longer than the archive window: the screen is from its end, and
-    // the snapshot says how much of the session it accounts for.
-    return archive.length > raw.length ? { ...snapshot, totalChars: archive.length } : snapshot
   }
 
   getRawBuffer(
@@ -522,16 +526,6 @@ export class PTYManager {
     }
   }
 }
-
-/**
- * How much of an ARCHIVED transcript is replayed for a screen.
- *
- * A live session is bounded by its ring buffer, so it is replayed whole. An archive
- * has no such cap, and the screen is at its end - but it also cannot be replayed
- * from a few hundred kilobytes, or a program that painted its header once would
- * come back with a blank top.
- */
-const ARCHIVE_REPLAY_WINDOW = 4 * 1024 * 1024
 
 export const manager = new PTYManager()
 

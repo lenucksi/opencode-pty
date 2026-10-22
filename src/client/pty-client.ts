@@ -124,7 +124,7 @@ export class PtyClient extends PtyClientTransport {
   /** The rest of the manager surface: methods the web UI and TUI need. */
   async screen(
     id: string,
-    options: { cols?: number; rows?: number; scrollback?: number } = {}
+    options: { cols?: number; rows?: number; scrollback?: number; chars?: number } = {}
   ): Promise<ScreenSnapshot | null> {
     return this.request<ScreenSnapshot | null>('screen', { id, ...options })
   }

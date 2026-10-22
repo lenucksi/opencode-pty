@@ -76,6 +76,7 @@ export function createRequestHandler(
         cols: params.cols as number | undefined,
         rows: params.rows as number | undefined,
         scrollback: params.scrollback as number | undefined,
+        chars: params.chars as number | undefined,
       }),
     get_raw_buffer: (params) => manager.getRawBuffer(params.id as string, params.since as number),
     read_since: (params) =>
