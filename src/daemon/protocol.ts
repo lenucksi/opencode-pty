@@ -12,12 +12,23 @@
  * Push:     {"method":"session_update","params":{"id":"pty_a1b2c3d4","status":"exited","exitCode":0}}
  */
 
+/**
+ * The version of the wire protocol.
+ *
+ * The daemon and the plugin are two processes that can be different builds: the
+ * daemon outlives the host, and a new plugin can talk to an old daemon. The
+ * version is what tells them apart - a client that meets a daemon of another
+ * version says so, instead of discovering it as a missing method.
+ *
+ * It goes up when the protocol changes in a way an old peer cannot survive.
+ */
+export const PROTOCOL_VERSION = 1
+
 export interface DaemonRequest {
   id: number
   method: string
   params?: Record<string, unknown>
 }
-
 export interface DaemonResponse {
   id: number
   result?: unknown

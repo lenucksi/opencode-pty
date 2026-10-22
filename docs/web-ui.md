@@ -17,6 +17,27 @@ If you name it "task" or "process" or anything else, the agent will sometimes ru
 
 This will start the background sessions observer cockpit server and launch the browser with web UI.
 
+### Starting it without OpenCode
+
+The interface is also a binary of its own, for a harness that is not OpenCode:
+
+```bash
+bunx opencode-pty-web
+```
+
+It serves the same interface against the daemon and prints the address on stdout,
+once. The daemon is the state: the sessions, the archive and the generation live
+there, so the interface shows the same sessions an OpenCode instance would - and a
+machine with no daemon gets one started rather than an error.
+
+**No permission authorizer is installed on this path.** The interface is a human's
+own surface, and the host's rules are the host's business - but that also means
+anything that can reach the port can start a process, which is why it binds to the
+loopback address by default (`PTY_WEB_HOSTNAME` moves it).
+
+The server writes an origin record keyed by the directory it was started in, so a
+running OpenCode TUI can find it; the record is removed when the process ends.
+
 ### Version
 
 Settings shows the version and the short Git commit of the build that is running,
