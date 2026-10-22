@@ -244,6 +244,50 @@ describe('pty_screen', () => {
     spy.mockRestore()
   })
 
+  it('replays a bounded window when one is asked for, and says it covered less', async () => {
+    // The bound is the caller's: a narrower window is a reconstruction, and the
+    // result has to say so rather than let a missing row pass for a row the
+    // program never painted.
+    const id = spawn(['-c', 'printf "first line\\r\\nsecond line\\r\\n"; sleep 5'], 60, 8)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    const result = text(await ptyScreen.execute({ id, chars: 12 }, ctx))
+
+    expect(result).toMatch(/partial="\d+\/\d+"/)
+    expect(result).toContain('Rendered from the last')
+  })
+
+  it('leaves the buffer and the character count untouched', async () => {
+    // The display path reads the buffer and replays it into a throwaway terminal.
+    // It must not consume anything: the raw stream is what the program produced,
+    // and a screen read that ate it would be a screen read that changed the
+    // session.
+    const id = spawn(['-c', 'printf "raw bytes stay raw\\r\\n"; sleep 5'], 60, 8)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    const before = manager.get(id)
+    const beforeRaw = manager.getRawBuffer(id, 0)
+    await ptyScreen.execute({ id }, ctx)
+    const after = manager.get(id)
+    const afterRaw = manager.getRawBuffer(id, 0)
+
+    expect(before?.charCount).toBe(after?.charCount)
+    expect(afterRaw?.raw).toBe(beforeRaw?.raw)
+    expect(afterRaw?.byteLength).toBe(beforeRaw?.byteLength)
+  })
+
+  it('still delivers the raw bytes byte for byte after a screen read', async () => {
+    // The whole point of the bound: the display path may look at less than the
+    // buffer, but what the program wrote is still there afterwards.
+    const id = spawn(['-c', 'printf "raw bytes stay raw\\r\\n"; sleep 5'], 60, 8)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    await ptyScreen.execute({ id, chars: 4 }, ctx)
+    const raw = manager.getRawBuffer(id, 0)
+
+    expect(raw?.raw).toContain('raw bytes stay raw')
+  })
+
   it('says so when the program is on the alternate screen', async () => {
     const id = spawn(['-c', 'printf "\\033[?1049hfull screen ui"; sleep 5'], 60, 8)
     await new Promise((resolve) => setTimeout(resolve, 500))

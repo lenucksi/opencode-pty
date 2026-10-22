@@ -57,6 +57,19 @@ export type { ColorSpan, StyledRun } from './screen-style.ts'
 export const DEFAULT_REPLAY_WINDOW = 262_144
 
 /**
+ * How much of an ARCHIVED transcript is replayed for a screen.
+ *
+ * A live session is bounded by its ring buffer, so it is replayed whole. An archive
+ * has no such cap, and the screen is at its end - but it also cannot be replayed
+ * from a few hundred kilobytes, or a program that painted its header once would
+ * come back with a blank top.
+ *
+ * Named, and stated in the result when it bites: a screen built from the tail of a
+ * transcript is a reconstruction, and a reader must not take it for the session.
+ */
+export const ARCHIVE_REPLAY_WINDOW = 4 * 1024 * 1024
+
+/**
  * Largest screen a single render will build, in cells.
  *
  * Reading the screen costs one host object per cell, and the cost grows faster
