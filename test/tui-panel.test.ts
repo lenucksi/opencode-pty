@@ -101,6 +101,8 @@ interface Observed {
   sessionPanels: RenderedSessionPanel[]
   /** How often the daemon was rolled from the sidebar. */
   daemonRolls: number
+  /** The action ids the panel sent with its rolls, in order. */
+  daemonRollIds: string[]
   /** Names passed to `ui.panel.open`, in order. */
   opened: string[]
   /** Routes navigated to, as `type` values, in order. */
@@ -264,15 +266,22 @@ function makeContext(observed: Observed): TuiContext {
         if (observed.rpcOrigin === undefined) throw new Error('not_running')
         return { url: observed.rpcOrigin }
       },
-      // The roll of the daemon, asked of the half that owns the client.
-      restartDaemon: async (): Promise<{
+      // The roll of the daemon, asked of the half that owns the client. The id the
+      // caller sent is recorded: it is the mark that lets the panel recognise the
+      // notice its own roll causes.
+      restartDaemon: async (input?: {
+        actionId?: string
+      }): Promise<{
         oldPid: number
         newPid: number
         restarted: boolean
       }> => {
         observed.daemonRolls += 1
+        if (input?.actionId !== undefined) observed.daemonRollIds.push(input.actionId)
         return { oldPid: 100, newPid: 200, restarted: true }
       },
+      // Which process is the daemon, for the footer's line.
+      daemonStatus: async (): Promise<{ pid: number }> => ({ pid: 4242 }),
       // The plugin's own events: how the server half says what a command did.
       events: {
         on: (name: string, handler: (event: { data: unknown }) => void): (() => void) => {
@@ -424,6 +433,7 @@ function observed(onCommand?: () => Promise<void>): Observed {
     footers: [],
     sessionPanels: [],
     daemonRolls: 0,
+    daemonRollIds: [],
     opened: [],
     navigated: [],
     fullscreenToggles: 0,
@@ -752,6 +762,52 @@ describe('the PTY sidebar panel', () => {
     expect(toast?.message).toContain('PTY daemon restarted')
     expect(toast?.message).toContain('1758332')
     expect(toast?.variant).toBe('success')
+  })
+
+  // A roll is announced to every surface, and the sidebar shows the answer to its
+  // own roll already - so the notice its own roll caused is not shown again. The
+  // mark is the action id it sent with the request.
+  test('stays quiet about the notice its own roll caused', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+
+    const subscription = seen.noticeHandlers.find((entry) => entry.name === 'notice')
+    if (!subscription) throw new Error('the panel subscribed to nothing')
+
+    await clickDaemonLine(seen)
+    const ownId = seen.daemonRollIds.at(-1)
+    if (ownId === undefined) throw new Error('the roll carried no action id')
+    const before = seen.toasts.length
+
+    subscription.handler({
+      data: {
+        message: 'PTY daemon restarted: old pid 100, new pid 200.',
+        variant: 'success',
+        origin: ownId,
+      },
+    })
+
+    expect(seen.toasts.length).toBe(before)
+  })
+
+  // The same notice from a roll this sidebar did not start - the browser's, or
+  // another instance's - is shown: it is the only way this surface learns that the
+  // machine changed.
+  test('shows a roll that was started elsewhere', async () => {
+    const seen = observed()
+    await tuiPanel.setup(makeContext(seen))
+
+    const subscription = seen.noticeHandlers.find((entry) => entry.name === 'notice')
+    if (!subscription) throw new Error('the panel subscribed to nothing')
+    subscription.handler({
+      data: {
+        message: 'PTY daemon restarted: old pid 7, new pid 9.',
+        variant: 'success',
+        origin: 'the-browser-made-this-up',
+      },
+    })
+
+    expect(seen.toasts.at(-1)?.message).toContain('new pid 9')
   })
 
   // A notice that is not one is dropped rather than shown as "[object Object]".

@@ -5,6 +5,9 @@ import { createActions } from './actions.ts'
 import { openSendDialog } from './send-dialog.ts'
 import { debug } from './debug.ts'
 import { restartDaemonAction } from './daemon-action.ts'
+import { noteDaemonPid } from './daemon-state.ts'
+import { listWithDaemonPid } from './daemon-status.ts'
+import { subscribeNotices } from './notices.ts'
 import { registerFilterCommand } from './filter-command.ts'
 import { type PanelSession, resolveParentTitles } from './lib.ts'
 import {
@@ -31,7 +34,7 @@ import {
   setFilter,
   toggleGroup,
 } from './sidebar-prefs.ts'
-import { noticeFromData, PtyServerRpc } from '../v2/rpc.ts'
+import { PtyServerRpc } from '../v2/rpc.ts'
 
 /**
  * The PTY sidebar: this project's PTY sessions, listed where the built-in sidebar
@@ -107,21 +110,13 @@ export default Plugin.define({
     }
 
     /**
-     * What the server half's commands did.
+     * What the server half says, and the mark that keeps it from saying it twice.
      *
-     * The host executes a slash command and drops whatever it returned, so a command
-     * that worked and a command that did nothing look the same. The server half says
-     * what it did over the plugin's own RPC event, and this is where that becomes a
-     * toast in front of the reader.
+     * The claim is shared with the footer's roll: the sidebar shows the answer to its
+     * own roll already, so it recognises its own notice and stays quiet - while the
+     * browser's roll, which has no mark of ours, is shown.
      */
-    try {
-      context.client.rpc(PtyServerRpc).events.on('notice', (event) => {
-        const notice = noticeFromData(event.data)
-        if (notice) notify(notice.message, notice.variant)
-      })
-    } catch (error) {
-      debug('notice.subscribe.failed', { error: String(error) })
-    }
+    const claim = subscribeNotices({ client: context.client, notify, debug })
 
     /**
      * The theme slots this plugin draws with, named rather than typed.
@@ -191,8 +186,15 @@ export default Plugin.define({
         setPanel((draft) => noteNoServer(draft, mayStart))
         return
       }
-      const sessions = await listSessions(origin)
-      setPanel((draft) => noteListSuccess(draft, origin as string, sessions))
+      const { sessions, pid } = await listWithDaemonPid({
+        client: context.client,
+        listSessions: () => listSessions(origin as string),
+        debug,
+      })
+      setPanel((draft) => {
+        noteListSuccess(draft, origin as string, sessions)
+        noteDaemonPid(draft, pid)
+      })
     }
 
     /**
@@ -337,6 +339,7 @@ export default Plugin.define({
     const onRestartDaemon = restartDaemonAction({
       client: context.client,
       update: setPanel,
+      claim,
       notify,
       debug,
     })

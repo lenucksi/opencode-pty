@@ -1369,3 +1369,72 @@ span.settings-build-value {
 .undo-toast-dismiss:hover {
   color: var(--fg);
 }
+
+/* Toasts: what the plugin's server half wants the reader to see (a slash command's
+   result, a roll of the daemon started elsewhere) and what a failed click says.
+   Bottom-right, opposite the undo bar: a removal's undo has a deadline and must not
+   be pushed aside by a notice about something else. */
+.toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 32px));
+  /* The stack sits over the terminal. A card that captured the mouse would swallow
+     the drag that selects text and the click that focuses the terminal, so nothing
+     here takes a pointer event except the close button. */
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #0008;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fg);
+  pointer-events: none;
+}
+.toast-info {
+  border-left-color: var(--accent);
+}
+.toast-success {
+  border-left-color: var(--success);
+}
+/* The palette has no warning or error accent of its own: the terminal's own
+   yellow and red are the two the interface already uses for "careful" and "no". */
+.toast-warning {
+  border-left-color: var(--term-ansi-3);
+}
+.toast-error {
+  border-left-color: var(--danger);
+}
+.toast-message {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.toast-close {
+  flex-shrink: 0;
+  /* The one interactive part. */
+  pointer-events: auto;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.toast-close:hover,
+.toast-close:focus-visible {
+  color: var(--fg);
+}

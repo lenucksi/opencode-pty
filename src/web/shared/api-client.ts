@@ -249,12 +249,17 @@ export function createApiClient(baseUrl: string) {
      * The daemon is machine state that every opencode instance on the machine
      * shares, so the roll ends every session it owns - the PTY masters belong to
      * that process. The answer says which pids were involved.
+     *
+     * `actionId` is the caller's own mark: the roll is announced to every surface,
+     * and the one that started it recognises its own mark and stays quiet, because
+     * it shows the answer itself.
      */
     daemon: {
-      restart: () =>
+      restart: (actionId?: string) =>
         apiFetchJson<typeof routes.daemon, 'POST', DaemonRestartResponse>(routes.daemon, {
           method: 'POST',
           baseUrl,
+          ...(actionId === undefined ? {} : { body: { actionId } }),
         }),
     },
   } as const

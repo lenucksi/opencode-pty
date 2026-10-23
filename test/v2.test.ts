@@ -348,6 +348,17 @@ describe('OpenCode V2 Plugin API', () => {
       expect(answer).toEqual({ oldPid: 0, newPid: 0, restarted: false })
     })
 
+    // The footer's line shows the pid of the daemon that is running. A machine
+    // without one is a working machine - the PTY service runs in-process - so the
+    // answer is 0 rather than an error.
+    it('reports no daemon as 0, not as a failure', async () => {
+      const methods = await registeredMethods()
+
+      const answer = await methods.daemonStatus?.({}, {})
+
+      expect(answer).toEqual({ pid: 0 })
+    })
+
     it('says where the server is, or that there is none', async () => {
       const methods = await registeredMethods()
 

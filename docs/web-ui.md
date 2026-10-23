@@ -62,6 +62,29 @@ survives and stays restorable.
 The button is disabled while a roll runs: two rolls at once are how a machine
 ends up with two daemons.
 
+### Toasts
+
+A toast appears in the corner when the plugin's server half has something to say: a
+slash command's result (`/pty-daemon-restart`, `/pty-show-server-url`), or a roll of
+the daemon that **another** surface started — the TUI's sidebar, another browser tab.
+The message arrives over the WebSocket the page already holds, so nothing reloads.
+
+The page stays quiet about the rolls it started itself: the answer is next to the
+button, and the mark the roll carries is how the page recognises its own notice.
+
+A failed action gets a toast too, and that is the more common case: input the server
+could not write, a session the server refused to remove, a bulk removal that failed,
+an undo that did not restore. Those used to be a line in the browser's console —
+which is to say invisible.
+
+The stack sits bottom-right, opposite the undo bar: a removal's undo has a deadline
+and must not be pushed aside by a notice about something else. It takes no pointer
+events except its dismiss button, so it never swallows a click or a selection in the
+terminal.
+
+A page served by a **different** OpenCode instance (or by `opencode-pty-web`) does
+not get these: the notices are about the commands of the instance that emitted them.
+
 ### Features
 
 - **Session List**: View all PTY sessions with status indicators, split into running and finished

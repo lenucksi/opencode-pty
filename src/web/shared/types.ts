@@ -75,6 +75,7 @@ export interface WSMessageServer {
     | 'session_list'
     | 'session_update'
     | 'session_removed'
+    | 'notice'
     | 'error'
 }
 
@@ -119,6 +120,21 @@ export interface WSMessageServerSessionUpdate extends WSMessageServer {
 export interface WSMessageServerSessionRemoved extends WSMessageServer {
   type: 'session_removed'
   sessionId: string
+}
+
+/**
+ * Something the reader should see, pushed to every connected page.
+ *
+ * The same notice the TUI half turns into a toast: a slash command's result, a
+ * roll of the daemon. `origin` is the id of the action that caused it, so the
+ * surface that started it can recognise its own and stay quiet - it already
+ * showed the answer.
+ */
+export interface WSMessageServerNotice extends WSMessageServer {
+  type: 'notice'
+  message: string
+  variant: 'info' | 'success' | 'warning' | 'error'
+  origin?: string
 }
 
 export interface WSMessageServerError extends WSMessageServer {

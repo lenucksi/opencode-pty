@@ -1,6 +1,8 @@
+import { OriginClaim } from 'opencode-pty/shared/notice'
 import type {
   PTYSessionInfo,
   ServerInfoResponse,
+  WSMessageServerNotice,
   WSMessageServerRawData,
 } from 'opencode-pty/web/shared/types'
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -12,6 +14,7 @@ import { useBulkRemoval } from '../hooks/use-bulk-removal.ts'
 import { useCopyFeedback } from '../hooks/use-copy-feedback.ts'
 import { useRawStream } from '../hooks/use-raw-stream.ts'
 import { useSessionManager } from '../hooks/use-session-manager.ts'
+import { useToasts } from '../hooks/use-toasts.ts'
 import { useTerminalResize } from '../hooks/use-terminal-resize.ts'
 import { useTheme } from '../hooks/use-theme.ts'
 import { useUiPrefs } from '../hooks/use-ui-prefs.ts'
@@ -21,6 +24,7 @@ import type { ThemeScheme } from '../lib/theme.ts'
 import { DocsModal } from './docs-modal.tsx'
 import { DownloadMenu } from './download-menu.tsx'
 import { RemoveSessionsDialog, UndoToast } from './remove-sessions-dialog.tsx'
+import { ToastStack } from './toast-stack.tsx'
 import { SettingsModal } from './settings-modal.tsx'
 import { Sidebar } from './sidebar.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
@@ -156,6 +160,17 @@ export function App() {
 
   const { preference: themePreference, scheme, setPreference: setThemePreference } = useTheme()
   const { prefs, setTerminalFontSize, setShowDebugBar } = useUiPrefs()
+
+  /**
+   * The toasts, and the marks of the actions this page started.
+   *
+   * A roll of the daemon is announced to every surface, and this page shows the
+   * answer to its own roll next to the button - so it recognises its own notice and
+   * stays quiet. The TUI's roll has no mark of ours and is shown, which is how a
+   * roll started there reaches this page.
+   */
+  const { toasts, show: showToast, dismiss: dismissToast } = useToasts()
+  const claimRef = useRef(new OriginClaim())
 
   const appShellRef = useRef<HTMLDivElement>(null)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
@@ -339,6 +354,14 @@ export function App() {
       })
     }, []),
     onSessionRemoved: handleSessionRemoved,
+    onNotice: useCallback(
+      (notice: WSMessageServerNotice) => {
+        // Our own roll: the answer is next to the button that asked.
+        if (claimRef.current.owns(notice.origin)) return
+        showToast(notice.message, notice.variant)
+      },
+      [showToast]
+    ),
   })
 
   const { outputContainerRef, handleTerminalResize } = useTerminalResize({
@@ -363,6 +386,7 @@ export function App() {
     onSessionReset: resetRawStream,
     onSnapshot: applySnapshot,
     getSinceOffset: getOffset,
+    onError: useCallback((message: string) => showToast(message, 'error'), [showToast]),
   })
 
   const removeSessionFromList = handleSessionRemoved
@@ -388,6 +412,7 @@ export function App() {
     sessions,
     onRemoved: handleSessionsRemoved,
     onRestored: setSessions,
+    onError: useCallback((message: string) => showToast(message, 'error'), [showToast]),
   })
 
   /**
@@ -471,6 +496,7 @@ export function App() {
         onShowDebugBarChange={setShowDebugBar}
         buildInfo={buildInfo}
         persist={persist}
+        claimActionId={() => claimRef.current.start()}
       />
       <DocsModal
         open={docsOpen}
@@ -495,6 +521,7 @@ export function App() {
         onUndo={() => void undoRemoval()}
         onDismiss={dismissUndo}
       />
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </>
   )
 }

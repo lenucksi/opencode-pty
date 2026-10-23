@@ -2,6 +2,7 @@ import type { MouseEvent } from '@opentui/core'
 
 import type { Plugin } from '@opencode/plugin/tui'
 
+import type { OriginClaim } from '../shared/notice.ts'
 import { daemonRestartFromData, PtyServerRpc } from '../v2/rpc.ts'
 import { type DaemonHolder, noteDaemonRestarted, noteDaemonRestarting } from './daemon-state.ts'
 
@@ -28,6 +29,13 @@ export interface DaemonRollDeps {
    * a change that does not go through it would not reach the screen.
    */
   readonly update: (mutate: (draft: DaemonHolder) => void) => void
+  /**
+   * The ids of the actions this surface started.
+   *
+   * The roll is announced to every surface, and this one shows the answer itself -
+   * so it has to recognise its own notice and stay quiet.
+   */
+  readonly claim: OriginClaim
   /** Say what happened, where the reader will see it. */
   readonly notify: (message: string, variant: 'info' | 'success' | 'warning' | 'error') => void
   /** The panel's own trace, for a reader who wants to see what was asked. */
@@ -43,11 +51,14 @@ export interface DaemonRollDeps {
 export function restartDaemonAction(deps: DaemonRollDeps): (event: MouseEvent) => void {
   return (event: MouseEvent): void => {
     event.stopPropagation()
+    // Claimed before the request goes out: the notice can arrive before the answer
+    // does, and an id claimed afterwards would miss it.
+    const actionId = deps.claim.start()
     deps.update((draft) => noteDaemonRestarting(draft))
-    deps.debug('daemon.restart.requested')
+    deps.debug('daemon.restart.requested', { actionId })
     void deps.client
       .rpc(PtyServerRpc)
-      .restartDaemon({})
+      .restartDaemon({ actionId })
       .then((raw: unknown) => {
         const answer = daemonRestartFromData(raw)
         deps.update((draft) => noteDaemonRestarted(draft, answer?.newPid ?? null))

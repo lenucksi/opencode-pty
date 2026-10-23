@@ -385,7 +385,7 @@ export class PtyClientTransport {
    * gone, and a file that was written by a daemon that lost the path names the
    * wrong one. The file is the fallback for a daemon that does not answer.
    */
-  private async daemonPid(): Promise<number | null> {
+  async daemonPid(): Promise<number | null> {
     if (this.connected) {
       try {
         const pong = await this.request<{ pid?: number }>('ping')

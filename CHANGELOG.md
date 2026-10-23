@@ -33,6 +33,33 @@ belongs to the server, not to the surface that asks.
 A roll ends every session the daemon owns: the PTY masters belong to that
 process. The archive on disk survives.
 
+Every roll is announced to every surface, marked with the id of the action that
+started it. The surface that started it recognises its own mark and stays quiet (it
+already shows the answer); every other one shows it. So a roll from the browser
+reaches the TUI's sidebar, and the other way round.
+
+The sidebar's line now shows the **running** daemon's pid, refreshed by the panel's
+poll rather than only by its own roll, so a roll started anywhere is visible there
+within a tick.
+
+**Toasts in the web interface**
+
+The web interface shows what the server half says: a slash command's result, a roll
+started in another surface. The notice arrives over the WebSocket the page already
+holds, with the same shape the TUI half turns into a toast.
+
+Failed actions are toasts now too — input the server could not write, a session it
+refused to remove, a bulk removal that failed, an undo that did not restore. They
+used to be a line in the browser's console, which is to say invisible.
+
+### Security
+
+- **`ip-address` is overridden past a moderate advisory.** `ip-address@10.7.3`
+  (Address6 matching a zone identifier in quadratic time) reached the lockfile
+  through `express-rate-limit` — in the MCP SDK's express stack — and through
+  `socks`. Neither is instantiated here: the MCP route is stdio-only. The override
+  is inside the contract, since both carriers declare `ip-address` as `^10.x`.
+
 ## [1.0.0] - 2026-10-22
 
 The line that makes the daemon the core and everything else a client of it. The

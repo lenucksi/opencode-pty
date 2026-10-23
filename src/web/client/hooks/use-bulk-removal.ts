@@ -24,6 +24,8 @@ interface UseBulkRemovalOptions {
   sessions: PTYSessionInfo[]
   onRemoved: (ids: string[]) => void
   onRestored: (sessions: PTYSessionInfo[]) => void
+  /** Where a failure goes, for the same reason as `useSessionManager`'s. */
+  onError?: (message: string) => void
 }
 
 interface UseBulkRemoval {
@@ -56,6 +58,7 @@ export function useBulkRemoval({
   sessions,
   onRemoved,
   onRestored,
+  onError,
 }: UseBulkRemovalOptions): UseBulkRemoval {
   const [plan, setPlan] = useState<RemovalPlan | null>(null)
   const [undo, setUndo] = useState<UndoState | null>(null)
@@ -87,8 +90,9 @@ export function useBulkRemoval({
       setUndo({ count: gone.length, ids: result.removed })
     } catch (error) {
       console.error('Failed to remove selected sessions', error)
+      onError?.('The selected sessions were not removed.')
     }
-  }, [plan, onRemoved])
+  }, [plan, onRemoved, onError])
 
   const undoRemoval = useCallback(async () => {
     const pending = undo
@@ -103,8 +107,9 @@ export function useBulkRemoval({
       setUndo(result.failed.length > 0 ? { ...pending, ids: result.failed } : null)
     } catch (error) {
       console.error('Failed to restore removed sessions', error)
+      onError?.('The removed sessions could not be restored.')
     }
-  }, [undo, onRestored])
+  }, [undo, onRestored, onError])
 
   const dismissUndo = useCallback(() => setUndo(null), [])
 

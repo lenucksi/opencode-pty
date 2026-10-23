@@ -4,6 +4,7 @@ import type {
   WSMessageClientResize,
   WSMessageServer,
   WSMessageServerError,
+  WSMessageServerNotice,
   WSMessageServerRawData,
   WSMessageServerSessionList,
   WSMessageServerSessionRemoved,
@@ -17,6 +18,8 @@ interface UseWebSocketOptions {
   onSessionList: (sessions: PTYSessionInfo[], autoSelected: PTYSessionInfo | null) => void
   onSessionUpdate?: (updatedSession: PTYSessionInfo) => void
   onSessionRemoved?: (sessionId: string) => void
+  /** Something the plugin's server half wants the reader to see. */
+  onNotice?: (notice: WSMessageServerNotice) => void
 }
 
 const RECONNECT_MIN_DELAY = RETRY_DELAY
@@ -29,12 +32,67 @@ const RECONNECT_MAX_DELAY = 10_000
 const STALE_SOCKET_MS = 45_000
 const WATCHDOG_INTERVAL_MS = 5_000
 
+/**
+ * One message, handed to whatever acts on it.
+ *
+ * A plain function rather than a closure inside the socket's handlers: it is the one
+ * place that knows the message grammar, and keeping it out of `connect` lets both be
+ * read without the other's housekeeping around them.
+ */
+interface DispatchDeps {
+  readonly handlers: {
+    onRawData?: (message: WSMessageServerRawData) => void
+    onSessionList: (sessions: PTYSessionInfo[], autoSelected: PTYSessionInfo | null) => void
+    onSessionUpdate?: (updatedSession: PTYSessionInfo) => void
+    onSessionRemoved?: (sessionId: string) => void
+    onNotice?: (notice: WSMessageServerNotice) => void
+  }
+  readonly activeSessionRef: { current: PTYSessionInfo | null }
+  readonly send: (message: unknown) => void
+}
+
+function dispatchMessage(data: WSMessageServer, deps: DispatchDeps): void {
+  const handlers = deps.handlers
+
+  if (data.type === 'session_list') {
+    const sessions = (data as WSMessageServerSessionList).sessions || []
+    // Auto-select the first running session if none is selected (skipped in tests
+    // that need the empty state).
+    const shouldSkipAutoselect = localStorage.getItem(SKIP_AUTOSELECT_KEY) === 'true'
+    let autoSelected: PTYSessionInfo | null = null
+    if (sessions.length > 0 && !deps.activeSessionRef.current && !shouldSkipAutoselect) {
+      autoSelected = sessions.find((s) => s.status === 'running') ?? sessions[0] ?? null
+      if (autoSelected) {
+        deps.activeSessionRef.current = autoSelected
+        deps.send({ type: 'subscribe', sessionId: autoSelected.id })
+      }
+    }
+    handlers.onSessionList(sessions, autoSelected)
+  } else if (data.type === 'session_update') {
+    handlers.onSessionUpdate?.((data as WSMessageServerSessionUpdate).session)
+  } else if (data.type === 'session_removed') {
+    handlers.onSessionRemoved?.((data as WSMessageServerSessionRemoved).sessionId)
+  } else if (data.type === 'raw_data') {
+    const rawDataMsg = data as WSMessageServerRawData
+    if (rawDataMsg.sessionId === deps.activeSessionRef.current?.id) {
+      handlers.onRawData?.(rawDataMsg)
+    }
+  } else if (data.type === 'notice') {
+    handlers.onNotice?.(data as WSMessageServerNotice)
+  } else if (data.type === 'error') {
+    console.warn('WebSocket server error:', (data as WSMessageServerError).error)
+  }
+  // `subscribed`, `unsubscribed`, and `readRawResponse` are intentionally ignored:
+  // subscription state is tracked locally and raw buffers are read over HTTP.
+}
+
 export function useWebSocket({
   activeSession,
   onRawData,
   onSessionList,
   onSessionUpdate,
   onSessionRemoved,
+  onNotice,
 }: UseWebSocketOptions) {
   const [connected, setConnected] = useState(false)
 
@@ -46,14 +104,20 @@ export function useWebSocket({
   // never tears down the socket. The connection is created once and kept for
   // the lifetime of the component; the server pushes list/update/removed
   // events, so there is no need to reconnect on session switches.
-  const handlersRef = useRef({ onRawData, onSessionList, onSessionUpdate, onSessionRemoved })
+  const handlersRef = useRef({
+    onRawData,
+    onSessionList,
+    onSessionUpdate,
+    onSessionRemoved,
+    onNotice,
+  })
 
   useEffect(() => {
     activeSessionRef.current = activeSession
   }, [activeSession])
 
   useEffect(() => {
-    handlersRef.current = { onRawData, onSessionList, onSessionUpdate, onSessionRemoved }
+    handlersRef.current = { onRawData, onSessionList, onSessionUpdate, onSessionRemoved, onNotice }
   })
 
   useEffect(() => {
@@ -102,37 +166,11 @@ export function useWebSocket({
         lastMessageAtRef.current = Date.now()
         try {
           const data = JSON.parse(event.data) as WSMessageServer
-          const handlers = handlersRef.current
-
-          if (data.type === 'session_list') {
-            const sessions = (data as WSMessageServerSessionList).sessions || []
-            // Auto-select the first running session if none is selected (skipped
-            // in tests that need the empty state).
-            const shouldSkipAutoselect = localStorage.getItem(SKIP_AUTOSELECT_KEY) === 'true'
-            let autoSelected: PTYSessionInfo | null = null
-            if (sessions.length > 0 && !activeSessionRef.current && !shouldSkipAutoselect) {
-              autoSelected = sessions.find((s) => s.status === 'running') ?? sessions[0] ?? null
-              if (autoSelected) {
-                activeSessionRef.current = autoSelected
-                send({ type: 'subscribe', sessionId: autoSelected.id })
-              }
-            }
-            handlers.onSessionList(sessions, autoSelected)
-          } else if (data.type === 'session_update') {
-            handlers.onSessionUpdate?.((data as WSMessageServerSessionUpdate).session)
-          } else if (data.type === 'session_removed') {
-            handlers.onSessionRemoved?.((data as WSMessageServerSessionRemoved).sessionId)
-          } else if (data.type === 'raw_data') {
-            const rawDataMsg = data as WSMessageServerRawData
-            if (rawDataMsg.sessionId === activeSessionRef.current?.id) {
-              handlers.onRawData?.(rawDataMsg)
-            }
-          } else if (data.type === 'error') {
-            console.warn('WebSocket server error:', (data as WSMessageServerError).error)
-          }
-          // `subscribed`, `unsubscribed`, and `readRawResponse` are intentionally
-          // ignored: subscription state is tracked locally and raw buffers are
-          // read over HTTP.
+          dispatchMessage(data, {
+            handlers: handlersRef.current,
+            activeSessionRef,
+            send,
+          })
         } catch (error) {
           console.warn('Failed to parse WebSocket message', error)
         }

@@ -85,9 +85,16 @@ appear.
 ### The daemon line
 
 The footer's second line is the daemon: `daemon · restart`, and the pid of the
-daemon that answered the last roll once there is one. Clicking it rolls the
-daemon; while the roll runs the line says `daemon · restarting…`, and the
-result arrives as a toast.
+daemon that is running — `daemon 1947407 · restart` — once the server reports one.
+The pid follows the poll, so a roll started anywhere (another instance, the browser)
+shows up within a tick. A machine without a daemon shows no pid rather than "not
+running": the PTY service runs in-process then, so "no daemon" is not "no service".
+
+Clicking the line rolls the daemon; while the roll runs the line says
+`daemon · restarting…`, and the result arrives as a toast. Every roll is announced
+to every surface, and each one recognises the notice it caused itself — the answer
+is already on screen — while a roll started elsewhere is shown. So a roll from the
+browser's settings reaches this sidebar as a toast.
 
 The daemon is **machine state, not panel state**. Every OpenCode instance on the
 machine talks to the same daemon over one socket, so a roll is a decision about
