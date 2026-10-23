@@ -234,6 +234,20 @@ describe('the TUI dependencies', () => {
     expect(manifest.overrides?.seroval).toBe('1.6.8')
   })
 
+  // The same shape once more, and the one that arrived last: `ip-address@10.7.3` carries a
+  // moderate advisory (Address6 matches a zone identifier in quadratic time), and it reached
+  // the lockfile twice - through `express-rate-limit` (in the MCP SDK's express stack) and
+  // through `socks`. Nothing in this repository parses an IP literal that way; the MCP route
+  // is stdio-only, so neither express nor the SOCKS agent is instantiated.
+  //
+  // Inside the contract as well: both carriers declare `ip-address` as `^10.x`, so 10.7.4 is
+  // a version their own manifests accept, and the patch is the fix for this advisory.
+  it('overrides ip-address past the detail advisory its carriers pin into it', () => {
+    // Expiry: when `express-rate-limit` (or `socks`) moves to a range that already admits a
+    // patched version, the override has outlived its reason and goes.
+    expect(manifest.overrides?.['ip-address']).toBe('10.7.4')
+  })
+
   // The premise the override is comfortable in: the vulnerable code is a build-time and
   // SSR-only path, and `solid-js` is not something a consumer installs. Were it promoted to
   // `dependencies`, a terminal plugin would be shipping Solid's server renderer - code that
