@@ -21,7 +21,7 @@ import {
   restoreSessions,
   sendInput,
 } from './handlers/sessions.ts'
-import { buildStaticRoutes, serveIndexHtml } from './handlers/static.ts'
+import { buildStaticRoutes, serveIndexHtml, serveStaticFallback } from './handlers/static.ts'
 import { handleUpgrade } from './handlers/upgrade.ts'
 
 /** The pub/sub topic every connected page subscribes to, for the plugin's notices. */
@@ -208,8 +208,10 @@ export class PTYServer implements Disposable {
 
       routes: {
         ...this.staticRoutes,
-        // The HTML shell is served from disk per request (revalidating cache),
-        // so a new build is picked up on reload instead of the next restart.
+        // The HTML shell is served from disk per request (revalidating cache), and
+        // an asset a later build added falls through to `serveStaticFallback`, so a
+        // new build is picked up on reload instead of the next restart - shell and
+        // assets alike.
         '/': () => serveIndexHtml(),
         '/index.html': () => serveIndexHtml(),
         [routes.websocket.path]: (req: Request) => handleUpgrade(this.server, req),
@@ -276,7 +278,9 @@ export class PTYServer implements Disposable {
         },
       },
 
-      fetch: () => new Response(null, { status: 302, headers: { Location: '/index.html' } }),
+      // A path no route claimed: an asset a rebuild added (served from disk), or
+      // something the app does not have (sent to `/`, not `/index.html`).
+      fetch: (request: Request) => serveStaticFallback(request),
     })
   }
 

@@ -15,7 +15,7 @@ If you name it "task" or "process" or anything else, the agent will sometimes ru
 1. Run opencode with the plugin.
 2. Run slash command `/pty-open-background-spy`.
 
-This will start the background sessions observer cockpit server and launch the browser with web UI.
+This will start the background sessions observer cockpit server and launch the browser with web UI, at the root address (`http://127.0.0.1:4200/`, or whatever port the plugin was given). A path the app does not have redirects there, so a stale bookmark or a typo still lands on the interface with a URL you can type.
 
 ### Starting it without OpenCode
 
@@ -61,6 +61,12 @@ survives and stays restorable.
 
 The button is disabled while a roll runs: two rolls at once are how a machine
 ends up with two daemons.
+
+### Rebuilding while it runs
+
+The interface is served from `dist/web`. Rebuilding it under a running server is fine:
+the shell is read per request, and an asset the new build added is read from disk on
+demand, so a reload picks the new bundle up instead of the next server restart.
 
 ### Toasts
 
