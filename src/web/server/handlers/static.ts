@@ -55,6 +55,63 @@ export async function serveIndexHtml(): Promise<Response> {
   })
 }
 
+/**
+ * An asset that the route map does not hold, read from disk.
+ *
+ * `buildStaticRoutes` reads `dist/web` once, at start, and keeps the files in memory.
+ * `index.html` is read per request on purpose - it is what points at the content-hashed
+ * assets - so a rebuild under a running server hands the browser filenames the route
+ * map has never seen. The routes miss, and before this existed the miss fell through
+ * to the redirect: the browser asked for a `.js` module and got `index.html`, a white
+ * page and a MIME-type error, with nothing on screen to say why.
+ *
+ * Reading the file off disk is what makes "a new build is picked up on reload" true for
+ * the assets as well as for the shell. Only `/assets/` is served this way, and only
+ * below the directory: it is content-hashed output, so a miss there can only mean "a
+ * newer build", and a path that tries to leave it is refused rather than normalised.
+ */
+async function serveAssetFromDisk(pathname: string): Promise<Response | null> {
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(pathname)
+  } catch {
+    return null
+  }
+  // `..` and a NUL are the two ways out of a directory. Checked on the decoded path,
+  // because the URL parser leaves `%2e%2e` alone while `join` would honour it.
+  if (decoded.includes('..') || decoded.includes('\0')) return null
+  const fullPath = join(STATIC_DIR, decoded)
+  if (!fullPath.startsWith(`${STATIC_DIR}/`)) return null
+  const file = Bun.file(fullPath)
+  if (!(await file.exists())) return null
+  return new Response(await file.bytes(), {
+    headers: {
+      'Content-Type':
+        file.type || ASSET_CONTENT_TYPES[extname(fullPath)] || 'application/octet-stream',
+      'Cache-Control': IMMUTABLE_CACHE,
+      ...SECURITY_HEADERS,
+    },
+  })
+}
+
+/**
+ * The last resort, for a path no route claims.
+ *
+ * A missing asset is a 404 rather than the shell: a module that 404s says what is
+ * wrong in one console line, while a shell answered to a `.js` request is the white
+ * page this exists to end. Anything else is a path the app does not have - a stale
+ * bookmark, a typo - and lands on the app itself, under its own address, so the URL a
+ * reader ends up looking at is `:4200/` and not `:4200/index.html`.
+ */
+export async function serveStaticFallback(request: Request): Promise<Response> {
+  const { pathname } = new URL(request.url)
+  if (!pathname.startsWith('/assets/')) {
+    return new Response(null, { status: 302, headers: { Location: '/' } })
+  }
+  const asset = await serveAssetFromDisk(pathname)
+  return asset ?? new Response('Not found', { status: 404, headers: SECURITY_HEADERS })
+}
+
 export async function buildStaticRoutes(): Promise<Record<string, Response>> {
   const routes: Record<string, Response> = {}
   const files = readdirSync(STATIC_DIR, { recursive: true })

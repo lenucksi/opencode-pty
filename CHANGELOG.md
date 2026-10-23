@@ -52,6 +52,16 @@ Failed actions are toasts now too — input the server could not write, a sessio
 refused to remove, a bulk removal that failed, an undo that did not restore. They
 used to be a line in the browser's console, which is to say invisible.
 
+### Fixed
+
+- **A rebuild no longer white-screens a running interface.** The static route map is
+  built once, at start, while `index.html` is read per request — so a rebuilt `dist/web`
+  handed the browser content-hashed asset names the running server had never seen. The
+  miss fell through to the redirect, and the browser got HTML for a `.js` module: a white
+  page with a MIME-type error. A missing asset is now read from disk, and one that is
+  really absent answers 404 instead of the shell.
+- **A path the app does not have lands on `/`, not on `/index.html`.**
+
 ### Security
 
 - **`ip-address` is overridden past a moderate advisory.** `ip-address@10.7.3`
