@@ -54,6 +54,20 @@ export function noteDaemonRestarting(state: DaemonHolder): void {
 }
 
 /**
+ * The daemon the server reports, as the poll found it.
+ *
+ * Ignored while a roll is running: the answer to that roll is newer than a list
+ * refresh that was already in flight, and it must not be overwritten by it. The
+ * line is drawn from the poll otherwise, so a roll started anywhere - another
+ * instance, the browser - shows up in the pid within a tick.
+ */
+export function noteDaemonPid(state: DaemonHolder, pid: number | null): void {
+  if (state.daemon.restarting) return
+  if (state.daemon.pid === pid) return
+  state.daemon = { restarting: false, pid }
+}
+
+/**
  * The roll is over, whatever it did.
  *
  * The pid is what the roll reported, so the line can name the daemon that is

@@ -6,6 +6,8 @@ import { setParentSessionTitleResolver } from '../src/plugin/pty/parent-session-
 import { setPermissionAuthorizer } from '../src/plugin/pty/permissions.ts'
 import { currentBuildInfo, resetBuildInfoCache } from '../src/plugin/pty/read-build-info.ts'
 import { describeBuild } from '../src/shared/build-info.ts'
+import type { Notice } from '../src/shared/notice.ts'
+import { setNoticeEmitter } from '../src/v2/rpc.ts'
 import { restartDaemonRoute } from '../src/web/server/handlers/daemon.ts'
 import { handleHealth } from '../src/web/server/handlers/health.ts'
 import { getParentSessions } from '../src/web/server/handlers/parent-sessions.ts'
@@ -32,11 +34,22 @@ afterEach(() => {
 })
 
 describe('the daemon route', () => {
+  /** The request the page sends: a POST, optionally carrying its own action id. */
+  const request = (body?: unknown): Request =>
+    new Request('http://localhost/api/daemon/restart', {
+      method: 'POST',
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+
+  afterEach(() => {
+    setNoticeEmitter(null)
+  })
+
   it('rolls the daemon and says which pids were involved', async () => {
     const rolled = { oldPid: 100, newPid: 200 }
     const restart = spyOn(managerModule, 'restartDaemon').mockResolvedValue(rolled)
 
-    const response = await restartDaemonRoute()
+    const response = await restartDaemonRoute(request())
 
     expect(response.status).toBe(200)
     const body = (await response.json()) as {
@@ -48,10 +61,37 @@ describe('the daemon route', () => {
     expect(restart).toHaveBeenCalled()
   })
 
+  // The roll is machine state, so every surface hears about it. The page that
+  // started it carries its own id and can recognise - and ignore - the notice;
+  // the TUI has no id of its own and shows it.
+  it('announces the roll, marked with the id the page sent', async () => {
+    spyOn(managerModule, 'restartDaemon').mockResolvedValue({ oldPid: 100, newPid: 200 })
+    const notices: Notice[] = []
+    setNoticeEmitter((notice) => notices.push(notice))
+
+    await restartDaemonRoute(request({ actionId: 'page-roll-1' }))
+
+    expect(notices).toHaveLength(1)
+    expect(notices[0]?.origin).toBe('page-roll-1')
+    expect(notices[0]?.message).toContain('old pid 100')
+    expect(notices[0]?.message).toContain('new pid 200')
+  })
+
+  it('announces it unmarked when the request sent no id', async () => {
+    spyOn(managerModule, 'restartDaemon').mockResolvedValue({ oldPid: 100, newPid: 200 })
+    const notices: Notice[] = []
+    setNoticeEmitter((notice) => notices.push(notice))
+
+    await restartDaemonRoute(request())
+
+    expect(notices).toHaveLength(1)
+    expect(notices[0]?.origin).toBeUndefined()
+  })
+
   it('says so when the roll failed, rather than pretending it worked', async () => {
     spyOn(managerModule, 'restartDaemon').mockRejectedValue(new Error('no daemon'))
 
-    const response = await restartDaemonRoute()
+    const response = await restartDaemonRoute(request())
 
     expect(response.status).toBe(500)
     expect(await response.text()).toContain('no daemon')

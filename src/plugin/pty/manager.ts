@@ -539,7 +539,7 @@ export function setManagerNotifier(notifier: SessionNotifier | null): void {
 }
 
 // Daemon mode: the plugin can delegate to a daemon process over IPC.
-import { PtyClient, sharedDaemonPid } from '../../client/pty-client.ts'
+import { isProcessAlive, PtyClient, sharedDaemonPid } from '../../client/pty-client.ts'
 
 let _ptyClient: PtyClient | null = null
 let _daemonMode = false
@@ -604,6 +604,20 @@ async function reportProtocolVersion(client: PtyClient): Promise<void> {
  * an instance that does not use the daemon can still roll it - but only if there IS
  * one, because a restart must not start what is not there.
  */
+/**
+ * Which process is the daemon, or null when nobody runs one.
+ *
+ * The daemon's own answer when this instance talks to one: the pid file only
+ * guesses, and a file left behind by a daemon that died names a process that is
+ * gone. An instance that does not use the daemon still shares the machine with
+ * one, so the file is read - but only a live process counts.
+ */
+export async function daemonPid(): Promise<number | null> {
+  if (_daemonMode && _ptyClient) return _ptyClient.daemonPid()
+  const pid = sharedDaemonPid()
+  return pid !== null && isProcessAlive(pid) ? pid : null
+}
+
 export async function restartDaemon(): Promise<{
   oldPid: number | null
   newPid: number | null

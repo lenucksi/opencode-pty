@@ -22,6 +22,15 @@ interface SettingsModalProps {
   showDebugBar: boolean
   onShowDebugBarChange: (show: boolean) => void
   /**
+   * A fresh mark for an action this dialog starts.
+   *
+   * The roll is announced to every surface, and this page shows the answer next to
+   * the button - so it has to recognise its own notice and stay quiet. The mark is
+   * what it recognises; the app owns the set of them, because the page's other
+   * actions may claim their own.
+   */
+  claimActionId: () => string
+  /**
    * Build identity of the server this page is talking to, or `null` while it is
    * still being fetched or if the request failed.
    */
@@ -53,6 +62,7 @@ export function SettingsModal({
   onTerminalFontSizeChange,
   showDebugBar,
   onShowDebugBarChange,
+  claimActionId,
   buildInfo,
   persist,
 }: SettingsModalProps) {
@@ -77,7 +87,7 @@ export function SettingsModal({
     setDaemonState('running')
     setDaemonMessage('Restarting the daemon…')
     void api.daemon
-      .restart()
+      .restart(claimActionId())
       .then((answer) => {
         setDaemonState('done')
         setDaemonMessage(
@@ -92,7 +102,7 @@ export function SettingsModal({
           `The daemon could not be restarted: ${error instanceof Error ? error.message : String(error)}`
         )
       })
-  }, [])
+  }, [claimActionId])
 
   const handleCopyBuild = useCallback(() => {
     if (buildInfo === null) return

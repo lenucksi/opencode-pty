@@ -52,8 +52,20 @@ describe('what a roll answers', () => {
 })
 
 describe('the roll itself', () => {
+  // Where the daemon lives, for the manager's own answers: `sharedDaemonPid` reads
+  // the pid file the runtime directory implies, and the daemon writes it beside its
+  // socket.
+  let previousRuntimeDir: string | undefined
+
+  afterAll(() => {
+    if (previousRuntimeDir === undefined) delete process.env.XDG_RUNTIME_DIR
+    else process.env.XDG_RUNTIME_DIR = previousRuntimeDir
+  })
+
   it('ends the daemon and brings a new one up', async () => {
     const m = machine()
+    previousRuntimeDir = process.env.XDG_RUNTIME_DIR
+    process.env.XDG_RUNTIME_DIR = m.runtimeDir
     mkdirSync(m.runtimeDir, { recursive: true })
     const socketPath = `${m.runtimeDir}/opencode-pty/ptyd.sock`
     const daemon = Bun.spawn(
@@ -90,6 +102,11 @@ describe('the roll itself', () => {
       // The new daemon answers, and the old one is gone.
       const after = await client.ping()
       expect(after.pid).toBe(rolled.newPid ?? 0)
+
+      // The status a surface draws its line from names the daemon that is running
+      // now, not the one that was rolled away.
+      const { daemonPid } = await import('../src/plugin/pty/manager.ts')
+      expect(await daemonPid()).toBe(rolled.newPid ?? 0)
       client.disconnect()
     } finally {
       daemon.kill()

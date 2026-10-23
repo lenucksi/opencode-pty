@@ -1,6 +1,9 @@
 import { Rpc } from '@opencode/plugin/rpc'
 
+import type { Notice, NoticeVariant } from '../shared/notice.ts'
 import type { PTYServer } from '../web/server/server.ts'
+
+export type { Notice, NoticeVariant } from '../shared/notice.ts'
 
 /**
  * The one thing this plugin's two halves have to say to each other.
@@ -44,7 +47,20 @@ export const PtyServerRpc = Rpc.define({
      * restart: the PTY masters belong to that process.
      */
     restartDaemon: {
-      input: { type: 'object', properties: {}, additionalProperties: false },
+      input: {
+        type: 'object',
+        properties: {
+          /**
+           * Who asked.
+           *
+           * The notice the roll sends out carries this, so the surface that
+           * started it can recognise its own and stay quiet - it already showed
+           * the answer.
+           */
+          actionId: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
       output: {
         type: 'object',
         properties: {
@@ -57,6 +73,22 @@ export const PtyServerRpc = Rpc.define({
       },
       errors: {
         failed: { type: 'object', properties: {}, additionalProperties: false },
+      },
+    },
+    /**
+     * Which process is the daemon, for a surface that shows it.
+     *
+     * `0` is "there is no daemon", not an error: the PTY service runs in-process
+     * when nobody asked for a daemon, so a machine without one is a working
+     * machine. The line that shows the pid says nothing rather than "not running".
+     */
+    daemonStatus: {
+      input: { type: 'object', properties: {}, additionalProperties: false },
+      output: {
+        type: 'object',
+        properties: { pid: { type: 'number' } },
+        required: ['pid'],
+        additionalProperties: false,
       },
     },
   },
@@ -75,6 +107,7 @@ export const PtyServerRpc = Rpc.define({
         properties: {
           message: { type: 'string' },
           variant: { type: 'string' },
+          origin: { type: 'string' },
         },
         required: ['message', 'variant'],
         additionalProperties: false,
@@ -82,15 +115,6 @@ export const PtyServerRpc = Rpc.define({
     },
   },
 })
-
-/** How a notice is dressed. The four the toast API knows. */
-export type NoticeVariant = 'info' | 'success' | 'warning' | 'error'
-
-/** One thing to tell the reader. */
-export interface Notice {
-  readonly message: string
-  readonly variant: NoticeVariant
-}
 
 type NoticeEmitter = (notice: Notice) => void
 
@@ -113,9 +137,13 @@ export function setNoticeEmitter(next: NoticeEmitter | null): void {
  * Best effort on purpose: a notice is never the point of the action that caused it,
  * and a channel that is not there must not fail the action.
  */
-export function notifyUser(message: string, variant: NoticeVariant = 'info'): void {
+export function notifyUser(
+  message: string,
+  variant: NoticeVariant = 'info',
+  origin?: string
+): void {
   try {
-    emitter?.({ message, variant })
+    emitter?.(origin === undefined ? { message, variant } : { message, variant, origin })
   } catch {
     /* a notice that cannot be delivered is not a failure of the action */
   }
@@ -129,13 +157,16 @@ export function notifyUser(message: string, variant: NoticeVariant = 'info'): vo
  */
 export function noticeFromData(data: unknown): Notice | null {
   if (typeof data !== 'object' || data === null) return null
-  const record = data as { message?: unknown; variant?: unknown }
+  const record = data as { message?: unknown; variant?: unknown; origin?: unknown }
   if (typeof record.message !== 'string' || record.message === '') return null
   const variant = record.variant
   const known: readonly NoticeVariant[] = ['info', 'success', 'warning', 'error']
+  const origin =
+    typeof record.origin === 'string' && record.origin !== '' ? record.origin : undefined
   return {
     message: record.message,
     variant: known.includes(variant as NoticeVariant) ? (variant as NoticeVariant) : 'info',
+    ...(origin === undefined ? {} : { origin }),
   }
 }
 
@@ -162,6 +193,19 @@ export function daemonRestartFromData(data: unknown): DaemonRestart | null {
     oldPid: pid(record.oldPid),
     newPid: pid(record.newPid),
   }
+}
+
+/**
+ * Which daemon the server reports, or null when it does not say.
+ *
+ * A pid of `0` is the server's way of saying "nobody runs one" - the PTY service
+ * works in-process - so it is an answer, not a failure, and the surface that asked
+ * draws a line without a pid rather than claiming there is no service.
+ */
+export function daemonStatusFromData(data: unknown): number | null {
+  if (typeof data !== 'object' || data === null) return null
+  const pid = (data as { pid?: unknown }).pid
+  return typeof pid === 'number' && pid > 0 ? pid : null
 }
 
 /**

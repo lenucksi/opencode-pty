@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import type { Plugin } from '@opencode/plugin/tui'
 
+import { OriginClaim } from '../src/shared/notice.ts'
 import { restartDaemonAction } from '../src/tui/daemon-action.ts'
 import type { DaemonStatus } from '../src/tui/daemon-state.ts'
 
@@ -45,6 +46,7 @@ describe("the daemon's roll", () => {
         panel.updates += 1
         mutate(panel)
       },
+      claim: new OriginClaim(() => 'roll-1'),
       notify: (message, variant) => toasts.push({ message, variant }),
       debug: () => {},
     })
@@ -64,6 +66,7 @@ describe("the daemon's roll", () => {
     const action = restartDaemonAction({
       client: client({ restarted: true, oldPid: 100, newPid: 200 }),
       update: (mutate) => mutate(state()),
+      claim: new OriginClaim(() => 'roll-2'),
       notify: (message, variant) => toasts.push({ message, variant }),
       debug: () => {},
     })
@@ -82,6 +85,7 @@ describe("the daemon's roll", () => {
     const action = restartDaemonAction({
       client: client({ restarted: false, oldPid: 0, newPid: 0 }),
       update: (mutate) => mutate(state()),
+      claim: new OriginClaim(() => 'roll-2'),
       notify: (message, variant) => toasts.push({ message, variant }),
       debug: () => {},
     })
@@ -98,6 +102,7 @@ describe("the daemon's roll", () => {
     const action = restartDaemonAction({
       client: client('rolled'),
       update: (mutate) => mutate(state()),
+      claim: new OriginClaim(() => 'roll-2'),
       notify: (message, variant) => toasts.push({ message, variant }),
       debug: () => {},
     })
@@ -115,6 +120,7 @@ describe("the daemon's roll", () => {
     const action = restartDaemonAction({
       client: client(undefined, new Error('the daemon is gone')),
       update: (mutate) => mutate(panel),
+      claim: new OriginClaim(() => 'roll-5'),
       notify: (message, variant) => toasts.push({ message, variant }),
       debug: () => {},
     })
@@ -134,6 +140,7 @@ describe("the daemon's roll", () => {
     const action = restartDaemonAction({
       client: client({ restarted: true, oldPid: 100, newPid: 200 }),
       update: (mutate) => mutate(state()),
+      claim: new OriginClaim(() => 'roll-6'),
       notify: () => {},
       debug: () => {},
     })

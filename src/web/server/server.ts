@@ -1,4 +1,5 @@
 import type { Server } from 'bun'
+import type { Notice } from '../../shared/notice.ts'
 import { removeOrigin, writeOrigin } from '../../shared/runtime.ts'
 import { routes } from '../shared/routes.ts'
 import { CallbackManager } from './callback-manager.ts'
@@ -22,9 +23,13 @@ import {
 } from './handlers/sessions.ts'
 import { buildStaticRoutes, serveIndexHtml } from './handlers/static.ts'
 import { handleUpgrade } from './handlers/upgrade.ts'
+
+/** The pub/sub topic every connected page subscribes to, for the plugin's notices. */
+const NOTICE_TOPIC = 'notices'
 import { restartDaemonRoute } from './handlers/daemon.ts'
 import { handleUsageDocs } from './handlers/usage-docs.ts'
 import { handleWebSocketMessage } from './handlers/websocket.ts'
+import type { WSMessageServerNotice } from '../shared/types.ts'
 
 export interface ServerOptions {
   port?: number
@@ -214,7 +219,7 @@ export class PTYServer implements Disposable {
           GET: () => handleUsageDocs(),
         },
         [routes.daemon.path]: {
-          POST: () => restartDaemonRoute(),
+          POST: (request: Request) => restartDaemonRoute(request),
         },
         [routes.parentSessions.path]: {
           GET: getParentSessions,
@@ -259,6 +264,9 @@ export class PTYServer implements Disposable {
         perMessageDeflate: true,
         open: (ws) => {
           ws.subscribe('sessions:update')
+          // Every page hears the notices: they are about what the machine did, not
+          // about the session the page happens to have open.
+          ws.subscribe(NOTICE_TOPIC)
         },
         message: handleWebSocketMessage,
         close: (ws) => {
@@ -274,5 +282,24 @@ export class PTYServer implements Disposable {
 
   public getWsUrl(): string {
     return `${this.server.url.origin.replace(/^http/, 'ws')}${routes.websocket.path}`
+  }
+
+  /**
+   * Say something to every page that is open.
+   *
+   * The notices are made by the plugin's server half - a slash command's result, a
+   * roll of the daemon - and a browser tab has no other way to hear them: it is not
+   * the side that ran the command. A topic rather than a socket list, because Bun's
+   * pub/sub is what already carries the session updates, and a page that is not
+   * connected is not a page that needs catching up.
+   */
+  public publishNotice(notice: Notice): void {
+    const message: WSMessageServerNotice = {
+      type: 'notice',
+      message: notice.message,
+      variant: notice.variant,
+      ...(notice.origin === undefined ? {} : { origin: notice.origin }),
+    }
+    this.server.publish(NOTICE_TOPIC, JSON.stringify(message))
   }
 }

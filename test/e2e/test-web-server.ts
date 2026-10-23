@@ -1,6 +1,8 @@
 import { OpencodeClient } from '@opencode-ai/sdk'
 import { initManager } from '../../src/plugin/pty/manager.ts'
+import { registerSessionUpdateCallback } from '../../src/plugin/pty/manager-notifications.ts'
 import { setParentSessionTitleResolver } from '../../src/plugin/pty/parent-session-title.ts'
+import { setNoticeEmitter } from '../../src/v2/rpc.ts'
 import { PTYServer } from '../../src/web/server/server.ts'
 
 initManager(new OpencodeClient())
@@ -9,6 +11,26 @@ setParentSessionTitleResolver({
 })
 
 const server = await PTYServer.createServer()
+
+/**
+ * A notice source, for the toast test.
+ *
+ * In production the notices come from the plugin's server half - a slash command's
+ * result, a roll of the daemon - and this test server does not load that half. What
+ * it can cause is a session ending, so that is what it announces, and only for a
+ * session whose description asks for it: the rest of the suite must run without a
+ * toast on screen.
+ */
+const NOTICE_PREFIX = 'notice:'
+setNoticeEmitter((notice) => server.publishNotice(notice))
+registerSessionUpdateCallback((session) => {
+  if (!session.description?.startsWith(NOTICE_PREFIX)) return
+  if (session.status !== 'exited' && session.status !== 'killed') return
+  server.publishNotice({
+    message: `Session ${session.description.slice(NOTICE_PREFIX.length)} ended.`,
+    variant: 'info',
+  })
+})
 
 // Only log in non-test environments or when explicitly requested
 

@@ -1,12 +1,13 @@
 import { installHostAdapter } from '../adapters/index.ts'
+import { originFrom } from '../shared/notice.ts'
 import { createV2Adapter } from '../adapters/v2/index.ts'
-import { getPtyManager, restartDaemon } from '../plugin/pty/manager.ts'
+import { daemonPid, getPtyManager, restartDaemon } from '../plugin/pty/manager.ts'
 import { setParentSessionTitleResolver } from '../plugin/pty/parent-session-title.ts'
 import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
 import { getActiveServer, getOrCreateServer, registerV2Commands } from './commands.ts'
 import { V2SessionNotifier } from './notifier.ts'
 import { announceRestart } from './restart-announce.ts'
-import { PtyServerRpc, serverOrigin, setNoticeEmitter } from './rpc.ts'
+import { notifyUser, PtyServerRpc, serverOrigin, setNoticeEmitter } from './rpc.ts'
 import { registerUsageSkill } from './skill.ts'
 import { registerV2Tools } from './tools.ts'
 import { define, type OpencodePtyOptions, type PluginContextV2, type PluginV2 } from './types.ts'
@@ -93,19 +94,32 @@ export const Plugin: PluginV2 = define({
         },
         // The roll, for a surface that wants it without being the server: the TUI
         // half and the web interface both ask the half that owns the client.
-        restartDaemon: async (_input, context) => {
+        restartDaemon: async (input, context) => {
+          const actionId = originFrom(input)
           try {
             const { oldPid, newPid } = await restartDaemon()
-            return {
-              oldPid: oldPid ?? 0,
-              newPid: newPid ?? 0,
-              restarted: oldPid !== null || newPid !== null,
-            }
+            const restarted = oldPid !== null || newPid !== null
+            // Every roll is announced, wherever it was started from: the surface that
+            // asked already shows the answer to its own question, and the origin is how
+            // it recognises that this notice is about that answer. The other surface
+            // has no way of knowing the machine changed, so it shows it.
+            notifyUser(
+              restarted
+                ? `PTY daemon restarted: old pid ${oldPid ?? 'none'}, new pid ${newPid ?? 'none'}.`
+                : 'There is no PTY daemon to restart.',
+              restarted ? 'success' : 'warning',
+              actionId
+            )
+            return { oldPid: oldPid ?? 0, newPid: newPid ?? 0, restarted }
           } catch (error) {
             logPtyEvent('error', 'the daemon could not be restarted', error)
             return context.error('failed', 'The PTY daemon could not be restarted', {})
           }
         },
+        // Which process is the daemon, for the line a surface draws. `0` is "nobody
+        // runs one": the PTY service works in-process, so that is an answer rather
+        // than a failure.
+        daemonStatus: async () => ({ pid: (await daemonPid()) ?? 0 }),
       })
       if (!registration) return
       // What a slash command did, said out loud: the host drops a command's result,
@@ -114,6 +128,11 @@ export const Plugin: PluginV2 = define({
         void registration.events.emit('notice', { ...notice }).catch(() => {
           /* a notice that cannot be delivered is not a failure of the command */
         })
+        // The web interface, when this instance serves one: the same news, a second
+        // way. A page cannot run a slash command, so this is the only way it hears
+        // what one did - and a page served by another instance stays quiet, because
+        // the notice is about this one's commands.
+        getActiveServer()?.publishNotice(notice)
       })
     })
 

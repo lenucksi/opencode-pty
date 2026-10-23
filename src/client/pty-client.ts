@@ -25,7 +25,7 @@ import type {
 import { PtyClientTransport, type PtyClientOptions } from './pty-client-transport.ts'
 
 export type { PtyClientOptions }
-export { defaultSocketPath, sharedDaemonPid } from './daemon-start.ts'
+export { defaultSocketPath, isProcessAlive, sharedDaemonPid } from './daemon-start.ts'
 
 /**
  * The store as a daemon client can offer it.
