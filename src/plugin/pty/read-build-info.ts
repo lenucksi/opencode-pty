@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { type BuildInfo, UNKNOWN_BUILD } from '../../shared/build-info.ts'
+import type { FileReader } from '../../shared/file-reader.ts'
 
 /**
  * Reads the build identity that the build stamped into `dist/`.
@@ -20,9 +21,6 @@ import { type BuildInfo, UNKNOWN_BUILD } from '../../shared/build-info.ts'
  */
 
 const MAX_LEVELS = 8
-
-/** Reads a file's contents, or null when it is missing or unreadable. */
-export type FileReader = (path: string) => string | null
 
 const readFileOrNull: FileReader = (path) => {
   try {

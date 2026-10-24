@@ -1,23 +1,11 @@
 import { readdirSync, statSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { ASSET_CONTENT_TYPES } from '../../shared/constants.ts'
+import { SECURITY_HEADERS } from './security-headers.ts'
 
 // Resolve project root regardless of whether we're running from source or dist/
 const MODULE_DIR = resolve(import.meta.dir, '../../../..')
 const PROJECT_ROOT = MODULE_DIR.replace(/[\\/]dist$/, '')
-const SECURITY_HEADERS = {
-  'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'DENY',
-  'X-XSS-Protection': '1; mode=block',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
-  // `script-src` keeps `'wasm-unsafe-eval'` (Chromium and Firefox require it to
-  // compile the ghostty-web WebAssembly module; it does NOT enable JS `eval`).
-  // The WASM is served as a same-origin asset under `default-src 'self'`, so no
-  // `connect-src data:` is needed. All scripts and styles are emitted as
-  // external same-origin assets, so `'unsafe-inline'` is not needed anywhere.
-  'Content-Security-Policy':
-    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self';",
-} as const
 const STATIC_DIR = join(PROJECT_ROOT, 'dist/web')
 const INDEX_HTML = join(STATIC_DIR, 'index.html')
 

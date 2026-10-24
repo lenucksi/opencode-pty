@@ -99,15 +99,16 @@
     "secrets:trufflehog": "trufflehog git file://$PWD --results=verified --no-update --no-color --fail",
     "capture:demo": "bun scripts/capture-demo.ts",
     "build:plugin": "tsc -p tsconfig.build.json && bun scripts/copy-tool-texts.ts",
-    "build:dev": "bun clean && bun build:plugin && vite build --mode development",
-    "build:prod": "bun clean && bun build:plugin && bun run build:version && vite build --mode production",
+    "build:dev": "bun clean && bun build:plugin && bun run build:licenses && vite build --mode development",
+    "build:prod": "bun clean && bun build:plugin && bun run build:version && bun run build:licenses && vite build --mode production",
     "prepack": "bun build:prod",
     "clean": "rm -rf dist playwright-report test-results",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "bun fmt --check",
     "format:fix": "bun fmt",
-    "build:version": "bun scripts/version.ts"
+    "build:version": "bun scripts/version.ts",
+    "build:licenses": "bun scripts/licenses.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.2",

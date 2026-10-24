@@ -27,6 +27,14 @@ export const routes = {
     path: '/api/docs',
     methods: ['GET'] as const,
   },
+  /**
+   * Third-party notices for the docs dialog's Licences tab, generated from
+   * `bun pm licenses --json` at build time and served from `dist/licenses.json`.
+   */
+  licenses: {
+    path: '/api/licenses',
+    methods: ['GET'] as const,
+  },
   sessions: {
     path: '/api/sessions',
     methods: ['GET', 'POST', 'DELETE'] as const,

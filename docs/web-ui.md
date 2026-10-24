@@ -45,6 +45,21 @@ and one click copies it. The value is served by the server rather than baked int
 the page bundle, so a stale bundle sitting next to a freshly built server cannot
 report a commit that is not running. The same identity is on `GET /api/server`.
 
+### Documentation and licences
+
+The **Docs** button in the sidebar opens a dialog with three tabs. _For humans_ is
+short orientation text; _For LLMs_ is the exact skill document the plugin hands the
+agent, served verbatim from `GET /api/docs`; _Licences_ is the third-party notice
+list, with four credits lines for the projects this repository is built on.
+
+The licence data is not written by hand. The build reduces `bun pm licenses --json`
+into `dist/licenses.json` - sorted, with paths and other machine metadata removed,
+so two builds of one lockfile are byte-identical - and `GET /api/licenses` serves
+it grouped by licence, with a package count per group. A build that never generated
+the artifact answers `available: false` and still shows the credits. Each group is
+collapsed until opened, so the tab reads as thirteen licence lines rather than
+hundreds of package rows.
+
 ### The daemon
 
 Settings has a **Daemon** section with a _Restart the daemon_ button. It rolls

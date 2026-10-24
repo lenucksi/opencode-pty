@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Third-party notices in the docs dialog**
+
+The Docs dialog has a third tab, _Licences_. It lists every installed package
+grouped by licence, with the package count per group and `name@version` under it,
+plus four credits lines for the projects this repository is built on. The package
+data is generated at build time from `bun pm licenses --json` into
+`dist/licenses.json` and served by `GET /api/licenses`, so the tab cannot fall out
+of step with the lockfile. The artifact is sorted and stripped of paths and other
+machine metadata, which makes a rebuild on an unchanged lockfile byte-identical.
+
 **Rolling the daemon from both surfaces**
 
 The daemon is machine state that every OpenCode instance on the machine shares:

@@ -10,6 +10,7 @@ import type {
   ServerInfoResponse,
 } from './types.ts'
 import { routes } from './routes'
+import type { LicensesResponse } from './licenses.ts'
 import type { UsageDocsResponse } from './usage-docs.ts'
 
 /** What a roll of the daemon answered. */
@@ -239,6 +240,13 @@ export function createApiClient(baseUrl: string) {
 
     docs: () =>
       apiFetchJson<typeof routes.docs, 'GET', UsageDocsResponse>(routes.docs, {
+        method: 'GET',
+        baseUrl,
+      }),
+
+    /** Third-party notices, generated from the lockfile at build time. */
+    licenses: () =>
+      apiFetchJson<typeof routes.licenses, 'GET', LicensesResponse>(routes.licenses, {
         method: 'GET',
         baseUrl,
       }),
