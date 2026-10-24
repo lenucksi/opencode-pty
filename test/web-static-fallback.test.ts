@@ -55,7 +55,7 @@ describe('an asset a rebuild added', () => {
       // the package manifest.
       expect([302, 404]).toContain(response.status)
       const body = await response.text()
-      expect(body).not.toContain('opencode-pty')
+      expect(body).not.toContain('@lenucksi/agentterm')
     }
   })
 })

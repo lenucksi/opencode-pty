@@ -100,7 +100,11 @@ describe('package pack structure', () => {
   it('ships the two binaries', async () => {
     const read = await run(['bun', '-e', 'console.log(JSON.stringify(require("./package.json")))'])
     const manifest = JSON.parse(read.stdout) as { bin?: Record<string, string> }
+    // Both spellings point at the same entrypoint: npm and bun link every bin name
+    // in the map, so the old name keeps working without a second package.
+    expect(manifest.bin?.['agentterm-mcp']).toBe('dist/src/mcp/entry.js')
     expect(manifest.bin?.['opencode-pty-mcp']).toBe('dist/src/mcp/entry.js')
+    expect(manifest.bin?.['agentterm-web']).toBe('dist/src/web/entry.js')
     expect(manifest.bin?.['opencode-pty-web']).toBe('dist/src/web/entry.js')
   })
 })

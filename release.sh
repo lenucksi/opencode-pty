@@ -10,7 +10,13 @@
 #   --major         Bump major version
 #   --dry-run       Simulate the release process without making changes
 #   --yes, -y       Skip confirmation prompt before pushing
+#   --skip-gate     Do not run `bun run test:local` first (not recommended)
 #   --help, -h      Show this help message
+#
+# The branch is `local/modernized` and the remote is `lenucksi` - `origin` is the
+# upstream fork source, and pushing there is not a release. The tag is cut by the
+# workflow (`.github/workflows/release.yml`), which also publishes only when the
+# version in `package.json` changed and no tag for it exists yet.
 
 set -euo pipefail
 
@@ -18,6 +24,9 @@ set -euo pipefail
 DRY_RUN=false
 SKIP_CONFIRM=false
 BUMP_TYPE="patch"
+SKIP_GATE=false
+RELEASE_BRANCH="local/modernized"
+RELEASE_REMOTE="lenucksi"
 SCRIPT_NAME=$(basename "$0")
 
 # --- Colors ---
@@ -81,6 +90,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_CONFIRM=true
             shift
             ;;
+        --skip-gate)
+            SKIP_GATE=true
+            shift
+            ;;
         --help|-h)
             usage
             exit 0
@@ -123,6 +136,21 @@ fi
 CURRENT_VERSION=$(bun -e 'import pkg from "./package.json"; console.log(pkg.version)')
 log_info "Current version: v$CURRENT_VERSION"
 
+# 3b. The gate, before anything is bumped into a release
+#
+# A published version is spent - it cannot be unpublished usefully and the number is
+# gone. The local gate is what stands between a green commit and a broken release, so
+# it runs here, on the exact tree that will be tagged.
+if [ "$SKIP_GATE" = true ]; then
+    log_warn "Skipping the quality gate at your request."
+elif [ "$DRY_RUN" = true ]; then
+    log_info "[DRY-RUN] Would run: bun run test:local"
+else
+    log_info "Running the quality gate (bun run test:local)..."
+    bun run test:local
+    log_success "Quality gate passed"
+fi
+
 # 4. Bump Version
 if [ "$DRY_RUN" = true ]; then
     log_info "[DRY-RUN] Would run: bun pm version $BUMP_TYPE --no-git-tag-version"
@@ -159,18 +187,18 @@ else
     log_success "Commited changes: $COMMIT_MSG"
 fi
 
-# 7. Push to Main
+# 7. Push to the release branch
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-if [ "$CURRENT_BRANCH" != "main" ]; then
-    log_warn "You are on branch '$CURRENT_BRANCH', not 'main'. The release workflow triggers on 'main'."
+if [ "$CURRENT_BRANCH" != "$RELEASE_BRANCH" ]; then
+    log_warn "You are on branch '$CURRENT_BRANCH', not '$RELEASE_BRANCH'. The release workflow triggers on '$RELEASE_BRANCH'."
 fi
 
 if [ "$DRY_RUN" = true ]; then
-    log_info "[DRY-RUN] Would prompt for confirmation (unless -y) and push to origin $CURRENT_BRANCH"
+    log_info "[DRY-RUN] Would prompt for confirmation (unless -y) and push to $RELEASE_REMOTE $CURRENT_BRANCH"
 else
     if [ "$SKIP_CONFIRM" = false ]; then
-        log_warn "Ready to push to origin $CURRENT_BRANCH. This will trigger the GitHub Action release workflow."
+        log_warn "Ready to push to $RELEASE_REMOTE $CURRENT_BRANCH. This will trigger the GitHub Action release workflow."
         read -p "Are you sure you want to proceed? [Y/n] " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -182,8 +210,8 @@ else
         fi
     fi
 
-    log_info "Pushing to origin..."
-    git push origin "$CURRENT_BRANCH"
+    log_info "Pushing to $RELEASE_REMOTE..."
+    git push "$RELEASE_REMOTE" "$CURRENT_BRANCH"
     log_success "Pushed successfully!"
     log_info "GitHub Actions should now handle the release."
 fi

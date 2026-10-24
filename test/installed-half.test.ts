@@ -9,8 +9,8 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path'
  * cost a round of testing.
  *
  * 1. The host resolves the plugin by NAME, not by path. The wrapper in
- *    `~/.config/opencode/plugins/opencode-pty/` re-exports `opencode-pty/v2/tui`, and
- *    `~/.config/opencode/package.json` declares `"opencode-pty": "file:/…/opencode-pty"`.
+ *    `~/.config/opencode/plugins/opencode-pty/` re-exports `@lenucksi/agentterm/v2/tui`, and
+ *    `~/.config/opencode/package.json` declares `"@lenucksi/agentterm": "file:/…/opencode-pty"`.
  *    A `file:` dependency installs a COPY - different inodes, `links=1` - so the host went
  *    on running a `dist` from two hours before the fix while the working tree was clean and
  *    the gate was green. Reported as "the fix did nothing", which is exactly what it was.
@@ -45,7 +45,7 @@ function isInsideRepo(path: string): boolean {
 
 describe('the TUI half the host loads', () => {
   it.skipIf(!wrapperPresent)('resolves into this working tree, not into an installed copy', () => {
-    const resolved = Bun.resolveSync('opencode-pty/v2/tui', join(WRAPPER_DIR, 'tui.ts'))
+    const resolved = Bun.resolveSync('@lenucksi/agentterm/v2/tui', join(WRAPPER_DIR, 'tui.ts'))
     // The PATH, not the contents: a copy of this package inside the host's own
     // node_modules is byte-identical and still a different artifact, which is why
     // grepping the loaded file for a new string is not a check either.
@@ -56,7 +56,7 @@ describe('the TUI half the host loads', () => {
   })
 
   it.skipIf(!wrapperPresent)('resolves the server half into this working tree too', () => {
-    const resolved = Bun.resolveSync('opencode-pty/v2', join(WRAPPER_DIR, 'index.ts'))
+    const resolved = Bun.resolveSync('@lenucksi/agentterm/v2', join(WRAPPER_DIR, 'index.ts'))
     expect({ resolved, insideRepo: isInsideRepo(resolved) }).toEqual({
       resolved,
       insideRepo: true,

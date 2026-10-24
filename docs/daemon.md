@@ -17,7 +17,7 @@ opencode session is still running when you open a new one.
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": [{ "package": "opencode-pty/v2", "options": { "daemon": true } }]
+  "plugin": [{ "package": "@lenucksi/agentterm/v2", "options": { "daemon": true } }]
 }
 ```
 
@@ -38,7 +38,10 @@ bun run src/daemon/index.ts --socket /tmp/ptyd.sock --state-dir ~/.local/share/o
 ```json
 {
   "plugin": [
-    { "package": "opencode-pty/v2", "options": { "daemon": true, "socketPath": "/tmp/ptyd.sock" } }
+    {
+      "package": "@lenucksi/agentterm/v2",
+      "options": { "daemon": true, "socketPath": "/tmp/ptyd.sock" }
+    }
   ]
 }
 ```

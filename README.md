@@ -1,11 +1,15 @@
-# opencode-pty
+# agentterm
 
 > Run long-lived processes the agent can read, write to and wait on.
 > Stop wrapping dev servers in `&`.
 
+**agentterm** is a PTY layer for coding agents: an OpenCode plugin, an MCP server for
+harnesses that are not OpenCode, and a standalone web terminal — like tmux, but
+agent-native.
+
 [![CI](https://github.com/lenucksi/opencode-pty/actions/workflows/ci.yml/badge.svg)](https://github.com/lenucksi/opencode-pty/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-80%25+-brightgreen)](https://github.com/lenucksi/opencode-pty)
-[![Version](https://img.shields.io/npm/v/opencode-pty)](https://www.npmjs.com/package/opencode-pty)
+[![Version](https://img.shields.io/npm/v/@lenucksi%2Fagentterm)](https://www.npmjs.com/package/@lenucksi/agentterm)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A plugin for [OpenCode](https://opencode.ai) that gives the agent real PTY sessions:
@@ -13,9 +17,12 @@ run dev servers, watchers, REPLs and TUIs in the background, send them input, re
 their output on demand, and get notified when they exit. Multiple sessions, real
 terminal emulation, a web UI and a TUI panel.
 
-**Status:** actively maintained on `local/modernized` (1.0.0). Fork of
+**Status:** actively maintained on `local/modernized` (1.0.1), published as
+`@lenucksi/agentterm`. Fork of
 [shekohex/opencode-pty](https://github.com/shekohex/opencode-pty); features are kept in a
-shape that can be contributed upstream.
+shape that can be contributed upstream. The plugin id, the daemon socket and the state
+directory keep the name `opencode-pty`: renaming them would orphan the archive and the
+sidebar preferences of every existing install.
 
 ## Why?
 
@@ -39,12 +46,12 @@ OpenCode V2 (recommended):
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": [{ "package": "opencode-pty", "options": { "port": 4200, "autostart": true } }]
+  "plugin": [{ "package": "@lenucksi/agentterm", "options": { "port": 4200, "autostart": true } }]
 }
 ```
 
-`opencode-pty` and `opencode-pty/v2` are the same plugin — the bare name loads the V2
-half, so a configuration that names either works. The TUI half is `opencode-pty/v2/tui`,
+`@lenucksi/agentterm` and `@lenucksi/agentterm/v2` are the same plugin — the bare name loads the V2
+half, so a configuration that names either works. The TUI half is `@lenucksi/agentterm/v2/tui`,
 and the host finds it by itself when the plugin directory has one.
 
 This plugin needs OpenCode 2.x: the V1 plugin shape is gone, and the V2 half is the
@@ -57,7 +64,7 @@ The same eight tools, over MCP, for a harness that speaks it — Claude Code, Co
 ```json
 {
   "mcpServers": {
-    "pty": { "command": "bunx", "args": ["opencode-pty-mcp"] }
+    "pty": { "command": "bunx", "args": ["-p", "@lenucksi/agentterm", "agentterm-mcp"] }
   }
 }
 ```
@@ -65,7 +72,7 @@ The same eight tools, over MCP, for a harness that speaks it — Claude Code, Co
 Same daemon, same sessions, same result tags — a session an MCP client starts is a
 session the OpenCode plugin lists. The texts, the permission gate and the completion
 signal are the route's own: see [`docs/mcp.md`](docs/mcp.md). The web interface is
-also a binary of its own (`bunx opencode-pty-web`) for a human who wants to watch.
+also a binary of its own (`bunx -p @lenucksi/agentterm agentterm-web`) for a human who wants to watch.
 
 ## Try it
 

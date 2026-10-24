@@ -1,17 +1,26 @@
 {
-  "name": "opencode-pty",
+  "name": "@lenucksi/agentterm",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "module": "dist/index.js",
-  "version": "1.0.0",
-  "description": "OpenCode plugin for interactive PTY management - run background processes, send input, read output with regex filtering",
-  "author": "shekohex",
+  "version": "1.0.1",
+  "description": "PTY sessions for coding agents - an OpenCode plugin, an MCP server for terminal sessions, and a standalone web terminal (tmux, but agent-native)",
+  "author": "lenucksi",
   "keywords": [
     "opencode",
     "opencode-plugin",
+    "mcp",
+    "mcp-server",
+    "ai-agents",
+    "agent",
     "pty",
     "pseudo-terminal",
     "terminal",
+    "terminal-multiplexer",
+    "tmux",
+    "tmux-alternative",
+    "claude",
+    "claude-code",
     "background-process",
     "interactive",
     "cli",
@@ -21,17 +30,19 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shekohex/opencode-pty.git"
+    "url": "git+https://github.com/lenucksi/opencode-pty.git"
   },
   "bugs": {
-    "url": "https://github.com/shekohex/opencode-pty/issues"
+    "url": "https://github.com/lenucksi/opencode-pty/issues"
   },
-  "homepage": "https://github.com/shekohex/opencode-pty#readme",
+  "homepage": "https://github.com/lenucksi/opencode-pty#readme",
   "files": [
     "dist",
     "patches"
   ],
   "bin": {
+    "agentterm-mcp": "dist/src/mcp/entry.js",
+    "agentterm-web": "dist/src/web/entry.js",
     "opencode-pty-mcp": "dist/src/mcp/entry.js",
     "opencode-pty-web": "dist/src/web/entry.js"
   },
@@ -163,5 +174,8 @@
     "undici@^6.0.0": "6.29.1",
     "zod": "4.6.7",
     "toml": "5.0.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

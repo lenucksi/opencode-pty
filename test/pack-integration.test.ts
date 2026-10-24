@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'bun:test'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -90,8 +90,13 @@ describe('package pack integration', () => {
       join(tempDir, 'test', 'start-server.ts')
     )
 
-    // Verify the package structure (compiled JS shipped in dist/)
-    const packageDir = join(tempDir, 'node_modules/opencode-pty')
+    // Verify the package structure (compiled JS shipped in dist/). The directory
+    // name comes from the manifest: a scoped package lands under
+    // `node_modules/@scope/name`, and this test must not hardcode either.
+    const shippedName = (
+      JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as { name: string }
+    ).name
+    const packageDir = join(tempDir, 'node_modules', shippedName)
     expect(existsSync(join(packageDir, 'dist/src/plugin/pty/manager.js'))).toBe(true)
     expect(existsSync(join(packageDir, 'dist/web/index.html'))).toBe(true)
     const portFile = join('/tmp', 'test-server-port-0.txt')

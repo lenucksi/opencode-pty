@@ -731,7 +731,7 @@ describe('isolated environment', () => {
     // it is normally worked on from a worktree whose name carries the task. What
     // identifies the root is the manifest in it, so assert that.
     const manifest: unknown = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-    expect(manifest).toMatchObject({ name: 'opencode-pty' })
+    expect(manifest).toMatchObject({ name: '@lenucksi/agentterm' })
     expect(pluginEntryPoint(root)).toBe(join(root, 'dist', 'src', 'v2', 'index.js'))
     expect(() => assertPluginBuilt(root)).not.toThrow()
   })

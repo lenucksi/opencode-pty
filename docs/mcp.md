@@ -15,7 +15,7 @@ Claude Code reads the servers from `.mcp.json` in the project (or
   "mcpServers": {
     "pty": {
       "command": "bunx",
-      "args": ["opencode-pty-mcp"]
+      "args": ["-p", "@lenucksi/agentterm", "agentterm-mcp"]
     }
   }
 }
@@ -100,7 +100,7 @@ A harness that is not OpenCode has no way to show a human the sessions. The
 interface is a binary of its own:
 
 ```bash
-bunx opencode-pty-web
+bunx -p @lenucksi/agentterm agentterm-web
 ```
 
 It serves the same UI against the daemon and prints the address once. **No

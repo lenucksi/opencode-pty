@@ -81,14 +81,14 @@ export function findRepoRoot(from: string = import.meta.dir): string {
     if (existsSync(manifest)) {
       try {
         const parsed = JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string }
-        if (parsed.name === 'opencode-pty') return current
+        if (parsed.name === '@lenucksi/agentterm') return current
       } catch {
         // A malformed manifest is not ours; keep walking.
       }
     }
     const parent = dirname(current)
     if (parent === current) {
-      throw new Error(`could not find the opencode-pty package root above ${from}`)
+      throw new Error(`could not find the @lenucksi/agentterm package root above ${from}`)
     }
     current = parent
   }

@@ -22,7 +22,7 @@ This will start the background sessions observer cockpit server and launch the b
 The interface is also a binary of its own, for a harness that is not OpenCode:
 
 ```bash
-bunx opencode-pty-web
+bunx -p @lenucksi/agentterm agentterm-web
 ```
 
 It serves the same interface against the daemon and prints the address on stdout,
@@ -88,7 +88,7 @@ and must not be pushed aside by a notice about something else. It takes no point
 events except its dismiss button, so it never swallows a click or a selection in the
 terminal.
 
-A page served by a **different** OpenCode instance (or by `opencode-pty-web`) does
+A page served by a **different** OpenCode instance (or by `agentterm-web`) does
 not get these: the notices are about the commands of the instance that emitted them.
 
 ### Features

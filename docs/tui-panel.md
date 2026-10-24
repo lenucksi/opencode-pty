@@ -71,7 +71,9 @@ path to a file:
 
 ```json
 {
-  "plugin": [{ "package": "opencode-pty/v2", "options": { "port": 4200, "autostart": true } }]
+  "plugin": [
+    { "package": "@lenucksi/agentterm/v2", "options": { "port": 4200, "autostart": true } }
+  ]
 }
 ```
 
