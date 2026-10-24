@@ -67,7 +67,7 @@ function StatusBar({
   return (
     <div className="status-bar" data-testid="status-bar">
       <span className="status-brand">
-        <BrandMark size={14} />
+        <BrandMark size={16} />
         <span className="status-name">agentterm</span>
       </span>
       <span className="status-metrics">
