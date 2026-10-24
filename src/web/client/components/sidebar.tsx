@@ -1,4 +1,4 @@
-import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
+import type { PTYSessionInfo } from '../../shared/types.ts'
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 
 import { WEB_API_PARENT_SESSION_ID } from '../../../plugin/constants.ts'

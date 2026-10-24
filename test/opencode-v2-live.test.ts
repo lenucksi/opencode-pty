@@ -42,12 +42,19 @@ describe('OpenCode V2 Live Integration', () => {
   it('matches the Schema.Struct expected by OpenCode core external plugin loader', async () => {
     // OpenCode core's packages/core/src/config/plugin/external.ts decodes:
     // Schema.Struct({ default: Schema.Union([ ... Schema.Struct({ id: Schema.String, setup: Function }) ]) })
-    const v2Module = await import('../dist/src/v2/index.js')
+    // Loaded through a variable on purpose: with a literal specifier the typecheck
+    // would have to resolve `dist/`, which is what this suite is checking the build
+    // of - not something the typechecker should depend on. The shape is asserted
+    // right here instead.
+    const builtEntry = '../dist/src/v2/index.js'
+    const v2Module = (await import(builtEntry)) as {
+      default?: { id?: unknown; setup?: unknown }
+    }
 
     expect(v2Module.default).toBeDefined()
     expect(typeof v2Module.default).toBe('object')
-    expect(v2Module.default.id).toBe('opencode-pty')
-    expect(typeof v2Module.default.setup).toBe('function')
+    expect(v2Module.default?.id).toBe('opencode-pty')
+    expect(typeof v2Module.default?.setup).toBe('function')
   })
 
   it('executes setup inside a simulated OpenCode V2 PluginPromise host', async () => {

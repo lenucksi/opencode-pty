@@ -1,4 +1,4 @@
-import type { NoticeVariant } from 'opencode-pty/shared/notice'
+import type { NoticeVariant } from '../../../shared/notice.ts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**

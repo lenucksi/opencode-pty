@@ -8,7 +8,7 @@ import type {
   PTYSessionInfo,
   RestoreSessionsResult,
   ServerInfoResponse,
-} from 'opencode-pty/web/shared/types'
+} from './types.ts'
 import { routes } from './routes'
 import type { UsageDocsResponse } from './usage-docs.ts'
 
