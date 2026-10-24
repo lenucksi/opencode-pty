@@ -5,9 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.1] - 2026-10-24
+
+First published release of the fork, as **`@lenucksi/agentterm`** (the npm name
+`opencode-pty` belongs to the upstream project). The plugin id, the daemon socket,
+the state directory and the storage keys keep the old name on purpose: renaming
+them would strand a running daemon and orphan the archive.
 
 ### Added
+
+**Named keys, quiet waits, and an installer with both edges**
+
+- `pty_sendkey` sends a key by name - `Enter`, `Tab`, `Escape`, arrows,
+  `Home`/`End`/`PageUp`/`PageDown`, `C-a`..`C-z`, `F1`..`F12` - with `times` to
+  repeat. `pty_write` makes a model spell bytes, and a wrong byte is not an error,
+  it is a prompt that does not move. A name the terminal does not have is refused
+  with the list of names that exist; a command still goes through `pty_write`,
+  where the permission policy sees it.
+- `pty_wait` takes `quietMs`: return once the session has printed nothing for that
+  long, with the process still running. That is how a prompt is awaited without a
+  `pty_read` loop. The result says which ending it had (`reason="quiet"` or
+  `"exit"`), and a quiet one has no `Exit:` line, because there is no exit status.
+- `agentterm-mcp install` prints the two edges this package is reached through:
+  the OpenCode plugin entry (the one file `--write` touches, merging into the
+  existing `plugin` array with a `.bak` first) and the MCP server block for
+  everything else (`mcpServers`, `claude mcp add`, or a printed TOML block for
+  Codex). Nothing is written without `--write`.
 
 **Third-party notices in the docs dialog**
 
@@ -62,7 +85,26 @@ Failed actions are toasts now too — input the server could not write, a sessio
 refused to remove, a bulk removal that failed, an undo that did not restore. They
 used to be a line in the browser's console, which is to say invisible.
 
+**The toolchain is Bun's wherever Bun can do the job**
+
+`bun check` replaced `tsc --noEmit` for type checking, `bun fmt` replaced Biome's
+formatter (configured through a `[fmt]` section in `bunfig.toml`; Biome keeps the
+lint), and `copyfiles` was replaced by `scripts/copy-tool-texts.ts`. `tsc` stays
+only as the emitter, for the two things Bun does not do: `.d.ts` and rewriting
+`.ts` import specifiers to `.js`. The tree is formatted by `bun fmt`; the web
+interface's typecheck no longer needs a build in the tree.
+
 ### Fixed
+
+- **`bun audit` was run to the end, and the gate had been red for longer than
+  anyone knew.** Four transitive advisories are overridden inside their carriers'
+  declared ranges (`body-parser`, two `undici` majors, `zod`); `toml` is the one
+  that leaves a range, because its fix is a major bump and the alternative was a
+  gate that ignores three high advisories. No `--ignore` remains.
+- **The typecheck needed a build in the tree** (TASK-12): the web client imported
+  its own shared types by package name, which resolves through the export map into
+  `dist/`. Those imports are relative now, and `bun check` passes with `dist/`
+  deleted.
 
 - **A rebuild no longer white-screens a running interface.** The static route map is
   built once, at start, while `index.html` is read per request — so a rebuilt `dist/web`

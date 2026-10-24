@@ -154,12 +154,13 @@ jobs:
           if [ -n "${{ vars.NPM_PACKAGE_NAME }}" ]; then
             npm pkg set name="${{ vars.NPM_PACKAGE_NAME }}"
           fi
+          # No token: npm's trusted publishing exchanges this workflow's OIDC token
+          # for a short-lived publish credential, and that is also what `--provenance`
+          # signs with. `id-token: write` above is the whole requirement, plus a
+          # trusted publisher configured on the package. A token here would be a
+          # credential that can publish without a human, which trusted publishing
+          # exists to replace.
           npm publish --access public --provenance
-        env:
-          # Empty for the upstream: npm's trusted publishing exchanges this workflow's
-          # OIDC token instead. A fork sets NPM_TOKEN to an npm automation token -
-          # provenance requires one, and a classic token cannot attest.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub release
         if: steps.determine.outputs.changed == 'true' && steps.determine.outputs.tag_exists == 'false'
