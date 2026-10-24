@@ -155,12 +155,19 @@ jobs:
             npm pkg set name="${{ vars.NPM_PACKAGE_NAME }}"
           fi
           # No token: npm's trusted publishing exchanges this workflow's OIDC token
-          # for a short-lived publish credential, and that is also what `--provenance`
-          # signs with. `id-token: write` above is the whole requirement, plus a
-          # trusted publisher configured on the package. A token here would be a
-          # credential that can publish without a human, which trusted publishing
-          # exists to replace.
-          npm publish --access public --provenance
+          # for a short-lived credential. `id-token: write` above is the whole
+          # requirement, plus a trusted publisher on the package.
+          #
+          # STAGED, not published. The trusted publisher is configured for
+          # `npm stage publish`, which defers proof-of-presence (2FA) to a human: this
+          # job uploads the tarball and signs the provenance statement, and a person
+          # approves the version afterwards. That is the trade - a compromised
+          # workflow cannot put a version live - and the cost is one approval per
+          # release:
+          #
+          #   npm stage list && npm stage approve <stage-id>
+          npm stage publish --access public --provenance
+          echo "::notice::Staged on npm. Approve it: npm stage list && npm stage approve <stage-id>"
 
       - name: Create GitHub release
         if: steps.determine.outputs.changed == 'true' && steps.determine.outputs.tag_exists == 'false'
