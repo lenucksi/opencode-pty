@@ -16,6 +16,7 @@ export PTY_DAEMON=1
 ## Scenario 1: Basic survival across restart
 
 **Steps:**
+
 1. Start opencode with `PTY_DAEMON=1`
 2. Ask the agent: "Start `sleep 300` as a background session"
 3. Note the session ID (e.g., `pty_abc123`)
@@ -29,6 +30,7 @@ The process is still alive (check with `ps aux | grep sleep`).
 ## Scenario 2: Read output after restart
 
 **Steps:**
+
 1. Start opencode with `PTY_DAEMON=1`
 2. Ask: "Start `echo hello; sleep 300` as a background session"
 3. Exit opencode
@@ -40,6 +42,7 @@ The process is still alive (check with `ps aux | grep sleep`).
 ## Scenario 3: Kill after restart
 
 **Steps:**
+
 1. Start opencode with `PTY_DAEMON=1`
 2. Start a `sleep 300` session
 3. Exit opencode
@@ -51,6 +54,7 @@ The process is still alive (check with `ps aux | grep sleep`).
 ## Scenario 4: Daemon auto-start
 
 **Steps:**
+
 1. Ensure no daemon is running: `rm -f $XDG_RUNTIME_DIR/opencode-pty/ptyd.sock`
 2. Start opencode with `PTY_DAEMON=1`
 3. Ask: "Start `echo test` as a background session"
@@ -60,6 +64,7 @@ The process is still alive (check with `ps aux | grep sleep`).
 ## Scenario 5: Daemon crash recovery
 
 **Steps:**
+
 1. Start opencode with `PTY_DAEMON=1`
 2. Start a session
 3. Kill the daemon: `kill $(cat $XDG_RUNTIME_DIR/opencode-pty/ptyd.pid)`
@@ -71,6 +76,7 @@ Old sessions are gone (daemon state was in-memory).
 ## Scenario 6: Exit notification
 
 **Steps:**
+
 1. Start opencode with `PTY_DAEMON=1`
 2. Ask: "Start `echo done` as a background session with notifyOnExit"
 3. Wait for the process to exit
@@ -80,6 +86,7 @@ Old sessions are gone (daemon state was in-memory).
 ## Scenario 7: Multiple clients
 
 **Steps:**
+
 1. Start opencode instance A with `PTY_DAEMON=1`
 2. Start a session in A
 3. Start opencode instance B with `PTY_DAEMON=1`
@@ -90,6 +97,7 @@ Old sessions are gone (daemon state was in-memory).
 ## Scenario 8: Idle timeout
 
 **Steps:**
+
 1. Start opencode with `PTY_DAEMON=1`
 2. Start a session
 3. Exit opencode
@@ -102,6 +110,7 @@ Old sessions are gone (daemon state was in-memory).
 ## Scenario 9: Web UI in daemon mode
 
 **Steps:**
+
 1. Start opencode with `PTY_DAEMON=1` and `autostart: true`
 2. Start a session
 3. Open the Web UI (`/pty-open-background-spy`)
@@ -111,6 +120,7 @@ Old sessions are gone (daemon state was in-memory).
 ## Scenario 10: TUI panel in daemon mode
 
 **Steps:**
+
 1. Start opencode with `PTY_DAEMON=1`
 2. Open the TUI panel (`/pty-sessions`)
 3. Start a session via the agent
@@ -120,11 +130,13 @@ Old sessions are gone (daemon state was in-memory).
 ## Automated verification
 
 Run the integration tests:
+
 ```bash
 bun test test/daemon-integration.test.ts
 ```
 
 Run the full quality gate:
+
 ```bash
 bun run test:local
 ```

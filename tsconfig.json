@@ -1,5 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
+  // Everything, minus the one file that must import the package by name: the
+  // pack-integration test copies `test/start-server.ts` into a temp directory and
+  // runs it against the packed tarball, so rewriting its imports to source paths
+  // would stop it testing the artifact. Excluding it is what lets the typecheck pass
+  // without a build in the tree - see the architecture trap in AGENTS.md.
+  "exclude": ["test/start-server.ts"],
   "compilerOptions": {
     // Environment setup & latest features
     "lib": ["ESNext", "DOM"],

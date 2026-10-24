@@ -1,4 +1,4 @@
-import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
+import type { PTYSessionInfo } from '../../shared/types.ts'
 import { type RefObject, useCallback, useEffect, useRef } from 'react'
 import type { RawTerminal } from '../components/terminal-renderer.ts'
 

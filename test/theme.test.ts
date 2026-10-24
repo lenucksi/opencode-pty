@@ -212,8 +212,20 @@ describe('initTheme', () => {
 describe('index.css terminal palette', () => {
   const css = readFileSync(new URL('../src/web/client/index.css', import.meta.url), 'utf8')
 
+  /**
+   * The block a selector opens.
+   *
+   * Search and compare by regex, not by `indexOf`: the formatter rewrites the quote
+   * style of attribute selectors (`"light"` becomes `'light'`), and a test that pins
+   * one quote style fails on a formatter change that means nothing.
+   */
   function tokensFor(selector: string): Record<string, string> {
-    const start = css.indexOf(`${selector} {`)
+    const escaped = selector
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      // The formatter writes single quotes into attribute selectors; the caller
+      // writes the selector the way the stylesheet used to spell it.
+      .replace(/"/g, '["\']')
+    const start = css.search(new RegExp(`${escaped}\\s*\\{`))
     expect(start, `missing ${selector}`).toBeGreaterThanOrEqual(0)
     const end = css.indexOf('}', start)
     const block = css.slice(start, end)

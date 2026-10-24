@@ -1,4 +1,4 @@
-import type { ServerInfoResponse } from 'opencode-pty/web/shared/types'
+import type { ServerInfoResponse } from '../../shared/types.ts'
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { type BuildInfo, describeBuild } from '../../../shared/build-info.ts'
 import { api } from '../../shared/api-client.ts'

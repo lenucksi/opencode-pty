@@ -199,9 +199,9 @@ export const Plugin: PluginV2 = define({
     // advertise a limit the store is not yet applying. The re-prune inside `updateRetention`
     // is what makes a lowered cap take effect at once - the store's own `prune()` runs only
     // in its constructor, which is long before these options exist.
-    const prunedRetention = await (await getPtyManager().getSessionStore()).updateRetention(
-      ctx.options?.retention ?? {}
-    )
+    const prunedRetention = await (
+      await getPtyManager().getSessionStore()
+    ).updateRetention(ctx.options?.retention ?? {})
     if (prunedRetention.length > 0) {
       logPtyEvent('info', `retention removed ${prunedRetention.length} archived session(s)`, {
         ids: prunedRetention,

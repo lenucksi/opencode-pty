@@ -4,13 +4,13 @@
 
 ### Environment Variables
 
-| Variable                        | Default    | Description                                        |
-| ------------------------------- | ---------- | -------------------------------------------------- |
-| `PTY_MAX_BUFFER_LINES`          | `50000`    | Maximum lines to keep in output buffer per session |
-| `PTY_READ_MAX_TOKENS`           | `25000`    | Default `pty_read` result budget, in tokens (~100 kB) |
-| `PTY_READ_MAX_TOKENS_CEILING`   | `125000`   | Hard ceiling on a caller's `maxTokens` request (~500 kB) |
-| `PTY_WEB_HOSTNAME`              | `::1`      | Hostname for the web server to bind to (IPv6 loopback by default) |
-| `PTY_WEB_PORT`                  | `0` (random) | Port for the web server (0 = random port)        |
+| Variable                      | Default      | Description                                                       |
+| ----------------------------- | ------------ | ----------------------------------------------------------------- |
+| `PTY_MAX_BUFFER_LINES`        | `50000`      | Maximum lines to keep in output buffer per session                |
+| `PTY_READ_MAX_TOKENS`         | `25000`      | Default `pty_read` result budget, in tokens (~100 kB)             |
+| `PTY_READ_MAX_TOKENS_CEILING` | `125000`     | Hard ceiling on a caller's `maxTokens` request (~500 kB)          |
+| `PTY_WEB_HOSTNAME`            | `::1`        | Hostname for the web server to bind to (IPv6 loopback by default) |
+| `PTY_WEB_PORT`                | `0` (random) | Port for the web server (0 = random port)                         |
 
 ### Permissions
 
@@ -54,4 +54,3 @@ This plugin respects OpenCode's [permission settings](https://opencode.ai/docs/p
   }
 }
 ```
-

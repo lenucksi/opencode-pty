@@ -1,6 +1,6 @@
 import { captureCommand, runInherited } from './process.ts'
 
-export const MINIMUM_BUN_VERSION = '1.4.2'
+export const MINIMUM_BUN_VERSION = '1.4.4'
 export const EXPECTED_PACKAGE_MANAGER = `bun@${MINIMUM_BUN_VERSION}`
 
 function versionParts(version: string): [number, number, number] | null {
@@ -212,6 +212,9 @@ export async function runDependencyCheck(timeoutMs = 0): Promise<void> {
   // `seroval`, which fixes the advisory for `bun audit` and for Aislop's own
   // `security/vulnerable-dependency` rule at once - and `seroval-plugins` declares
   // `seroval` as a peer of `^1.0`, so 1.6.8 is inside the range its own package asks for.
+  // Unscoped, at every severity, and with no `--ignore`: an advisory the gate cannot
+  // fix is an override with a written expiry, not a silence. `--audit-level` is
+  // deliberately not used either - it would drop every moderate and low advisory.
   await runInherited('bun', ['audit'], { timeoutMs })
   const result = await captureCommand('bun', ['outdated'], { timeoutMs })
   const reported = parseOutdatedDependencies(result.stdout)

@@ -47,7 +47,7 @@ report a commit that is not running. The same identity is on `GET /api/server`.
 
 ### The daemon
 
-Settings has a **Daemon** section with a *Restart the daemon* button. It rolls
+Settings has a **Daemon** section with a _Restart the daemon_ button. It rolls
 the daemon — the same roll the TUI's sidebar footer offers — and reports the
 result under the button, next to the action that caused it.
 
@@ -104,4 +104,3 @@ not get these: the notices are about the commands of the instance that emitted t
 - **Session Management**: Kill sessions directly from the UI
 - **Settings**: Configure viewport, scrollback and display preferences
 - **Connection Status**: Visual indicator of WebSocket connection status
-

@@ -1,5 +1,5 @@
-import { api } from 'opencode-pty/web/shared/api-client'
-import type { UsageDocsResponse } from 'opencode-pty/web/shared/usage-docs'
+import { api } from '../../shared/api-client.ts'
+import type { UsageDocsResponse } from '../../shared/usage-docs.ts'
 import { type RefObject, useCallback, useEffect, useState } from 'react'
 import { useDialog } from '../hooks/use-dialog.ts'
 

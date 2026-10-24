@@ -16,4 +16,3 @@ The web server provides a REST API for session management:
 | `GET`    | `/api/sessions/:id/buffer/raw`   | Get session output buffer (raw data)                                        |
 | `DELETE` | `/api/sessions`                  | Clear all sessions                                                          |
 | `GET`    | `/health`                        | Server health check with metrics                                            |
-

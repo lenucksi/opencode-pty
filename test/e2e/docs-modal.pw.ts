@@ -35,7 +35,7 @@ extendedTest.describe('documentation dialog', () => {
     await expect(intro).toContainText('opencode-pty:pty-usage')
 
     // The rendered block is the skill itself, not a paraphrase.
-    const shown = (await page.locator('.docs-pre').innerText()).trim()
+    const shown = ((await page.locator('.docs-pre').textContent()) ?? '').trim()
     const expected = await page.evaluate(async () => {
       const response = await fetch('/api/docs')
       const payload = (await response.json()) as { llm: { content: string } }

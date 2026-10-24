@@ -46,8 +46,6 @@ session it covered (`partial="1200/54000"`), so a missing row cannot pass for a 
 the program never painted.
 
 **`raw: true` is a spawn-time property.** It sets the line discipline of the PTY
-(`stty raw -echo`), which changes how bytes *reach* the program - a serial console
+(`stty raw -echo`), which changes how bytes _reach_ the program - a serial console
 wants a `\r` to stay a `\r`. It has nothing to do with how the buffer is read or
 rendered: the screen path reads the same bytes and replays them, either way.
-
-

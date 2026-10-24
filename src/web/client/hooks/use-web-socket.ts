@@ -1,4 +1,4 @@
-import { RETRY_DELAY, SKIP_AUTOSELECT_KEY } from 'opencode-pty/web/shared/constants'
+import { RETRY_DELAY, SKIP_AUTOSELECT_KEY } from '../../shared/constants.ts'
 import type {
   PTYSessionInfo,
   WSMessageClientResize,
@@ -9,7 +9,7 @@ import type {
   WSMessageServerSessionList,
   WSMessageServerSessionRemoved,
   WSMessageServerSessionUpdate,
-} from 'opencode-pty/web/shared/types'
+} from '../../shared/types.ts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface UseWebSocketOptions {

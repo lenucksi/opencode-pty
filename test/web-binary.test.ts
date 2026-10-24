@@ -93,8 +93,7 @@ describe('the standalone web interface', () => {
       const health = await fetch(`${origin}/health`)
       expect(health.status).toBe(200)
       const listed = (await (await fetch(`${origin}/api/sessions`)).json()) as
-        | { id: string }[]
-        | { sessions?: { id: string }[] }
+        { id: string }[] | { sessions?: { id: string }[] }
       const sessions = Array.isArray(listed) ? listed : (listed.sessions ?? [])
       expect(sessions.some((session) => session.id === spawned.id)).toBe(true)
 

@@ -1,10 +1,10 @@
-import { OriginClaim } from 'opencode-pty/shared/notice'
+import { OriginClaim } from '../../../shared/notice.ts'
 import type {
   PTYSessionInfo,
   ServerInfoResponse,
   WSMessageServerNotice,
   WSMessageServerRawData,
-} from 'opencode-pty/web/shared/types'
+} from '../../shared/types.ts'
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BuildInfo } from '../../../shared/build-info.ts'
 import { api } from '../../shared/api-client.ts'

@@ -1,4 +1,4 @@
-import type { PTYSessionInfo } from 'opencode-pty/web/shared/types'
+import type { PTYSessionInfo } from '../../shared/types.ts'
 import { useCallback, useState } from 'react'
 
 import { api } from '../../shared/api-client.ts'

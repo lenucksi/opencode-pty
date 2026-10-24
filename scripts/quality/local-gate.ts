@@ -120,9 +120,10 @@ export async function runLocalQualityGate(): Promise<number> {
       runDependencyCheck(NETWORK_STEP_TIMEOUT_MS)
     )
     await runSocketStep(recorder)
-    // Before Typecheck on purpose: the web client resolves `opencode-pty/web/*`
-    // through the package export map, which points at `dist/`. Typechecking code
-    // that imports the build output needs the build to exist.
+    // Before the tests on purpose: `installed-half.test.ts` compares the built
+    // artifact against the sources, and `pack-integration.test.ts` installs the
+    // packed tarball. Typechecking no longer needs it - the self-imports went
+    // relative (TASK-12), so `bun check` passes on a tree with no `dist/` at all.
     await recorder.run('Production build for tests', () =>
       runInherited('bun', ['run', 'build:prod'])
     )

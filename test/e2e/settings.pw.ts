@@ -57,7 +57,7 @@ const withRetention = async (
 }> => {
   const section = retentionSection(page)
   await expect(section).toBeVisible()
-  const text = await section.innerText()
+  const text = (await section.textContent()) ?? ''
   const sessions = /keep at most (\d+) sessions/.exec(text)
   const days = /keep sessions for (\d+) days/.exec(text)
   const kilo = /rotate a session's log past (\d+) KB/.exec(text)

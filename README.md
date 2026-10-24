@@ -19,7 +19,7 @@ shape that can be contributed upstream.
 
 ## Why?
 
-OpenCode v2 can background shell calls — so this plugin isn't about *whether* a process
+OpenCode v2 can background shell calls — so this plugin isn't about _whether_ a process
 runs in the background. It's about **real terminal emulation** and **shared control**:
 
 - **Processes that need a TTY** — certain Ansible plays, SSH sessions, anything that prompts or formats for a terminal.
@@ -27,7 +27,7 @@ runs in the background. It's about **real terminal emulation** and **shared cont
 - **Interactive programs** — REPLs, `top`, `vim`, prompts, TUIs.
 - **Dev servers & watchers** (`bun run dev`, `cargo watch`, `bun test --watch`).
 
-With a PTY, the agent and a human can send input to the *same* running process, short or
+With a PTY, the agent and a human can send input to the _same_ running process, short or
 long-lived, and both watch it through the web UI or the TUI panel. You get a real terminal
 buffer with byte-exact paging, mouse reporting, selection, true colour, and exit
 notifications instead of polling — like tmux, but agent-native.
@@ -69,7 +69,7 @@ also a binary of its own (`bunx opencode-pty-web`) for a human who wants to watc
 
 ## Try it
 
-Ask the agent: *"Start `bun run dev` as a background session and tell me when it's ready."*
+Ask the agent: _"Start `bun run dev` as a background session and tell me when it's ready."_
 It will call `pty_spawn`, wait for `<pty_exited>`/`pty_wait`, and report the URL.
 
 ## One session, end to end
@@ -119,12 +119,12 @@ pty_screen({ id: "pty_..." })
 
 Environment variables (full table in [`docs/configuration.md`](docs/configuration.md)):
 
-| Variable | Default | What it does |
-|---|---|---|
-| `PTY_MAX_BUFFER_LINES` | `50000` | Lines kept per session |
-| `PTY_READ_MAX_TOKENS` | `25000` | Default `pty_read` budget |
-| `PTY_WEB_PORT` | `0` (random) | Web UI port |
-| `PTY_WEB_HOSTNAME` | `::1` | Web UI bind host |
+| Variable               | Default      | What it does              |
+| ---------------------- | ------------ | ------------------------- |
+| `PTY_MAX_BUFFER_LINES` | `50000`      | Lines kept per session    |
+| `PTY_READ_MAX_TOKENS`  | `25000`      | Default `pty_read` budget |
+| `PTY_WEB_PORT`         | `0` (random) | Web UI port               |
+| `PTY_WEB_HOSTNAME`     | `::1`        | Web UI bind host          |
 
 Plugin options (V2): `port`, `hostname`, `autostart`, `retention`. Archive retention
 (`maxSessions`, `maxAgeDays`, `maxBytesPerSession`) is enforced on the shared on-disk
@@ -155,8 +155,8 @@ See `docs/configuration.md`.
 - **TUI panel**: a PTY section in OpenCode's sidebar (2.0.23+) and a per-conversation
   session panel (`/pty-sessions`), with coloured output, scrollback and a command line.
 - **REST API + WebSocket**: see [`docs/api.md`](docs/api.md).
-- **Version identity**: `GET /api/server` and the Settings dialog show the build's version
-  + commit.
+- **Version identity**: `GET /api/server` and the Settings dialog show the build's
+  version and the commit it was built from.
 
 ## How it works
 
@@ -209,4 +209,3 @@ Contributions welcome. Open an issue or PR. See [`CONTRIBUTING.md`](CONTRIBUTING
 
 The V1 plugin is gone: the bare package name loads the V2 half, and OpenCode 1.x is no
 longer supported.
-```

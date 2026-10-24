@@ -64,4 +64,3 @@ To load a local checkout in OpenCode:
   "plugin": ["file:///absolute/path/to/opencode-pty/index.ts"]
 }
 ```
-
