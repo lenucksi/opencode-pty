@@ -1,21 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="utf-8" />
-    <title>agentterm — logo variants</title>
+    <title>agentterm — acht Marken, zwei Größenklassen</title>
     <style>
       :root {
         color-scheme: dark light;
         --ink: #0d1117;
         --ink-raised: #161b22;
+        --ink-inset: #0b0f14;
         --line: #30363d;
         --fg: #c9d1d9;
-        --muted: #8b949e;
+        --fg-muted: #8b949e;
+        --fg-subtle: #6e7681;
         --accent: #58a6ff;
         --paper: #ffffff;
+        --paper-raised: #f6f8fa;
         --paper-line: #d0d7de;
         --paper-fg: #1f2328;
         --paper-muted: #59636e;
+        --paper-subtle: #818b98;
         --paper-accent: #0969da;
       }
       * {
@@ -23,7 +27,7 @@
       }
       body {
         margin: 0;
-        padding: 40px;
+        padding: 40px 40px 96px;
         background: var(--ink);
         color: var(--fg);
         font:
@@ -33,19 +37,88 @@
           Roboto,
           sans-serif;
       }
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+      }
       h1 {
-        font-size: 20px;
+        font-size: 22px;
         margin: 0 0 4px;
       }
-      p.lede {
-        color: var(--muted);
-        margin: 0 0 32px;
-        max-width: 68ch;
-      }
       h2 {
-        font-size: 15px;
-        margin: 40px 0 12px;
+        font-size: 16px;
+        margin: 0;
         color: var(--accent);
+      }
+      p.lede {
+        color: var(--fg-muted);
+        margin: 0 0 8px;
+        max-width: 78ch;
+      }
+      p {
+        margin: 0;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        font-size: 12px;
+        color: var(--fg-muted);
+      }
+      .rules {
+        margin: 24px 0 48px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .rules table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .rules th,
+      .rules td {
+        text-align: left;
+        padding: 9px 14px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      .rules th {
+        background: var(--ink-raised);
+        color: var(--fg-muted);
+        font-weight: 600;
+      }
+      .rules tr:last-child td {
+        border-bottom: none;
+      }
+      .variant {
+        margin: 0 0 56px;
+        padding-top: 28px;
+        border-top: 1px solid var(--line);
+      }
+      .variant-head {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 4px;
+        flex-wrap: wrap;
+      }
+      .tag {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--fg-subtle);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 1px 8px;
+      }
+      .tag.live {
+        color: #3fb950;
+        border-color: #238636;
+      }
+      .idea {
+        color: var(--fg-muted);
+        margin: 0 0 18px;
+        max-width: 86ch;
       }
       .grid {
         display: grid;
@@ -54,14 +127,20 @@
       .grid.three {
         grid-template-columns: repeat(3, minmax(0, 1fr));
       }
+      @media (max-width: 980px) {
+        .grid.three {
+          grid-template-columns: 1fr;
+        }
+      }
       .tile {
         border: 1px solid var(--line);
         border-radius: 10px;
-        padding: 16px;
+        padding: 18px;
         background: var(--ink-raised);
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 18px;
+        min-width: 0;
       }
       .tile.light {
         background: var(--paper);
@@ -71,40 +150,31 @@
       .mark {
         color: var(--accent);
         display: flex;
+        flex-shrink: 0;
       }
       .tile.light .mark {
         color: var(--paper-accent);
       }
-      .row {
+      .lockup {
         display: flex;
         align-items: center;
-        gap: 18px;
+        gap: 12px;
       }
       .wordmark {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .wordmark-text {
-        font-size: 22px;
+        font-size: 24px;
         font-weight: 600;
         letter-spacing: -0.01em;
         color: var(--fg);
+        line-height: 1.1;
       }
-      .caption {
-        color: var(--muted);
-        font-size: 12px;
-      }
-      .tile.light .wordmark-text {
+      .tile.light .wordmark {
         color: var(--paper-fg);
-      }
-      .tile.light .caption {
-        color: var(--paper-muted);
       }
       .sizes {
         display: flex;
         align-items: flex-end;
-        gap: 16px;
+        gap: 18px;
+        flex-wrap: wrap;
       }
       .sizes figure {
         margin: 0;
@@ -115,159 +185,225 @@
       }
       .sizes figcaption {
         font-size: 10px;
-        color: var(--muted);
+        color: var(--fg-subtle);
         font-variant-numeric: tabular-nums;
       }
-      .favicon {
+      .caption {
+        font-size: 12px;
+        color: var(--fg-muted);
+      }
+      .label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--fg-subtle);
+      }
+      .tile.light .label {
+        color: var(--paper-subtle);
+      }
+      /* the sidebar, reduced to what the header actually shows */
+      .sidebar-mock {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 6px 12px 6px 8px;
-        border-radius: 8px 8px 0 0;
-        background: #1c2128;
+        gap: 9px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--ink-inset);
+        color: var(--accent);
+      }
+      .sidebar-mock .brand-text {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .sidebar-mock .brand-name {
+        font-size: 17px;
+        font-weight: 600;
+        line-height: 1.15;
+      }
+      .sidebar-mock .brand-sub {
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--fg-muted);
+      }
+      /* the status line at the size it really renders at: 14 px */
+      .statusbar-mock {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        height: 26px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: var(--ink-inset);
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        font-size: 11px;
+        color: var(--fg-subtle);
+        overflow: hidden;
+      }
+      .statusbar-mock .status-brand {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--accent);
+      }
+      .statusbar-mock .status-name {
+        color: var(--fg-muted);
+      }
+      .statusbar-mock .metrics {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-variant-numeric: tabular-nums;
+      }
+      /* favicons: 32 and 16 on the tile they actually sit on */
+      .favrow {
+        display: flex;
+        align-items: flex-end;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      .swatch {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+      .swatch-icon {
+        display: grid;
+        place-items: center;
+        background: var(--ink);
+        border-radius: 7px;
+      }
+      .swatch-icon.s32 {
+        width: 32px;
+        height: 32px;
+      }
+      .swatch-icon.s16 {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+      }
+      .tab {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        align-self: flex-start;
+        padding: 5px 12px 5px 7px;
         border: 1px solid var(--line);
         border-bottom: none;
-        align-self: flex-start;
-      }
-      .favicon span {
-        font-size: 11px;
+        border-radius: 8px 8px 0 0;
+        background: #1c2128;
         color: var(--fg);
       }
-      code {
-        font-family: ui-monospace, monospace;
-        font-size: 12px;
-        color: var(--muted);
+      .tab span {
+        font-size: 11px;
+      }
+      .verdict {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px 22px;
+        margin: 14px 0 0;
+        font-size: 12.5px;
+        color: var(--fg-muted);
+      }
+      .tile.light .caption,
+      .tile.light .sizes figcaption,
+      .tile.light .verdict {
+        color: var(--paper-muted);
+      }
+      @media (max-width: 980px) {
+        .verdict {
+          grid-template-columns: 1fr;
+        }
+      }
+      .verdict b {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .footer {
+        margin-top: 56px;
+        padding-top: 24px;
+        border-top: 1px solid var(--line);
+        color: var(--fg-muted);
+        max-width: 88ch;
+      }
+      .footer h2 {
+        margin-bottom: 8px;
       }
     </style>
   </head>
   <body>
-    <h1>agentterm — three marks</h1>
-    <p class="lede">
-      The idea each variant is trying to carry: <strong>one PTY, two readers</strong> — the agent
-      works in the terminal, the human can read the same screen and type into it. All three are
-      single-colour via <code>currentColor</code>, so they work on both themes without a second
-      file.
-    </p>
+    <main>
+      <h1>agentterm — acht Marken, zwei Größenklassen</h1>
+      <p class="lede">
+        Acht Entwürfe, jeder in der Form, in der er wirklich benutzt wird: einmal als
+        <strong>Web-Marke</strong> (darf zwei Tonwerte und einen Live-Punkt haben) und einmal als
+        <strong>Favicon</strong> (nur das Skelett, ein Ton, nichts unter zwei Einheiten). Die
+        Reduktion ist Teil des Entwurfs, nicht sein Unfall — darum steht bei jeder Variante, was im
+        Favicon wegfällt.
+      </p>
 
-    <!-- ── V1: two cursors ─────────────────────────────────────────────── -->
-    <h2>V1 — two cursors in one frame</h2>
-    <div class="grid three">
-      <div class="tile">
-        <div class="row">
-          <span class="mark">
-            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
-              <rect
-                x="2.5"
-                y="6"
-                width="27"
-                height="20"
-                rx="4"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-              />
-              <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
-              <rect
-                x="17.5"
-                y="12.5"
-                width="6.5"
-                height="9"
-                rx="1.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              />
-            </svg>
-          </span>
-          <span class="wordmark">
-            <span class="wordmark-text">agentterm</span>
-          </span>
-        </div>
-        <div class="sizes">
-          <figure>
-            <span class="mark"
-              ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
-                <rect
-                  x="2.5"
-                  y="6"
-                  width="27"
-                  height="20"
-                  rx="4"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                />
-                <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
-                <rect
-                  x="17.5"
-                  y="12.5"
-                  width="6.5"
-                  height="9"
-                  rx="1.5"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                /></svg
-            ></span>
-            <figcaption>64</figcaption>
-          </figure>
-          <figure>
-            <span class="mark"
-              ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
-                <rect
-                  x="2.5"
-                  y="6"
-                  width="27"
-                  height="20"
-                  rx="4"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                />
-                <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
-                <rect
-                  x="17.5"
-                  y="12.5"
-                  width="6.5"
-                  height="9"
-                  rx="1.5"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                /></svg
-            ></span>
-            <figcaption>24</figcaption>
-          </figure>
-          <figure>
-            <span class="mark"
-              ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
-                <rect
-                  x="2.5"
-                  y="6"
-                  width="27"
-                  height="20"
-                  rx="4"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                />
-                <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
-                <rect
-                  x="17.5"
-                  y="12.5"
-                  width="6.5"
-                  height="9"
-                  rx="1.5"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                /></svg
-            ></span>
-            <figcaption>16</figcaption>
-          </figure>
-        </div>
-        <div class="favicon">
-          <svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+      <div class="rules">
+        <table>
+          <tr>
+            <th></th>
+            <th>Favicon (16 / 32 px)</th>
+            <th>Web-Marke (24 / 64 / 96 px)</th>
+          </tr>
+          <tr>
+            <td><b>Formen</b></td>
+            <td>maximal drei, alles ≥ 2 Einheiten</td>
+            <td>Skelett plus Zutaten</td>
+          </tr>
+          <tr>
+            <td><b>Tonwerte</b></td>
+            <td>einer (<code>#58a6ff</code>)</td>
+            <td>zwei: Agent 1.0, Mensch <code>0.62</code></td>
+          </tr>
+          <tr>
+            <td><b>Detail</b></td>
+            <td>nichts</td>
+            <td>Fensterleiste, Live-Punkt, Bewegungsspur</td>
+          </tr>
+          <tr>
+            <td><b>Hintergrund</b></td>
+            <td>eigene Kachel <code>#0d1117</code>, <code>rx 7</code></td>
+            <td>transparent, erbt die Seite (<code>currentColor</code>)</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- ── the symbols, once ─────────────────────────────────────────── -->
+      <svg
+        style="position: absolute; width: 0; height: 0; overflow: hidden"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <defs>
+          <!-- V1a: what ships right now, kept as the baseline -->
+          <symbol id="v1a-web" viewBox="0 0 32 32">
+            <g fill="none" stroke="currentColor" stroke-width="2.5">
+              <rect x="2.5" y="6" width="27" height="20" rx="4" />
+            </g>
+            <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
+            <rect
+              x="17.5"
+              y="12.5"
+              width="6.5"
+              height="9"
+              rx="1.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            />
+          </symbol>
+          <symbol id="v1a-fav" viewBox="0 0 32 32">
             <rect width="32" height="32" rx="7" fill="#0d1117" />
             <rect
               x="4.5"
@@ -290,51 +426,10 @@
               stroke="#58a6ff"
               stroke-width="2"
             />
-          </svg>
-          <span>agentterm</span>
-        </div>
-        <p class="caption">
-          A filled cursor and an outlined one, side by side in one frame: the agent types, the human
-          watches the same buffer. Strongest at 16 px.
-        </p>
-      </div>
-      <div class="tile light">
-        <div class="row">
-          <span class="mark">
-            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
-              <rect
-                x="2.5"
-                y="6"
-                width="27"
-                height="20"
-                rx="4"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-              />
-              <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
-              <rect
-                x="17.5"
-                y="12.5"
-                width="6.5"
-                height="9"
-                rx="1.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              />
-            </svg>
-          </span>
-          <span class="wordmark"><span class="wordmark-text">agentterm</span></span>
-        </div>
-        <p class="caption">Same mark on the light theme — it inherits the colour it sits in.</p>
-      </div>
-      <div class="tile">
-        <p class="caption">
-          In the sidebar, at 22 px next to the name and the word “PTY sessions”:
-        </p>
-        <div style="display: flex; align-items: center; gap: 9px; color: var(--accent)">
-          <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+          </symbol>
+
+          <!-- V1b: block cursor + I-beam -->
+          <symbol id="v1b-web" viewBox="0 0 32 32">
             <rect
               x="2.5"
               y="6"
@@ -345,313 +440,1614 @@
               stroke="currentColor"
               stroke-width="2.5"
             />
-            <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
+            <rect x="7.5" y="12" width="7" height="9" rx="1.5" fill="currentColor" />
+            <g fill="currentColor" opacity="0.62">
+              <rect x="16.8" y="11" width="7.4" height="2.2" rx="1.1" />
+              <rect x="19.6" y="13.2" width="2" height="5.6" />
+              <rect x="16.8" y="18.8" width="7.4" height="2.2" rx="1.1" />
+            </g>
+            <circle cx="26.4" cy="9.2" r="1.6" fill="currentColor" />
+          </symbol>
+          <symbol id="v1b-fav" viewBox="0 0 32 32">
+            <rect width="32" height="32" rx="7" fill="#0d1117" />
             <rect
-              x="17.5"
-              y="12.5"
-              width="6.5"
-              height="9"
+              x="4.5"
+              y="8"
+              width="23"
+              height="16"
+              rx="3"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.8"
+            />
+            <rect x="9" y="13" width="6" height="6.5" rx="1.2" fill="#58a6ff" />
+            <g fill="#58a6ff">
+              <rect x="17.4" y="12" width="6.2" height="2.4" rx="1.2" />
+              <rect x="19.3" y="14.4" width="2.4" height="3.6" />
+              <rect x="17.4" y="18" width="6.2" height="2.4" rx="1.2" />
+            </g>
+          </symbol>
+
+          <!-- V1c: prompt chevron + hollow caret -->
+          <symbol id="v1c-web" viewBox="0 0 32 32">
+            <rect
+              x="2.5"
+              y="6"
+              width="27"
+              height="20"
+              rx="4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            />
+            <path
+              d="M8.5 12.4 14 16l-5.5 3.6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <rect
+              x="18.6"
+              y="11.9"
+              width="7"
+              height="9.2"
+              rx="1.6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.3"
+              opacity="0.62"
+            />
+            <circle cx="26.4" cy="9.2" r="1.6" fill="currentColor" />
+          </symbol>
+          <symbol id="v1c-fav" viewBox="0 0 32 32">
+            <rect width="32" height="32" rx="7" fill="#0d1117" />
+            <rect
+              x="4.5"
+              y="8"
+              width="23"
+              height="16"
+              rx="3"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.8"
+            />
+            <path
+              d="M9.5 12.6 14.2 16l-4.7 3.4"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <rect
+              x="18.6"
+              y="12.2"
+              width="6.6"
+              height="7.6"
+              rx="1.5"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.6"
+            />
+          </symbol>
+
+          <!-- V1d: notched frame -->
+          <symbol id="v1d-web" viewBox="0 0 32 32">
+            <path
+              d="M6.5 6h19a4 4 0 0 1 4 4v4.2m0 3.6v4.2a4 4 0 0 1-4 4h-19a4 4 0 0 1-4-4v-12a4 4 0 0 1 4-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linejoin="round"
+            />
+            <rect x="8.6" y="11.4" width="7" height="9.2" rx="1.6" fill="currentColor" />
+            <rect
+              x="18.6"
+              y="11.4"
+              width="6.8"
+              height="9.2"
+              rx="1.6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              opacity="0.62"
+            />
+            <circle cx="26.4" cy="9.2" r="1.6" fill="currentColor" />
+          </symbol>
+          <symbol id="v1d-fav" viewBox="0 0 32 32">
+            <rect width="32" height="32" rx="7" fill="#0d1117" />
+            <rect
+              x="4.5"
+              y="8"
+              width="23"
+              height="16"
+              rx="3"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.8"
+            />
+            <rect x="8.4" y="12.6" width="6.2" height="7.6" rx="1.4" fill="#58a6ff" />
+            <rect
+              x="17.2"
+              y="13"
+              width="5.8"
+              height="6.8"
+              rx="1.4"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.4"
+            />
+          </symbol>
+
+          <!-- V1e: window with a title bar -->
+          <symbol id="v1e-web" viewBox="0 0 32 32">
+            <rect
+              x="2.5"
+              y="6"
+              width="27"
+              height="20"
+              rx="4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            />
+            <g fill="currentColor" opacity="0.55">
+              <path d="M5 10.4h22" stroke="currentColor" stroke-width="1.5" />
+              <circle cx="7" cy="8.5" r="0.9" />
+              <circle cx="9.6" cy="8.5" r="0.9" />
+            </g>
+            <rect x="8.6" y="12.6" width="6.8" height="8.4" rx="1.5" fill="currentColor" />
+            <rect
+              x="18.2"
+              y="12.6"
+              width="6.4"
+              height="8.4"
               rx="1.5"
               fill="none"
               stroke="currentColor"
+              stroke-width="2.1"
+              opacity="0.62"
+            />
+          </symbol>
+
+          <!-- V2c: echo, two depths -->
+          <symbol id="v2c-web" viewBox="0 0 32 32">
+            <rect
+              x="2.4"
+              y="4.8"
+              width="15"
+              height="12.4"
+              rx="2.6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              opacity="0.55"
+            />
+            <rect
+              x="6.4"
+              y="8.4"
+              width="4.2"
+              height="5.8"
+              rx="1"
+              fill="currentColor"
+              opacity="0.55"
+            />
+            <rect
+              x="15.8"
+              y="15.2"
+              width="13.6"
+              height="12"
+              rx="2.8"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+            />
+            <rect x="19.8" y="19.2" width="4.8" height="6.6" rx="1.1" fill="currentColor" />
+          </symbol>
+          <symbol id="v2c-fav" viewBox="0 0 32 32">
+            <rect width="32" height="32" rx="7" fill="#0d1117" />
+            <rect
+              x="3.4"
+              y="5.6"
+              width="14"
+              height="11.4"
+              rx="2.8"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.4"
+              opacity="0.55"
+            />
+            <rect
+              x="15.4"
+              y="14.4"
+              width="13.2"
+              height="11.4"
+              rx="3"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.6"
+            />
+            <rect x="18.8" y="18.4" width="4.2" height="5.8" rx="1" fill="#58a6ff" />
+          </symbol>
+
+          <!-- V2d: a packet, not a wire -->
+          <symbol id="v2d-web" viewBox="0 0 32 32">
+            <rect
+              x="2.4"
+              y="8"
+              width="10"
+              height="16"
+              rx="2.8"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+            />
+            <rect x="5.2" y="12.6" width="4.4" height="6.8" rx="1" fill="currentColor" />
+            <rect
+              x="19.6"
+              y="8"
+              width="10"
+              height="16"
+              rx="2.8"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+            />
+            <circle cx="16" cy="16" r="1.6" fill="currentColor" />
+          </symbol>
+          <symbol id="v2d-fav" viewBox="0 0 32 32">
+            <rect width="32" height="32" rx="7" fill="#0d1117" />
+            <rect
+              x="3.2"
+              y="8.6"
+              width="8.8"
+              height="14.8"
+              rx="2.6"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.6"
+            />
+            <rect x="5.4" y="13" width="3.6" height="6" rx="0.9" fill="#58a6ff" />
+            <rect
+              x="20"
+              y="8.6"
+              width="8.8"
+              height="14.8"
+              rx="2.6"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.6"
+            />
+            <circle cx="16" cy="16" r="1.9" fill="#58a6ff" />
+          </symbol>
+
+          <!-- V2e: the attach bracket -->
+          <symbol id="v2e-web" viewBox="0 0 32 32">
+            <rect
+              x="2.2"
+              y="9"
+              width="10.8"
+              height="14"
+              rx="2.6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+            />
+            <rect x="5.2" y="13" width="4.4" height="6" rx="1" fill="currentColor" />
+            <path
+              d="M19.4 10.6h7a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-7"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linejoin="round"
+              opacity="0.62"
+            />
+            <rect
+              x="21.6"
+              y="13.6"
+              width="5"
+              height="6.2"
+              rx="1.1"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+            />
+          </symbol>
+          <symbol id="v2e-fav" viewBox="0 0 32 32">
+            <rect width="32" height="32" rx="7" fill="#0d1117" />
+            <rect
+              x="3.4"
+              y="9.4"
+              width="9.4"
+              height="13.2"
+              rx="2.4"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.6"
+            />
+            <rect x="6" y="13.2" width="4" height="5.8" rx="0.9" fill="#58a6ff" />
+            <rect
+              x="19.2"
+              y="9.4"
+              width="9.4"
+              height="13.2"
+              rx="2.4"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.6"
+            />
+            <rect
+              x="21.8"
+              y="13.2"
+              width="4.2"
+              height="5.8"
+              rx="1"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.2"
+            />
+          </symbol>
+
+          <!-- V2f: mirrored frames, shared corner -->
+          <symbol id="v2f-web" viewBox="0 0 32 32">
+            <rect
+              x="2.8"
+              y="4.6"
+              width="12"
+              height="10.4"
+              rx="2.4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.3"
+            />
+            <rect x="9.3" y="8" width="3.6" height="5.6" rx="0.9" fill="currentColor" />
+            <rect
+              x="17.7"
+              y="17.9"
+              width="12"
+              height="10.4"
+              rx="2.4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.3"
+            />
+            <rect
+              x="20.1"
+              y="20.3"
+              width="3.6"
+              height="5.6"
+              rx="0.9"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+            />
+          </symbol>
+          <symbol id="v2f-fav" viewBox="0 0 32 32">
+            <rect width="32" height="32" rx="7" fill="#0d1117" />
+            <rect
+              x="3"
+              y="4.6"
+              width="11.4"
+              height="9.6"
+              rx="2.6"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.6"
+            />
+            <rect x="8.4" y="7.4" width="3.4" height="5" rx="0.9" fill="#58a6ff" />
+            <rect
+              x="18"
+              y="17.8"
+              width="11.4"
+              height="9.6"
+              rx="2.6"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.6"
+            />
+            <rect
+              x="19.6"
+              y="18.8"
+              width="3.4"
+              height="5"
+              rx="0.9"
+              fill="none"
+              stroke="#58a6ff"
               stroke-width="2"
             />
-          </svg>
-          <span style="display: flex; flex-direction: column; gap: 1px">
-            <span style="font-size: 17px; font-weight: 600; line-height: 1.15; color: var(--accent)"
-              >agentterm</span
-            >
-            <span
-              style="
-                font-size: 10px;
-                letter-spacing: 0.09em;
-                text-transform: uppercase;
-                color: var(--muted);
-              "
-              >PTY sessions</span
-            >
-          </span>
-        </div>
-      </div>
-    </div>
+          </symbol>
+        </defs>
+      </svg>
 
-    <!-- ── V2: two windows, one line ───────────────────────────────────── -->
-    <h2>V2 — two windows, one connection</h2>
-    <div class="grid three">
-      <div class="tile">
-        <div class="row">
-          <span class="mark">
-            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
-              <rect
-                x="2"
-                y="5"
-                width="15"
-                height="12"
-                rx="3"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-              />
-              <rect
-                x="15"
-                y="15"
-                width="15"
-                height="12"
-                rx="3"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-              />
-              <path
-                d="M17 11h5a3 3 0 0 1 3 3v1"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              />
-            </svg>
-          </span>
-          <span class="wordmark"><span class="wordmark-text">agentterm</span></span>
+      <p class="lede" style="margin-bottom: 40px">
+        Die Symbole für die Web-Marke sind <code>currentColor</code>; ihr zweiter Tonwert ist
+        <code>opacity="0.62"</code> auf dem Cursor des Menschen. Die Favicons tragen ihre eigene
+        dunkle Kachel und ein festes <code>#58a6ff</code>, weil sie auf fremdem Grund stehen.
+      </p>
+
+      <!-- ── V1a, the baseline ─────────────────────────────────────────── -->
+      <section class="variant" id="v1a">
+        <div class="variant-head">
+          <h2>V1a — zwei gleiche Cursor</h2>
+          <span class="tag live">läuft jetzt</span>
         </div>
-        <p class="caption">
-          Two terminals, one line between them: the agent’s process and the human’s window on it.
-          Reads as two panes of the same session.
+        <p class="idea">
+          Der Ist-Zustand, als Vergleichsmaßstab: ein Rahmen, zwei gleich große Cursor, einer
+          gefüllt, einer hohl. Kein Tonwertunterschied, weil beide gleich viel zu sagen haben — und
+          das ist genau die Stelle, an der die acht folgenden ansetzen.
+        </p>
+        <div class="grid three">
+          <div class="tile">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1a-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <div class="sizes">
+              <figure>
+                <span class="mark"
+                  ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1a-web" /></svg
+                ></span>
+                <figcaption>96</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1a-web" /></svg
+                ></span>
+                <figcaption>64</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1a-web" /></svg
+                ></span>
+                <figcaption>24</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1a-web" /></svg
+                ></span>
+                <figcaption>16</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1a-web" /></svg
+                ></span>
+                <figcaption>14</figcaption>
+              </figure>
+            </div>
+          </div>
+          <div class="tile light">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1a-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <p class="caption">
+              Auf hellem Grund: die Marke erbt <code>#0969da</code> von der Seite.
+            </p>
+          </div>
+          <div class="tile">
+            <span class="label">Sidebar</span>
+            <div class="sidebar-mock">
+              <span class="mark"
+                ><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1a-web" /></svg
+              ></span>
+              <span class="brand-text">
+                <span class="brand-name">agentterm</span>
+                <span class="brand-sub">PTY sessions</span>
+              </span>
+            </div>
+            <span class="label">Statuszeile, 14 px</span>
+            <div class="statusbar-mock">
+              <span class="status-brand">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1a-web" />
+                </svg>
+                <span class="status-name">agentterm</span>
+              </span>
+              <span class="metrics">pty_a1b2 · 12.4k chars · ws 6 · upd 7 · 1.0.3</span>
+            </div>
+            <span class="label">Favicon</span>
+            <div class="favrow">
+              <div class="swatch">
+                <span class="swatch-icon s32"
+                  ><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1a-fav" /></svg
+                ></span>
+                <span class="caption">32</span>
+              </div>
+              <div class="swatch">
+                <span class="swatch-icon s16"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1a-fav" /></svg
+                ></span>
+                <span class="caption">16</span>
+              </div>
+              <div class="tab">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1a-fav" />
+                </svg>
+                <span>agentterm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="verdict">
+          <p><b>Idee</b> — zwei Leser, gleiche Rechte.</p>
+          <p><b>Bei 16 px</b> — trägt, weil es nur zwei Massen sind.</p>
+          <p><b>Mindestgröße</b> — 14 px.</p>
+        </div>
+      </section>
+
+      <!-- ── V1b ──────────────────────────────────────────────────────── -->
+      <section class="variant" id="v1b">
+        <div class="variant-head">
+          <h2>V1b — Block-Cursor und I-Beam</h2>
+          <span class="tag">20 px+</span>
+        </div>
+        <p class="idea">
+          Zwei <em>Gattungen</em> von Cursor statt zwei gleichen Kästchen: der Block ist der Cursor
+          einer TUI (das Programm), der I-Beam der eines Menschen in einem Textfeld. Der gefüllte
+          Block arbeitet, der gedämpfte I-Beam ist der zweite Leser — derselbe Rahmen, zwei Arten
+          von Anwesenheit.
+        </p>
+        <div class="grid three">
+          <div class="tile">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1b-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <div class="sizes">
+              <figure>
+                <span class="mark"
+                  ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1b-web" /></svg
+                ></span>
+                <figcaption>96</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1b-web" /></svg
+                ></span>
+                <figcaption>64</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1b-web" /></svg
+                ></span>
+                <figcaption>24</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1b-web" /></svg
+                ></span>
+                <figcaption>16</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1b-web" /></svg
+                ></span>
+                <figcaption>14</figcaption>
+              </figure>
+            </div>
+          </div>
+          <div class="tile light">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1b-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <p class="caption">
+              Der Live-Punkt bleibt auch hier: er ist die Aussage „diese Sitzung läuft".
+            </p>
+          </div>
+          <div class="tile">
+            <span class="label">Sidebar</span>
+            <div class="sidebar-mock">
+              <span class="mark"
+                ><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1b-web" /></svg
+              ></span>
+              <span class="brand-text">
+                <span class="brand-name">agentterm</span>
+                <span class="brand-sub">PTY sessions</span>
+              </span>
+            </div>
+            <span class="label">Statuszeile, 14 px</span>
+            <div class="statusbar-mock">
+              <span class="status-brand">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1b-web" />
+                </svg>
+                <span class="status-name">agentterm</span>
+              </span>
+              <span class="metrics">pty_a1b2 · 12.4k chars · ws 6 · upd 7 · 1.0.3</span>
+            </div>
+            <span class="label">Favicon</span>
+            <div class="favrow">
+              <div class="swatch">
+                <span class="swatch-icon s32"
+                  ><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1b-fav" /></svg
+                ></span>
+                <span class="caption">32</span>
+              </div>
+              <div class="swatch">
+                <span class="swatch-icon s16"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1b-fav" /></svg
+                ></span>
+                <span class="caption">16</span>
+              </div>
+              <div class="tab">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1b-fav" />
+                </svg>
+                <span>agentterm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="verdict">
+          <p><b>Idee</b> — das Programm hat einen Block, der Mensch einen I-Beam.</p>
+          <p>
+            <b>Favicon</b> — Serifen von 2.2 auf 2.4 verdickt; bei 16 px bleiben sie gerade eben.
+          </p>
+          <p>
+            <b>Grenze</b> — 20 px. In der Statuszeile (14 px) sind die Serifen weg, der I-Beam wird
+            zum Strich.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── V1c ──────────────────────────────────────────────────────── -->
+      <section class="variant" id="v1c">
+        <div class="variant-head">
+          <h2>V1c — Prompt und hohler Cursor</h2>
+          <span class="tag">14 px+</span>
+        </div>
+        <p class="idea">
+          Der Chevron ist die Eingabeaufforderung: der Agent arbeitet in einem Terminal. Der hohle
+          Cursor daneben ist ein zweiter, wartender Cursor: der Mensch kann hier tippen. Das ist die
+          einzige Variante, die <em>beide</em> Hälften des Briefings in zwei Zeichen sagt — und sie
+          ist die einzige der acht, die im Favicon nichts verliert.
+        </p>
+        <div class="grid three">
+          <div class="tile">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1c-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <div class="sizes">
+              <figure>
+                <span class="mark"
+                  ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1c-web" /></svg
+                ></span>
+                <figcaption>96</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1c-web" /></svg
+                ></span>
+                <figcaption>64</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1c-web" /></svg
+                ></span>
+                <figcaption>24</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1c-web" /></svg
+                ></span>
+                <figcaption>16</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1c-web" /></svg
+                ></span>
+                <figcaption>14</figcaption>
+              </figure>
+            </div>
+          </div>
+          <div class="tile light">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1c-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <p class="caption">
+              Bei 96 px trägt der Kontrast zwischen dem lauten Chevron und dem leisen Cursor.
+            </p>
+          </div>
+          <div class="tile">
+            <span class="label">Sidebar</span>
+            <div class="sidebar-mock">
+              <span class="mark"
+                ><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1c-web" /></svg
+              ></span>
+              <span class="brand-text">
+                <span class="brand-name">agentterm</span>
+                <span class="brand-sub">PTY sessions</span>
+              </span>
+            </div>
+            <span class="label">Statuszeile, 14 px</span>
+            <div class="statusbar-mock">
+              <span class="status-brand">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1c-web" />
+                </svg>
+                <span class="status-name">agentterm</span>
+              </span>
+              <span class="metrics">pty_a1b2 · 12.4k chars · ws 6 · upd 7 · 1.0.3</span>
+            </div>
+            <span class="label">Favicon</span>
+            <div class="favrow">
+              <div class="swatch">
+                <span class="swatch-icon s32"
+                  ><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1c-fav" /></svg
+                ></span>
+                <span class="caption">32</span>
+              </div>
+              <div class="swatch">
+                <span class="swatch-icon s16"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1c-fav" /></svg
+                ></span>
+                <span class="caption">16</span>
+              </div>
+              <div class="tab">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1c-fav" />
+                </svg>
+                <span>agentterm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="verdict">
+          <p><b>Idee</b> — der Agent tippt den Prompt, der Mensch hat einen zweiten Cursor.</p>
+          <p>
+            <b>Favicon</b> — Chevron auf 3 verdickt, Cursor voll statt gedämpft; keine Form fällt
+            weg.
+          </p>
+          <p>
+            <b>Grenze</b> — 14 px. Bei 14 wird aus dem hohlen Cursor ein Punkt — noch lesbar, aber
+            ab hier ist es ein Symbol, kein Bild.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── V1d ──────────────────────────────────────────────────────── -->
+      <section class="variant" id="v1d">
+        <div class="variant-head">
+          <h2>V1d — Fenster mit Einkerbung</h2>
+          <span class="tag">32 px+</span>
+        </div>
+        <p class="idea">
+          Der Rahmen hat rechts eine Lücke: der Agent ist drin, der Mensch greift hinein. Die
+          stärkste Aussage der V1-Familie — und die fragilste, weil eine 3.6-Einheiten-Lücke bei 16
+          px zu 1.8 px wird und schlicht verschwindet. Darum ist das Favicon hier die
+          <em>Reduktion</em>: geschlossener Rahmen, dieselben zwei Massen.
+        </p>
+        <div class="grid three">
+          <div class="tile">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1d-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <div class="sizes">
+              <figure>
+                <span class="mark"
+                  ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1d-web" /></svg
+                ></span>
+                <figcaption>96</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1d-web" /></svg
+                ></span>
+                <figcaption>64</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1d-web" /></svg
+                ></span>
+                <figcaption>24</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1d-web" /></svg
+                ></span>
+                <figcaption>16</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1d-web" /></svg
+                ></span>
+                <figcaption>14</figcaption>
+              </figure>
+            </div>
+          </div>
+          <div class="tile light">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1d-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <p class="caption">
+              Die Lücke liegt auf der Cursor-Seite: dort, wo der Mensch hereinkommt.
+            </p>
+          </div>
+          <div class="tile">
+            <span class="label">Sidebar</span>
+            <div class="sidebar-mock">
+              <span class="mark"
+                ><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1d-web" /></svg
+              ></span>
+              <span class="brand-text">
+                <span class="brand-name">agentterm</span>
+                <span class="brand-sub">PTY sessions</span>
+              </span>
+            </div>
+            <span class="label">Statuszeile, 14 px</span>
+            <div class="statusbar-mock">
+              <span class="status-brand">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1d-web" />
+                </svg>
+                <span class="status-name">agentterm</span>
+              </span>
+              <span class="metrics">pty_a1b2 · 12.4k chars · ws 6 · upd 7 · 1.0.3</span>
+            </div>
+            <span class="label">Favicon (Reduktion)</span>
+            <div class="favrow">
+              <div class="swatch">
+                <span class="swatch-icon s32"
+                  ><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1d-fav" /></svg
+                ></span>
+                <span class="caption">32</span>
+              </div>
+              <div class="swatch">
+                <span class="swatch-icon s16"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1d-fav" /></svg
+                ></span>
+                <span class="caption">16</span>
+              </div>
+              <div class="tab">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1d-fav" />
+                </svg>
+                <span>agentterm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="verdict">
+          <p><b>Idee</b> — der Agent sitzt drin, der Mensch kann hineingreifen.</p>
+          <p><b>Favicon</b> — die Kerbe fällt weg; es bleibt die gewichtete Paarung.</p>
+          <p>
+            <b>Grenze</b> — 32 px. Bei 24 px ist die Lücke 2.7 px breit, bei 16 px 1.8 — sie liest
+            sich als Druckfehler.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── V1e ──────────────────────────────────────────────────────── -->
+      <section class="variant" id="v1e">
+        <div class="variant-head">
+          <h2>V1e — Fenster mit Titelleiste</h2>
+          <span class="tag">24 px+</span>
+        </div>
+        <p class="idea">
+          Eine Haarlinie und zwei Punkte oben machen aus dem Rahmen ein Fenster; darunter das Paar.
+          Bei 96 px sagt es sofort „das ist ein Fenster mit zwei Lesern". Bei 24 px sind die Punkte
+          weg und die Leiste ist 1 px — dann ist es V1a mit einer Störung. Das Favicon ist deshalb
+          identisch mit V1d: <em>unter 24 px existiert der Unterschied nicht.</em>
+        </p>
+        <div class="grid three">
+          <div class="tile">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1e-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <div class="sizes">
+              <figure>
+                <span class="mark"
+                  ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1e-web" /></svg
+                ></span>
+                <figcaption>96</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1e-web" /></svg
+                ></span>
+                <figcaption>64</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1e-web" /></svg
+                ></span>
+                <figcaption>24</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1e-web" /></svg
+                ></span>
+                <figcaption>16</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1e-web" /></svg
+                ></span>
+                <figcaption>14</figcaption>
+              </figure>
+            </div>
+          </div>
+          <div class="tile light">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1e-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <p class="caption">
+              Leiste und Punkte bei <code>0.55</code>: Fensterchrom, keine Information.
+            </p>
+          </div>
+          <div class="tile">
+            <span class="label">Sidebar</span>
+            <div class="sidebar-mock">
+              <span class="mark"
+                ><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1e-web" /></svg
+              ></span>
+              <span class="brand-text">
+                <span class="brand-name">agentterm</span>
+                <span class="brand-sub">PTY sessions</span>
+              </span>
+            </div>
+            <span class="label">Statuszeile, 14 px</span>
+            <div class="statusbar-mock">
+              <span class="status-brand">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1e-web" />
+                </svg>
+                <span class="status-name">agentterm</span>
+              </span>
+              <span class="metrics">pty_a1b2 · 12.4k chars · ws 6 · upd 7 · 1.0.3</span>
+            </div>
+            <span class="label">Favicon (Reduktion)</span>
+            <div class="favrow">
+              <div class="swatch">
+                <span class="swatch-icon s32"
+                  ><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1d-fav" /></svg
+                ></span>
+                <span class="caption">32</span>
+              </div>
+              <div class="swatch">
+                <span class="swatch-icon s16"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v1d-fav" /></svg
+                ></span>
+                <span class="caption">16</span>
+              </div>
+              <div class="tab">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v1d-fav" />
+                </svg>
+                <span>agentterm</span>
+              </div>
+            </div>
+            <p class="caption">
+              Das Favicon ist bewusst dasselbe wie bei V1d — eine eigene Reduktion wäre eine zweite
+              Wahrheit über dasselbe Zeichen.
+            </p>
+          </div>
+        </div>
+        <div class="verdict">
+          <p><b>Idee</b> — ein Fenster, nicht nur ein Rahmen.</p>
+          <p><b>Favicon</b> — identisch mit V1d; Leiste und Punkte fallen weg.</p>
+          <p><b>Grenze</b> — 24 px. Darunter bleibt von der Leiste 1 px Chrom und zwei Krümel.</p>
+        </div>
+      </section>
+
+      <!-- ── V2c ──────────────────────────────────────────────────────── -->
+      <section class="variant" id="v2c">
+        <div class="variant-head">
+          <h2>V2c — Echo, zwei Tiefen</h2>
+          <span class="tag">24 px+</span>
+        </div>
+        <p class="idea">
+          Zwei Fenster ohne Verbindungslinie: die hintere Ansicht ist dieselbe Zeichnung bei
+          <code>0.55</code>, die vordere bei <code>1.0</code>. Die Verschiebung selbst ist die
+          Verbindung — „du siehst, was dort läuft". Kein <code>fill</code>, damit die Überlappung
+          transparent bleibt und auf jedem Grund funktioniert; weil ohne Füllung auch nichts
+          verdeckt wird, berühren sich die Rahmen nur an einer Ecke (1,6 × 2,0 Einheiten) statt sich
+          zu durchdringen.
+        </p>
+        <div class="grid three">
+          <div class="tile">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2c-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <div class="sizes">
+              <figure>
+                <span class="mark"
+                  ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2c-web" /></svg
+                ></span>
+                <figcaption>96</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2c-web" /></svg
+                ></span>
+                <figcaption>64</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2c-web" /></svg
+                ></span>
+                <figcaption>24</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2c-web" /></svg
+                ></span>
+                <figcaption>16</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2c-web" /></svg
+                ></span>
+                <figcaption>14</figcaption>
+              </figure>
+            </div>
+          </div>
+          <div class="tile light">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2c-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <p class="caption">Der Tonwertunterschied trägt auch auf Weiß — Tiefe ohne Schatten.</p>
+          </div>
+          <div class="tile">
+            <span class="label">Sidebar</span>
+            <div class="sidebar-mock">
+              <span class="mark"
+                ><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2c-web" /></svg
+              ></span>
+              <span class="brand-text">
+                <span class="brand-name">agentterm</span>
+                <span class="brand-sub">PTY sessions</span>
+              </span>
+            </div>
+            <span class="label">Statuszeile, 14 px</span>
+            <div class="statusbar-mock">
+              <span class="status-brand">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2c-web" />
+                </svg>
+                <span class="status-name">agentterm</span>
+              </span>
+              <span class="metrics">pty_a1b2 · 12.4k chars · ws 6 · upd 7 · 1.0.3</span>
+            </div>
+            <span class="label">Favicon (ein Cursor weniger)</span>
+            <div class="favrow">
+              <div class="swatch">
+                <span class="swatch-icon s32"
+                  ><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2c-fav" /></svg
+                ></span>
+                <span class="caption">32</span>
+              </div>
+              <div class="swatch">
+                <span class="swatch-icon s16"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2c-fav" /></svg
+                ></span>
+                <span class="caption">16</span>
+              </div>
+              <div class="tab">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2c-fav" />
+                </svg>
+                <span>agentterm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="verdict">
+          <p>
+            <b>Idee</b> — dieselbe Sitzung, zwei Tiefen; die zweite Sicht ist gedämpft, nicht
+            versteckt.
+          </p>
+          <p><b>Favicon</b> — der hintere Cursor fällt weg, sonst wären es vier Kleckse.</p>
+          <p><b>Grenze</b> — 24 px. Bei 16 px berühren sich die Rahmen und lesen als ein dicker.</p>
+        </div>
+      </section>
+
+      <!-- ── V2d ──────────────────────────────────────────────────────── -->
+      <section class="variant" id="v2d">
+        <div class="variant-head">
+          <h2>V2d — Paket statt Leitung</h2>
+          <span class="tag">24 px+</span>
+        </div>
+        <p class="idea">
+          Zwei Fenster, ein gefüllter Punkt dazwischen. Der Punkt überlebt 16 px, eine
+          Verbindungslinie nicht — und „da fließt gerade etwas" ist für einen Live-Stream die
+          ehrlichere Aussage als ein statischer Steg. Der rechte Rahmen bleibt leer: die Sicht des
+          Menschen, in die hineingestreamt wird. Die zwei Bewegungsspuren, die hier zuerst standen,
+          sind wieder raus: sie lagen halb unter den Rahmenstrichen und trugen nur Unruhe — was den
+          Punkt als Paket lesbar macht, ist der Abstand um ihn, nicht eine Spur.
+        </p>
+        <div class="grid three">
+          <div class="tile">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2d-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <div class="sizes">
+              <figure>
+                <span class="mark"
+                  ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2d-web" /></svg
+                ></span>
+                <figcaption>96</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2d-web" /></svg
+                ></span>
+                <figcaption>64</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2d-web" /></svg
+                ></span>
+                <figcaption>24</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2d-web" /></svg
+                ></span>
+                <figcaption>16</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2d-web" /></svg
+                ></span>
+                <figcaption>14</figcaption>
+              </figure>
+            </div>
+          </div>
+          <div class="tile light">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2d-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <p class="caption">
+              Der leere Rahmen ist die Aussage: der Mensch sieht, ohne zu tippen.
+            </p>
+          </div>
+          <div class="tile">
+            <span class="label">Sidebar</span>
+            <div class="sidebar-mock">
+              <span class="mark"
+                ><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2d-web" /></svg
+              ></span>
+              <span class="brand-text">
+                <span class="brand-name">agentterm</span>
+                <span class="brand-sub">PTY sessions</span>
+              </span>
+            </div>
+            <span class="label">Statuszeile, 14 px</span>
+            <div class="statusbar-mock">
+              <span class="status-brand">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2d-web" />
+                </svg>
+                <span class="status-name">agentterm</span>
+              </span>
+              <span class="metrics">pty_a1b2 · 12.4k chars · ws 6 · upd 7 · 1.0.3</span>
+            </div>
+            <span class="label">Favicon (Punkt bleibt)</span>
+            <div class="favrow">
+              <div class="swatch">
+                <span class="swatch-icon s32"
+                  ><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2d-fav" /></svg
+                ></span>
+                <span class="caption">32</span>
+              </div>
+              <div class="swatch">
+                <span class="swatch-icon s16"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2d-fav" /></svg
+                ></span>
+                <span class="caption">16</span>
+              </div>
+              <div class="tab">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2d-fav" />
+                </svg>
+                <span>agentterm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="verdict">
+          <p><b>Idee</b> — die Sitzung strömt vom arbeitenden Fenster ins zuschauende.</p>
+          <p>
+            <b>Favicon</b> — gleiche Zeichnung, nur enger: der leere Rahmen ist schon bei 32 px eine
+            Fläche.
+          </p>
+          <p>
+            <b>Grenze</b> — 24 px. Bei 16 px ist die Luft um den Punkt weg und er klebt an beiden
+            Rahmen; dann liest es sich als Stecker, nicht als Paket.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── V2e ──────────────────────────────────────────────────────── -->
+      <section class="variant" id="v2e">
+        <div class="variant-head">
+          <h2>V2e — Attach-Klammer</h2>
+          <span class="tag">24 px+</span>
+        </div>
+        <p class="idea">
+          Ein Fenster, und das zweite ist eine Klammer mit drei Seiten: die offene vierte zeigt zum
+          Fenster, also „ich hänge mich an deine Sitzung". Das ist wörtlich
+          <code>tmux attach</code> — genau die Geste, die das Produkt ersetzt, hier als Bild. Die
+          Klammer sitzt <em>eng</em>
+          um den Cursor — und sie ist der gedämpfte Teil: die Geste ist leise, der Cursor, den sie
+          hält, ist laut. Ohne das enge Maß wäre sie nur ein zweiter Rahmen. Bei 16 px wird daraus
+          ein normaler Rahmen, das Favicon ist deshalb die geschlossene Form.
+        </p>
+        <div class="grid three">
+          <div class="tile">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2e-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <div class="sizes">
+              <figure>
+                <span class="mark"
+                  ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2e-web" /></svg
+                ></span>
+                <figcaption>96</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2e-web" /></svg
+                ></span>
+                <figcaption>64</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2e-web" /></svg
+                ></span>
+                <figcaption>24</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2e-web" /></svg
+                ></span>
+                <figcaption>16</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2e-web" /></svg
+                ></span>
+                <figcaption>14</figcaption>
+              </figure>
+            </div>
+          </div>
+          <div class="tile light">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2e-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <p class="caption">Die offene Seite liegt zum Fenster — die Klammer kommt von außen.</p>
+          </div>
+          <div class="tile">
+            <span class="label">Sidebar</span>
+            <div class="sidebar-mock">
+              <span class="mark"
+                ><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2e-web" /></svg
+              ></span>
+              <span class="brand-text">
+                <span class="brand-name">agentterm</span>
+                <span class="brand-sub">PTY sessions</span>
+              </span>
+            </div>
+            <span class="label">Statuszeile, 14 px</span>
+            <div class="statusbar-mock">
+              <span class="status-brand">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2e-web" />
+                </svg>
+                <span class="status-name">agentterm</span>
+              </span>
+              <span class="metrics">pty_a1b2 · 12.4k chars · ws 6 · upd 7 · 1.0.3</span>
+            </div>
+            <span class="label">Favicon (Klammer geschlossen)</span>
+            <div class="favrow">
+              <div class="swatch">
+                <span class="swatch-icon s32"
+                  ><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2e-fav" /></svg
+                ></span>
+                <span class="caption">32</span>
+              </div>
+              <div class="swatch">
+                <span class="swatch-icon s16"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2e-fav" /></svg
+                ></span>
+                <span class="caption">16</span>
+              </div>
+              <div class="tab">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2e-fav" />
+                </svg>
+                <span>agentterm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="verdict">
+          <p><b>Idee</b> — der Mensch hängt sich an die laufende Sitzung.</p>
+          <p>
+            <b>Favicon</b> — die Klammer wird zum Rahmen; die Öffnung ist unter 24 px nicht zu
+            halten.
+          </p>
+          <p><b>Grenze</b> — 24 px. Bei 16 px ist es ein Paar, kein Attach.</p>
+        </div>
+      </section>
+
+      <!-- ── V2f ──────────────────────────────────────────────────────── -->
+      <section class="variant" id="v2f">
+        <div class="variant-head">
+          <h2>V2f — gespiegelte Fenster, geteilter Cursor</h2>
+          <span class="tag">32 px+</span>
+        </div>
+        <p class="idea">
+          Zwei Fenster, diagonal versetzt, mit je einem halben Cursor an der zugewandten Ecke: oben
+          gefüllt, unten hohl. Jede Ansicht sieht das Zeichen anders, weil jede Ansicht etwas
+          anderes sieht. Die Ecken stehen <strong>0,6 Einheiten</strong> auseinander, nicht auf
+          Null: bei einem 2,3er-Strich verschmelzen zwei berührende Ecken zu einem Knoten, und aus
+          der Spiegelung wird ein Klecks. Konzeptionell das eleganteste der acht, praktisch das
+          empfindlichste — 0,6 Einheiten sind bei 16 px ein Viertelpixel.
+        </p>
+        <div class="grid three">
+          <div class="tile">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2f-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <div class="sizes">
+              <figure>
+                <span class="mark"
+                  ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2f-web" /></svg
+                ></span>
+                <figcaption>96</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2f-web" /></svg
+                ></span>
+                <figcaption>64</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2f-web" /></svg
+                ></span>
+                <figcaption>24</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2f-web" /></svg
+                ></span>
+                <figcaption>16</figcaption>
+              </figure>
+              <figure>
+                <span class="mark"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2f-web" /></svg
+                ></span>
+                <figcaption>14</figcaption>
+              </figure>
+            </div>
+          </div>
+          <div class="tile light">
+            <div class="lockup">
+              <span class="mark"
+                ><svg width="96" height="96" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2f-web" /></svg
+              ></span>
+              <span class="wordmark">agentterm</span>
+            </div>
+            <p class="caption">
+              Die Diagonale macht die Marke dynamisch — und bei kleinster Größe unruhig.
+            </p>
+          </div>
+          <div class="tile">
+            <span class="label">Sidebar</span>
+            <div class="sidebar-mock">
+              <span class="mark"
+                ><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2f-web" /></svg
+              ></span>
+              <span class="brand-text">
+                <span class="brand-name">agentterm</span>
+                <span class="brand-sub">PTY sessions</span>
+              </span>
+            </div>
+            <span class="label">Statuszeile, 14 px</span>
+            <div class="statusbar-mock">
+              <span class="status-brand">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2f-web" />
+                </svg>
+                <span class="status-name">agentterm</span>
+              </span>
+              <span class="metrics">pty_a1b2 · 12.4k chars · ws 6 · upd 7 · 1.0.3</span>
+            </div>
+            <span class="label">Favicon (eine Cursor-Hälfte)</span>
+            <div class="favrow">
+              <div class="swatch">
+                <span class="swatch-icon s32"
+                  ><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2f-fav" /></svg
+                ></span>
+                <span class="caption">32</span>
+              </div>
+              <div class="swatch">
+                <span class="swatch-icon s16"
+                  ><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                    <use href="#v2f-fav" /></svg
+                ></span>
+                <span class="caption">16</span>
+              </div>
+              <div class="tab">
+                <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
+                  <use href="#v2f-fav" />
+                </svg>
+                <span>agentterm</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="verdict">
+          <p><b>Idee</b> — dasselbe Zeichen sieht aus jeder Ansicht anders aus.</p>
+          <p><b>Favicon</b> — beide Cursor bleiben, sind aber nur noch 3.6 Einheiten breit.</p>
+          <p><b>Grenze</b> — 32 px. Die Eckenberührung ist bei 16 px ein Zufallspixel.</p>
+        </div>
+      </section>
+
+      <div class="footer">
+        <h2>Was eine Entscheidung kostet</h2>
+        <p>
+          Ein Wechsel sind drei Dateien: <code>src/web/client/components/brand-mark.tsx</code>,
+          <code>src/web/client/public/favicon.svg</code> und <code>docs/media/logo.svg</code>. Zwei
+          Zeichnungen (Web-Marke plus Favicon-Reduktion) statt einer bedeutet: die
+          <code>BrandMark</code>-Komponente bekommt eine Variante für kleine Größen, oder die
+          Statuszeile hebt die Marke von 14 auf 16 px. Das zweite ist weniger Code und, nach den
+          Kacheln oben, die bessere Wahl — bei 14 px verliert jede der acht Varianten entweder ein
+          Detail oder eine Kontur.
+        </p>
+        <p style="margin-top: 10px">
+          Die Symbole oben sind die geprüften Geometrien. Die V1-Familie teilt Rahmen (<code
+            >27 × 20</code
+          >, <code>rx 4</code>, Strich <code>2.5</code>), Cursorhöhe (<code>9</code>) und Live-Punkt
+          (<code>r 1.6</code> bei <code>26.4, 9.2</code>); die V2-Familie teilt Strich (<code
+            >2.3 – 2.4</code
+          >) und Cursor (<code>3.6 × 5.6</code>). Was alle acht teilen, sind Strichstärke,
+          Tonwertregel und die dreißig Einheiten im <code>32er</code>-Raster — damit sie
+          vergleichbar bleiben und nicht achtmal anders gebaut.
         </p>
       </div>
-      <div class="tile light">
-        <div class="row">
-          <span class="mark">
-            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
-              <rect
-                x="2"
-                y="5"
-                width="15"
-                height="12"
-                rx="3"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-              />
-              <rect
-                x="15"
-                y="15"
-                width="15"
-                height="12"
-                rx="3"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-              />
-              <path
-                d="M17 11h5a3 3 0 0 1 3 3v1"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              />
-            </svg>
-          </span>
-          <span class="wordmark"><span class="wordmark-text">agentterm</span></span>
-        </div>
-        <p class="caption">On the light theme.</p>
-      </div>
-      <div class="tile">
-        <p class="caption">At 16 px the connector is the first thing to disappear.</p>
-        <div class="sizes">
-          <figure>
-            <span class="mark"
-              ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
-                <rect
-                  x="2"
-                  y="5"
-                  width="15"
-                  height="12"
-                  rx="3"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                />
-                <rect
-                  x="15"
-                  y="15"
-                  width="15"
-                  height="12"
-                  rx="3"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                />
-                <path
-                  d="M17 11h5a3 3 0 0 1 3 3v1"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                /></svg
-            ></span>
-            <figcaption>24</figcaption>
-          </figure>
-          <figure>
-            <span class="mark"
-              ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
-                <rect
-                  x="2"
-                  y="5"
-                  width="15"
-                  height="12"
-                  rx="3"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                />
-                <rect
-                  x="15"
-                  y="15"
-                  width="15"
-                  height="12"
-                  rx="3"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                />
-                <path
-                  d="M17 11h5a3 3 0 0 1 3 3v1"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                /></svg
-            ></span>
-            <figcaption>16</figcaption>
-          </figure>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── V3: the shared prompt ───────────────────────────────────────── -->
-    <h2>V3 — one prompt, two halves</h2>
-    <div class="grid three">
-      <div class="tile">
-        <div class="row">
-          <span class="mark">
-            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
-              <path
-                d="M5 11l6 5-6 5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <rect x="15" y="14" width="7" height="8" rx="1.5" fill="currentColor" />
-              <rect
-                x="22"
-                y="14"
-                width="5"
-                height="8"
-                rx="1.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              />
-            </svg>
-          </span>
-          <span class="wordmark"><span class="wordmark-text">agentterm</span></span>
-        </div>
-        <p class="caption">
-          A prompt chevron and a cursor split in two — the moment where agent and human meet. The
-          clearest “terminal” read of the three, the weakest as a symbol for “two”.
-        </p>
-      </div>
-      <div class="tile light">
-        <div class="row">
-          <span class="mark">
-            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
-              <path
-                d="M5 11l6 5-6 5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <rect x="15" y="14" width="7" height="8" rx="1.5" fill="currentColor" />
-              <rect
-                x="22"
-                y="14"
-                width="5"
-                height="8"
-                rx="1.5"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              />
-            </svg>
-          </span>
-          <span class="wordmark"><span class="wordmark-text">agentterm</span></span>
-        </div>
-        <p class="caption">On the light theme.</p>
-      </div>
-      <div class="tile">
-        <p class="caption">At 16 px.</p>
-        <div class="sizes">
-          <figure>
-            <span class="mark"
-              ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
-                <path
-                  d="M5 11l6 5-6 5"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <rect x="15" y="14" width="7" height="8" rx="1.5" fill="currentColor" />
-                <rect
-                  x="22"
-                  y="14"
-                  width="5"
-                  height="8"
-                  rx="1.5"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                /></svg
-            ></span>
-            <figcaption>24</figcaption>
-          </figure>
-          <figure>
-            <span class="mark"
-              ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
-                <path
-                  d="M5 11l6 5-6 5"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <rect x="15" y="14" width="7" height="8" rx="1.5" fill="currentColor" />
-                <rect
-                  x="22"
-                  y="14"
-                  width="5"
-                  height="8"
-                  rx="1.5"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                /></svg
-            ></span>
-            <figcaption>16</figcaption>
-          </figure>
-        </div>
-      </div>
-    </div>
-
-    <h2>Notes for the pick</h2>
-    <p class="caption" style="max-width: 70ch">
-      V1 is what the sidebar and the favicon use right now, so picking it costs nothing. Picking V2
-      or V3 replaces one SVG block in <code>src/web/client/components/brand-mark.tsx</code>,
-      <code>src/web/client/public/favicon.svg</code> and <code>docs/media/logo.svg</code> — three
-      files, one commit. Mixed ideas (“V1, but the frame squarer”, “V3 without the chevron”) are the
-      normal next step; say which and it gets redrawn here.
-    </p>
+    </main>
   </body>
 </html>
