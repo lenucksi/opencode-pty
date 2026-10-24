@@ -8,7 +8,7 @@ extendedTest.describe('WebSocket Raw Data Counter', () => {
         localStorage.setItem('skip-autoselect', 'true')
       })
 
-      await page.waitForSelector('h1:has-text("PTY Sessions")')
+      await page.waitForSelector('[data-testid="sidebar-brand"]')
 
       // Create a bash session that will echo input
       await api.sessions.create({
@@ -25,10 +25,10 @@ extendedTest.describe('WebSocket Raw Data Counter', () => {
       await page.waitForSelector('.terminal.xterm', { timeout: 5000 })
 
       // Get initial WS counter value
-      const debugElement = page.locator('[data-testid="debug-info"]')
+      const debugElement = page.locator('[data-testid="status-bar"]')
       await debugElement.waitFor({ state: 'attached', timeout: 2000 })
       const initialDebugText = (await debugElement.textContent()) || ''
-      const initialWsMatch = initialDebugText.match(/WS raw_data:\s*(\d+)/)
+      const initialWsMatch = initialDebugText.match(/\bws (\d+)/)
       const initialCount = initialWsMatch?.[1] ? parseInt(initialWsMatch[1], 10) : 0
 
       // Click on terminal and type some text
@@ -40,17 +40,17 @@ extendedTest.describe('WebSocket Raw Data Counter', () => {
         ({ selector, initialCount }) => {
           const el = document.querySelector(selector)
           if (!el) return false
-          const match = el.textContent?.match(/WS raw_data:\s*(\d+)/)
+          const match = el.textContent?.match(/\bws (\d+)/)
           const count = match?.[1] ? parseInt(match[1], 10) : 0
           return count > initialCount
         },
-        { selector: '[data-testid="debug-info"]', initialCount },
+        { selector: '[data-testid="status-bar"]', initialCount },
         { timeout: 5000 }
       )
 
       // Verify counter incremented
       const finalDebugText = (await debugElement.textContent()) || ''
-      const finalWsMatch = finalDebugText.match(/WS raw_data:\s*(\d+)/)
+      const finalWsMatch = finalDebugText.match(/\bws (\d+)/)
       const finalCount = finalWsMatch?.[1] ? parseInt(finalWsMatch[1], 10) : 0
 
       expect(finalCount).toBeGreaterThan(initialCount)

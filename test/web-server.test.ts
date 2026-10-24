@@ -53,7 +53,8 @@ describe('Web Server', () => {
 
       // Should contain built HTML with assets
       expect(html).toContain('<!doctype html>')
-      expect(html).toContain('PTY Sessions Monitor')
+      expect(html).toContain('<title>agentterm')
+      expect(html).toContain('/favicon.svg')
       expect(html).toContain('/assets/')
       expect(html).not.toContain('/main.tsx')
       expect(html).toContain('<div id="root"></div>')
@@ -90,7 +91,7 @@ describe('Web Server', () => {
 
       const html = await response.text()
       expect(html).toContain('<!doctype html>')
-      expect(html).toContain('PTY Sessions Monitor')
+      expect(html).toContain('<title>agentterm')
     })
 
     it('should return sessions list', async () => {

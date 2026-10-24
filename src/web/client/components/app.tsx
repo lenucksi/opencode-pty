@@ -6,7 +6,7 @@ import type {
   WSMessageServerRawData,
 } from '../../shared/types.ts'
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BuildInfo } from '../../../shared/build-info.ts'
+import { type BuildInfo, describeBuild } from '../../../shared/build-info.ts'
 import { api } from '../../shared/api-client.ts'
 import { sessionDetailLine, sessionTooltip, sortSessionsByTime } from '../../shared/session-meta.ts'
 import { useAppShortcuts } from '../hooks/use-app-shortcuts.ts'
@@ -21,6 +21,7 @@ import { useUiPrefs } from '../hooks/use-ui-prefs.ts'
 import { useWebSocket } from '../hooks/use-web-socket.ts'
 import type { RenderIntent } from '../lib/raw-stream.ts'
 import type { ThemeScheme } from '../lib/theme.ts'
+import { BrandMark } from './brand-mark.tsx'
 import { DocsModal } from './docs-modal.tsx'
 import { DownloadMenu } from './download-menu.tsx'
 import { RemoveSessionsDialog, UndoToast } from './remove-sessions-dialog.tsx'
@@ -28,6 +29,61 @@ import { ToastStack } from './toast-stack.tsx'
 import { SettingsModal } from './settings-modal.tsx'
 import { Sidebar } from './sidebar.tsx'
 import { RawTerminal } from './terminal-renderer.tsx'
+
+/**
+ * The bar at the bottom of the interface.
+ *
+ * It used to be a `<div>` with no styles at all, which is why it read as something
+ * that had fallen off the page: no border, no height, no colour. It also carried
+ * only counters, which are the least interesting thing on a screen.
+ *
+ * Now it is the status line: the mark and the name (the same pair as the sidebar
+ * header, one step smaller), then what the page is actually doing - which session is
+ * on screen, how much has come through, and which build is serving it - and it is
+ * always there, because "which version is this" is a question a reader asks without
+ * wanting to open settings.
+ */
+interface StatusBarProps {
+  sessionId: string | null
+  charCount: number
+  wsMessages: number
+  sessionUpdates: number
+  buildInfo: BuildInfo | null
+}
+
+function compactCount(value: number): string {
+  if (value < 1000) return String(value)
+  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}k`
+  return `${(value / 1_000_000).toFixed(1)}M`
+}
+
+function StatusBar({
+  sessionId,
+  charCount,
+  wsMessages,
+  sessionUpdates,
+  buildInfo,
+}: StatusBarProps) {
+  return (
+    <div className="status-bar" data-testid="status-bar">
+      <span className="status-brand">
+        <BrandMark size={14} />
+        <span className="status-name">agentterm</span>
+      </span>
+      <span className="status-metrics">
+        <span data-testid="status-session">{sessionId ?? 'no session'}</span>
+        <span className="status-sep">·</span>
+        <span>{compactCount(charCount)} chars</span>
+        <span className="status-sep">·</span>
+        <span>ws {wsMessages}</span>
+        <span className="status-sep">·</span>
+        <span>upd {sessionUpdates}</span>
+        <span className="status-sep">·</span>
+        <span data-testid="status-build">{buildInfo === null ? '' : describeBuild(buildInfo)}</span>
+      </span>
+    </div>
+  )
+}
 
 /** A session is live until its process has actually exited. */
 function isLiveStatus(status: PTYSessionInfo['status']): boolean {
@@ -38,12 +94,8 @@ interface ActiveSessionViewProps {
   activeSession: PTYSessionInfo
   terminalRef: RefObject<RawTerminal | null>
   outputContainerRef: RefObject<HTMLDivElement | null>
-  charCount: number
-  wsMessageCount: number
-  sessionUpdateCount: number
   colorScheme: ThemeScheme
   terminalFontSize: number
-  showDebugBar: boolean
   copyFeedback: string
   onTerminalResize: (cols: number, rows: number) => void
   onSendInput: (data: string) => void
@@ -57,12 +109,8 @@ function ActiveSessionView({
   activeSession,
   terminalRef,
   outputContainerRef,
-  charCount,
-  wsMessageCount,
-  sessionUpdateCount,
   colorScheme,
   terminalFontSize,
-  showDebugBar,
   copyFeedback,
   onTerminalResize,
   onSendInput,
@@ -123,12 +171,6 @@ function ActiveSessionView({
           disabled={activeSession.status !== 'running'}
         />
       </div>
-      {showDebugBar ? (
-        <div className="debug-info" data-testid="debug-info">
-          Debug: chars: {charCount}, active: {activeSession.id || 'none'}, WS raw_data:{' '}
-          {wsMessageCount}, session_updates: {sessionUpdateCount}
-        </div>
-      ) : null}
     </>
   )
 }
@@ -159,7 +201,7 @@ export function App() {
   const [docsOpen, setDocsOpen] = useState(false)
 
   const { preference: themePreference, scheme, setPreference: setThemePreference } = useTheme()
-  const { prefs, setTerminalFontSize, setShowDebugBar } = useUiPrefs()
+  const { prefs, setTerminalFontSize } = useUiPrefs()
 
   /**
    * The toasts, and the marks of the actions this page started.
@@ -464,12 +506,8 @@ export function App() {
               activeSession={activeSession}
               terminalRef={terminalRef}
               outputContainerRef={outputContainerRef}
-              charCount={charCount}
-              wsMessageCount={wsMessageCount}
-              sessionUpdateCount={sessionUpdateCount}
               colorScheme={scheme}
               terminalFontSize={prefs.terminalFontSize}
-              showDebugBar={prefs.showDebugBar}
               copyFeedback={copyFeedback}
               onCopy={handleCopy}
               onCopyAll={handleCopyAll}
@@ -481,6 +519,13 @@ export function App() {
           ) : (
             <div className="empty-state">Select a session from the sidebar to view its output</div>
           )}
+          <StatusBar
+            sessionId={activeSession?.id ?? null}
+            charCount={charCount}
+            wsMessages={wsMessageCount}
+            sessionUpdates={sessionUpdateCount}
+            buildInfo={buildInfo}
+          />
         </div>
       </div>
       <SettingsModal
@@ -492,8 +537,7 @@ export function App() {
         onThemePreferenceChange={setThemePreference}
         terminalFontSize={prefs.terminalFontSize}
         onTerminalFontSizeChange={setTerminalFontSize}
-        showDebugBar={prefs.showDebugBar}
-        onShowDebugBarChange={setShowDebugBar}
+
         buildInfo={buildInfo}
         persist={persist}
         claimActionId={() => claimRef.current.start()}

@@ -21,7 +21,7 @@ extendedTest.describe(
         })
 
         // Wait for UI
-        await page.waitForSelector('h1:has-text("PTY Sessions")')
+        await page.waitForSelector('[data-testid="sidebar-brand"]')
         await selectSession(page, 'Visual verification test', 5000)
         await page.waitForSelector('.xterm', { timeout: 5000 })
         await waitForTerminalRegex(page, /More text/)

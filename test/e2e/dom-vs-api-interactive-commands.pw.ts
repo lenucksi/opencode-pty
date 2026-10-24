@@ -9,7 +9,7 @@ extendedTest.describe('Xterm Content Extraction', () => {
   extendedTest(
     'should compare SerializeAddon extraction vs Terminal API with interactive commands',
     async ({ page, api }) => {
-      await page.waitForSelector('h1:has-text("PTY Sessions")')
+      await page.waitForSelector('[data-testid="sidebar-brand"]')
 
       // Create interactive bash session
       await api.sessions.create({

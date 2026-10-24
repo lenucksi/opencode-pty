@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A brand, a status line, and the notice a licence asks for.**
+  The sidebar header is the mark plus `agentterm` under `PTY sessions`, the same pair
+  once more in a status line that is now always at the bottom - it used to be an
+  unstyled `<div>` behind a settings toggle, carrying counters and no border, which is
+  why it read as something that had fallen off the page. It carries the active session,
+  the byte count, the WebSocket and update counters, and the build identity.
+  The mark is one terminal with two cursors in it: the agent types, the human watches
+  the same buffer. `docs/media/logo-variants.html` keeps the two alternatives that were
+  drawn for the pick.
 ### Changed
 
 - **`patches/` is no longer in the published tarball.** npm strips patch files that

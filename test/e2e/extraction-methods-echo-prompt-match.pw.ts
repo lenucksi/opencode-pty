@@ -21,7 +21,7 @@ extendedTest(
     })
 
     // Wait for UI
-    await page.waitForSelector('h1:has-text("PTY Sessions")')
+    await page.waitForSelector('[data-testid="sidebar-brand"]')
     await page.waitForSelector('.session-item', { timeout: 5000 })
     await page
       .locator('.session-item .session-title', { hasText: 'Echo "Hello World" test' })

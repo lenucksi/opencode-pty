@@ -19,8 +19,6 @@ interface SettingsModalProps {
   onThemePreferenceChange: (preference: ThemePreference) => void
   terminalFontSize: number
   onTerminalFontSizeChange: (size: number) => void
-  showDebugBar: boolean
-  onShowDebugBarChange: (show: boolean) => void
   /**
    * A fresh mark for an action this dialog starts.
    *
@@ -60,8 +58,6 @@ export function SettingsModal({
   onThemePreferenceChange,
   terminalFontSize,
   onTerminalFontSizeChange,
-  showDebugBar,
-  onShowDebugBarChange,
   claimActionId,
   buildInfo,
   persist,
@@ -165,17 +161,6 @@ export function SettingsModal({
               {terminalFontSize}px
             </span>
           </div>
-        </section>
-
-        <section className="settings-section">
-          <label className="settings-toggle">
-            <input
-              type="checkbox"
-              checked={showDebugBar}
-              onChange={(event) => onShowDebugBarChange(event.target.checked)}
-            />
-            Show debug bar
-          </label>
         </section>
 
         <section className="settings-section">

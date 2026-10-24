@@ -119,13 +119,13 @@ extendedTest.describe('App Component', () => {
 
         // Wait for session to be active and debug element to appear
         await page.waitForSelector('.output-header .output-title', { timeout: 2000 })
-        await page.waitForSelector('[data-testid="debug-info"]', { timeout: 2000 })
+        await page.waitForSelector('[data-testid="status-bar"]', { timeout: 2000 })
 
         // Get session ID from debug element
-        const initialDebugElement = page.locator('[data-testid="debug-info"]')
+        const initialDebugElement = page.locator('[data-testid="status-bar"]')
         await initialDebugElement.waitFor({ state: 'attached', timeout: 1000 })
         const initialDebugText = (await initialDebugElement.textContent()) || ''
-        const activeMatch = initialDebugText.match(/active:\s*([^\s,]+)/)
+        const activeMatch = initialDebugText.match(/(pty_[0-9a-z]+)/)
         const sessionId = activeMatch?.[1] ? activeMatch[1] : null
 
         // Check if session has output
@@ -133,7 +133,7 @@ extendedTest.describe('App Component', () => {
           await api.session.buffer.raw({ id: sessionId })
         }
 
-        const initialWsMatch = initialDebugText.match(/WS raw_data:\s*(\d+)/)
+        const initialWsMatch = initialDebugText.match(/\bws (\d+)/)
         const initialCount = initialWsMatch?.[1] ? parseInt(initialWsMatch[1], 10) : 0
 
         // Wait until WebSocket message count increases from initial
@@ -141,17 +141,17 @@ extendedTest.describe('App Component', () => {
           ({ selector, initialCount }) => {
             const el = document.querySelector(selector)
             if (!el) return false
-            const match = el.textContent?.match(/WS raw_data:\s*(\d+)/)
+            const match = el.textContent?.match(/\bws (\d+)/)
             const count = match?.[1] ? parseInt(match[1], 10) : 0
             return count > initialCount
           },
-          { selector: '[data-testid="debug-info"]', initialCount },
+          { selector: '[data-testid="status-bar"]', initialCount },
           { timeout: 7000 }
         )
 
         // Check that WS message count increased
         const finalDebugText = (await initialDebugElement.textContent()) || ''
-        const finalWsMatch = finalDebugText.match(/WS raw_data:\s*(\d+)/)
+        const finalWsMatch = finalDebugText.match(/\bws (\d+)/)
         const finalCount = finalWsMatch?.[1] ? parseInt(finalWsMatch[1], 10) : 0
 
         // The test should fail if no messages were received
@@ -197,10 +197,10 @@ extendedTest.describe('App Component', () => {
         await page.waitForSelector('.output-header .output-title', { timeout: 2000 })
 
         // Get initial count
-        const debugElement = page.locator('[data-testid="debug-info"]')
+        const debugElement = page.locator('[data-testid="status-bar"]')
         await debugElement.waitFor({ state: 'attached', timeout: 1000 })
         const initialDebugText = (await debugElement.textContent()) || ''
-        const initialWsMatch = initialDebugText.match(/WS raw_data:\s*(\d+)/)
+        const initialWsMatch = initialDebugText.match(/\bws (\d+)/)
         const initialCount = initialWsMatch?.[1] ? parseInt(initialWsMatch[1], 10) : 0
 
         // Wait until WebSocket message count increases from initial
@@ -208,15 +208,15 @@ extendedTest.describe('App Component', () => {
           ({ selector, initialCount }) => {
             const el = document.querySelector(selector)
             if (!el) return false
-            const match = el.textContent?.match(/WS raw_data:\s*(\d+)/)
+            const match = el.textContent?.match(/\bws (\d+)/)
             const count = match?.[1] ? parseInt(match[1], 10) : 0
             return count > initialCount
           },
-          { selector: '[data-testid="debug-info"]', initialCount },
+          { selector: '[data-testid="status-bar"]', initialCount },
           { timeout: 7000 }
         )
         const finalDebugText = (await debugElement.textContent()) || ''
-        const finalWsMatch = finalDebugText.match(/WS raw_data:\s*(\d+)/)
+        const finalWsMatch = finalDebugText.match(/\bws (\d+)/)
         const finalCount = finalWsMatch?.[1] ? parseInt(finalWsMatch[1], 10) : 0
 
         // Should have received messages for the active session
@@ -252,18 +252,18 @@ extendedTest.describe('App Component', () => {
         ({ selector }) => {
           const el = document.querySelector(selector)
           if (!el) return false
-          const match = el.textContent?.match(/WS raw_data:\s*(\d+)/)
+          const match = el.textContent?.match(/\bws (\d+)/)
           const count = match?.[1] ? parseInt(match[1], 10) : 0
           return count > 0
         },
-        { selector: '[data-testid="debug-info"]' },
+        { selector: '[data-testid="status-bar"]' },
         { timeout: 7000 }
       )
 
-      const debugElement = page.locator('[data-testid="debug-info"]')
+      const debugElement = page.locator('[data-testid="status-bar"]')
       await debugElement.waitFor({ state: 'attached', timeout: 2000 })
       const debugText = (await debugElement.textContent()) || ''
-      const wsMatch = debugText.match(/WS raw_data:\s*(\d+)/)
+      const wsMatch = debugText.match(/\bws (\d+)/)
       const count = wsMatch?.[1] ? parseInt(wsMatch[1], 10) : 0
 
       // Should have received some messages

@@ -5,7 +5,7 @@ extendedTest.describe('Xterm Content Extraction', () => {
   extendedTest(
     'should verify server buffer consistency with terminal display',
     async ({ page, api }) => {
-      await page.waitForSelector('h1:has-text("PTY Sessions")')
+      await page.waitForSelector('[data-testid="sidebar-brand"]')
 
       // Create a session that runs a command and produces output
       const session = await api.sessions.create({

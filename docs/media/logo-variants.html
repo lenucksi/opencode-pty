@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>agentterm — logo variants</title>
+    <style>
+      :root {
+        color-scheme: dark light;
+        --ink: #0d1117;
+        --ink-raised: #161b22;
+        --line: #30363d;
+        --fg: #c9d1d9;
+        --muted: #8b949e;
+        --accent: #58a6ff;
+        --paper: #ffffff;
+        --paper-line: #d0d7de;
+        --paper-fg: #1f2328;
+        --paper-muted: #59636e;
+        --paper-accent: #0969da;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 40px;
+        background: var(--ink);
+        color: var(--fg);
+        font:
+          14px/1.55 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      p.lede {
+        color: var(--muted);
+        margin: 0 0 32px;
+        max-width: 68ch;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 40px 0 12px;
+        color: var(--accent);
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+      .grid.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .tile {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 16px;
+        background: var(--ink-raised);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .tile.light {
+        background: var(--paper);
+        border-color: var(--paper-line);
+        color: var(--paper-fg);
+      }
+      .mark {
+        color: var(--accent);
+        display: flex;
+      }
+      .tile.light .mark {
+        color: var(--paper-accent);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .wordmark-text {
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--fg);
+      }
+      .caption {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .tile.light .wordmark-text {
+        color: var(--paper-fg);
+      }
+      .tile.light .caption {
+        color: var(--paper-muted);
+      }
+      .sizes {
+        display: flex;
+        align-items: flex-end;
+        gap: 16px;
+      }
+      .sizes figure {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+      .sizes figcaption {
+        font-size: 10px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .favicon {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px 6px 8px;
+        border-radius: 8px 8px 0 0;
+        background: #1c2128;
+        border: 1px solid var(--line);
+        border-bottom: none;
+        align-self: flex-start;
+      }
+      .favicon span {
+        font-size: 11px;
+        color: var(--fg);
+      }
+      code {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>agentterm — three marks</h1>
+    <p class="lede">
+      The idea each variant is trying to carry: <strong>one PTY, two readers</strong> — the agent
+      works in the terminal, the human can read the same screen and type into it. All three are
+      single-colour via <code>currentColor</code>, so they work on both themes without a second
+      file.
+    </p>
+
+    <!-- ── V1: two cursors ─────────────────────────────────────────────── -->
+    <h2>V1 — two cursors in one frame</h2>
+    <div class="grid three">
+      <div class="tile">
+        <div class="row">
+          <span class="mark">
+            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+              <rect
+                x="2.5"
+                y="6"
+                width="27"
+                height="20"
+                rx="4"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              />
+              <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
+              <rect
+                x="17.5"
+                y="12.5"
+                width="6.5"
+                height="9"
+                rx="1.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+            </svg>
+          </span>
+          <span class="wordmark">
+            <span class="wordmark-text">agentterm</span>
+          </span>
+        </div>
+        <div class="sizes">
+          <figure>
+            <span class="mark"
+              ><svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+                <rect
+                  x="2.5"
+                  y="6"
+                  width="27"
+                  height="20"
+                  rx="4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                />
+                <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
+                <rect
+                  x="17.5"
+                  y="12.5"
+                  width="6.5"
+                  height="9"
+                  rx="1.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                /></svg
+            ></span>
+            <figcaption>64</figcaption>
+          </figure>
+          <figure>
+            <span class="mark"
+              ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                <rect
+                  x="2.5"
+                  y="6"
+                  width="27"
+                  height="20"
+                  rx="4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                />
+                <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
+                <rect
+                  x="17.5"
+                  y="12.5"
+                  width="6.5"
+                  height="9"
+                  rx="1.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                /></svg
+            ></span>
+            <figcaption>24</figcaption>
+          </figure>
+          <figure>
+            <span class="mark"
+              ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                <rect
+                  x="2.5"
+                  y="6"
+                  width="27"
+                  height="20"
+                  rx="4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                />
+                <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
+                <rect
+                  x="17.5"
+                  y="12.5"
+                  width="6.5"
+                  height="9"
+                  rx="1.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                /></svg
+            ></span>
+            <figcaption>16</figcaption>
+          </figure>
+        </div>
+        <div class="favicon">
+          <svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="#0d1117" />
+            <rect
+              x="4.5"
+              y="8"
+              width="23"
+              height="16"
+              rx="3"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2.5"
+            />
+            <rect x="9" y="13" width="5.5" height="7.5" rx="1.5" fill="#58a6ff" />
+            <rect
+              x="17.5"
+              y="13"
+              width="5.5"
+              height="7.5"
+              rx="1.5"
+              fill="none"
+              stroke="#58a6ff"
+              stroke-width="2"
+            />
+          </svg>
+          <span>agentterm</span>
+        </div>
+        <p class="caption">
+          A filled cursor and an outlined one, side by side in one frame: the agent types, the human
+          watches the same buffer. Strongest at 16 px.
+        </p>
+      </div>
+      <div class="tile light">
+        <div class="row">
+          <span class="mark">
+            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+              <rect
+                x="2.5"
+                y="6"
+                width="27"
+                height="20"
+                rx="4"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              />
+              <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
+              <rect
+                x="17.5"
+                y="12.5"
+                width="6.5"
+                height="9"
+                rx="1.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+            </svg>
+          </span>
+          <span class="wordmark"><span class="wordmark-text">agentterm</span></span>
+        </div>
+        <p class="caption">Same mark on the light theme — it inherits the colour it sits in.</p>
+      </div>
+      <div class="tile">
+        <p class="caption">
+          In the sidebar, at 22 px next to the name and the word “PTY sessions”:
+        </p>
+        <div style="display: flex; align-items: center; gap: 9px; color: var(--accent)">
+          <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+            <rect
+              x="2.5"
+              y="6"
+              width="27"
+              height="20"
+              rx="4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            />
+            <rect x="8" y="12.5" width="6.5" height="9" rx="1.5" fill="currentColor" />
+            <rect
+              x="17.5"
+              y="12.5"
+              width="6.5"
+              height="9"
+              rx="1.5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            />
+          </svg>
+          <span style="display: flex; flex-direction: column; gap: 1px">
+            <span style="font-size: 17px; font-weight: 600; line-height: 1.15; color: var(--accent)"
+              >agentterm</span
+            >
+            <span
+              style="
+                font-size: 10px;
+                letter-spacing: 0.09em;
+                text-transform: uppercase;
+                color: var(--muted);
+              "
+              >PTY sessions</span
+            >
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── V2: two windows, one line ───────────────────────────────────── -->
+    <h2>V2 — two windows, one connection</h2>
+    <div class="grid three">
+      <div class="tile">
+        <div class="row">
+          <span class="mark">
+            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+              <rect
+                x="2"
+                y="5"
+                width="15"
+                height="12"
+                rx="3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              />
+              <rect
+                x="15"
+                y="15"
+                width="15"
+                height="12"
+                rx="3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              />
+              <path
+                d="M17 11h5a3 3 0 0 1 3 3v1"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+            </svg>
+          </span>
+          <span class="wordmark"><span class="wordmark-text">agentterm</span></span>
+        </div>
+        <p class="caption">
+          Two terminals, one line between them: the agent’s process and the human’s window on it.
+          Reads as two panes of the same session.
+        </p>
+      </div>
+      <div class="tile light">
+        <div class="row">
+          <span class="mark">
+            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+              <rect
+                x="2"
+                y="5"
+                width="15"
+                height="12"
+                rx="3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              />
+              <rect
+                x="15"
+                y="15"
+                width="15"
+                height="12"
+                rx="3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              />
+              <path
+                d="M17 11h5a3 3 0 0 1 3 3v1"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+            </svg>
+          </span>
+          <span class="wordmark"><span class="wordmark-text">agentterm</span></span>
+        </div>
+        <p class="caption">On the light theme.</p>
+      </div>
+      <div class="tile">
+        <p class="caption">At 16 px the connector is the first thing to disappear.</p>
+        <div class="sizes">
+          <figure>
+            <span class="mark"
+              ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                <rect
+                  x="2"
+                  y="5"
+                  width="15"
+                  height="12"
+                  rx="3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                />
+                <rect
+                  x="15"
+                  y="15"
+                  width="15"
+                  height="12"
+                  rx="3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                />
+                <path
+                  d="M17 11h5a3 3 0 0 1 3 3v1"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                /></svg
+            ></span>
+            <figcaption>24</figcaption>
+          </figure>
+          <figure>
+            <span class="mark"
+              ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                <rect
+                  x="2"
+                  y="5"
+                  width="15"
+                  height="12"
+                  rx="3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                />
+                <rect
+                  x="15"
+                  y="15"
+                  width="15"
+                  height="12"
+                  rx="3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                />
+                <path
+                  d="M17 11h5a3 3 0 0 1 3 3v1"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                /></svg
+            ></span>
+            <figcaption>16</figcaption>
+          </figure>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── V3: the shared prompt ───────────────────────────────────────── -->
+    <h2>V3 — one prompt, two halves</h2>
+    <div class="grid three">
+      <div class="tile">
+        <div class="row">
+          <span class="mark">
+            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+              <path
+                d="M5 11l6 5-6 5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <rect x="15" y="14" width="7" height="8" rx="1.5" fill="currentColor" />
+              <rect
+                x="22"
+                y="14"
+                width="5"
+                height="8"
+                rx="1.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+            </svg>
+          </span>
+          <span class="wordmark"><span class="wordmark-text">agentterm</span></span>
+        </div>
+        <p class="caption">
+          A prompt chevron and a cursor split in two — the moment where agent and human meet. The
+          clearest “terminal” read of the three, the weakest as a symbol for “two”.
+        </p>
+      </div>
+      <div class="tile light">
+        <div class="row">
+          <span class="mark">
+            <svg width="64" height="64" viewBox="0 0 32 32" aria-hidden="true">
+              <path
+                d="M5 11l6 5-6 5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <rect x="15" y="14" width="7" height="8" rx="1.5" fill="currentColor" />
+              <rect
+                x="22"
+                y="14"
+                width="5"
+                height="8"
+                rx="1.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+            </svg>
+          </span>
+          <span class="wordmark"><span class="wordmark-text">agentterm</span></span>
+        </div>
+        <p class="caption">On the light theme.</p>
+      </div>
+      <div class="tile">
+        <p class="caption">At 16 px.</p>
+        <div class="sizes">
+          <figure>
+            <span class="mark"
+              ><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
+                <path
+                  d="M5 11l6 5-6 5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <rect x="15" y="14" width="7" height="8" rx="1.5" fill="currentColor" />
+                <rect
+                  x="22"
+                  y="14"
+                  width="5"
+                  height="8"
+                  rx="1.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                /></svg
+            ></span>
+            <figcaption>24</figcaption>
+          </figure>
+          <figure>
+            <span class="mark"
+              ><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+                <path
+                  d="M5 11l6 5-6 5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <rect x="15" y="14" width="7" height="8" rx="1.5" fill="currentColor" />
+                <rect
+                  x="22"
+                  y="14"
+                  width="5"
+                  height="8"
+                  rx="1.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                /></svg
+            ></span>
+            <figcaption>16</figcaption>
+          </figure>
+        </div>
+      </div>
+    </div>
+
+    <h2>Notes for the pick</h2>
+    <p class="caption" style="max-width: 70ch">
+      V1 is what the sidebar and the favicon use right now, so picking it costs nothing. Picking V2
+      or V3 replaces one SVG block in <code>src/web/client/components/brand-mark.tsx</code>,
+      <code>src/web/client/public/favicon.svg</code> and <code>docs/media/logo.svg</code> — three
+      files, one commit. Mixed ideas (“V1, but the frame squarer”, “V3 without the chevron”) are the
+      normal next step; say which and it gets redrawn here.
+    </p>
+  </body>
+</html>
