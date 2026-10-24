@@ -37,6 +37,7 @@ const TOOLS = [
   'pty_wait',
   'pty_resize',
   'pty_screen',
+  'pty_sendkey',
 ]
 
 const temps: string[] = []
@@ -154,7 +155,7 @@ describe('the MCP server', () => {
     }
   })
 
-  it('offers the eight PTY tools, each with a schema of its own', async () => {
+  it('offers the nine PTY tools, each with a schema of its own', async () => {
     const result = await withClient(async (client) => {
       const listed = await client.listTools()
       return listed.tools

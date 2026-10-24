@@ -5,6 +5,7 @@ import { ptyList } from './list.ts'
 import { ptyRead } from './read.ts'
 import { ptyResize } from './resize.ts'
 import { ptyScreen } from './screen.ts'
+import { ptySendkey } from './sendkey.ts'
 import { ptySpawn } from './spawn.ts'
 import { ptyWait } from './wait.ts'
 import { ptyWrite } from './write.ts'
@@ -32,10 +33,11 @@ const table = {
   pty_wait: ptyWait,
   pty_resize: ptyResize,
   pty_screen: ptyScreen,
+  pty_sendkey: ptySendkey,
 }
 
 /**
- * The eight tools, in one place.
+ * The nine tools, in one place.
  *
  * Both routes that offer them - the OpenCode plugin and the MCP server - register
  * this table, so a tool that exists in one exists in the other. The route decides

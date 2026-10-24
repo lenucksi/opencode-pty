@@ -13,6 +13,11 @@ import DESCRIPTION from './wait.txt'
 
 const WAIT_TAIL_LINES = 20
 const TIMEOUT = Symbol('pty_wait_timeout')
+const QUIET = Symbol('pty_wait_quiet')
+
+/** How often the output position is sampled while waiting for quiet (ms). */
+const QUIET_SAMPLE_MIN_MS = 50
+const QUIET_SAMPLE_MAX_MS = 250
 
 /**
  * How often the route is told that the wait is still running.
@@ -76,12 +81,25 @@ interface TailLines {
   bufferChars: number
 }
 
-async function formatWaitedBlock(session: PTYSessionInfo, budget: number): Promise<string> {
+/**
+ * The result block, for a session that ended or for one that went quiet.
+ *
+ * `reason` is "exit" or "quiet", and it changes the one line a reader would
+ * otherwise misread: a quiet session is still running, so it has no exit status to
+ * report - printing `Exit: unknown` there would suggest it had died.
+ */
+async function formatWaitedBlock(
+  session: PTYSessionInfo,
+  budget: number,
+  reason: 'exit' | 'quiet',
+  quietMs?: number
+): Promise<string> {
   const tail = await formatTail(session, WAIT_TAIL_LINES, budget)
   const exitInfo = `${session.exitCode ?? 'unknown'}${session.exitSignal ? `, signal: ${session.exitSignal}` : ''}`
   const attrs = [
     `id="${session.id}"`,
     `status="${session.status}"`,
+    `reason="${reason}"`,
     `lines="${session.lineCount}"`,
     `chars="${session.charCount}"`,
   ]
@@ -92,7 +110,9 @@ async function formatWaitedBlock(session: PTYSessionInfo, budget: number): Promi
     `Title: ${session.title}`,
     `Command: ${session.command} ${session.args.join(' ')}`,
     `Status: ${session.status}`,
-    `Exit: ${exitInfo}`,
+    ...(reason === 'exit'
+      ? [`Exit: ${exitInfo}`]
+      : [`Still running: yes (no output for ${quietMs ?? 0} ms)`]),
     `Output Lines: ${session.lineCount} | Chars: ${session.charCount}`,
     ...(tail.lines.length > 0 ? ['', 'Tail:', ...tail.lines] : []),
     ...(tail.truncatedLines
@@ -115,6 +135,15 @@ export const ptyWait = tool({
       .describe(
         'Maximum time to wait in seconds. If the session is still running after this, returns a <pty_wait_timeout> result instead of blocking forever. Default: no limit.'
       ),
+    quietMs: tool.schema
+      .number()
+      .int()
+      .min(QUIET_SAMPLE_MIN_MS)
+      .max(600_000)
+      .optional()
+      .describe(
+        'Return once the session has printed nothing for this many milliseconds, instead of waiting for it to exit. This is how you wait for a prompt after sending a command. The session keeps running.'
+      ),
   },
   async execute(args, ctx) {
     const tailBudget = charsForTokens(DEFAULT_READ_MAX_TOKENS)
@@ -124,7 +153,7 @@ export const ptyWait = tool({
       throw await buildSessionNotFoundError(args.id)
     }
     if (isTerminal(initial)) {
-      return await formatWaitedBlock(initial, tailBudget)
+      return await formatWaitedBlock(initial, tailBudget, 'exit')
     }
 
     let resolveDone!: (session: PTYSessionInfo) => void
@@ -174,6 +203,40 @@ export const ptyWait = tool({
       })
     }
 
+    // Waiting for quiet: the output position is sampled, and the wait ends when it
+    // has not moved for `quietMs`. The manager's `get` is the only way to ask on
+    // both routes - in-process it is a field read, over the daemon it is one small
+    // request - so the sample interval is coarse on purpose: at most a handful of
+    // requests per second, and never finer than the thing being measured.
+    let quiet: Promise<typeof QUIET> | undefined
+    let quietHandle: ReturnType<typeof setInterval> | undefined
+    const quietMs = args.quietMs
+    if (quietMs !== undefined) {
+      let lastChars = initial.charCount
+      let lastChange = Date.now()
+      const interval = Math.min(
+        QUIET_SAMPLE_MAX_MS,
+        Math.max(QUIET_SAMPLE_MIN_MS, Math.floor(quietMs / 4))
+      )
+      quiet = new Promise<typeof QUIET>((resolve) => {
+        quietHandle = setInterval(() => {
+          void Promise.resolve(getPtyManager().get(args.id)).then((current) => {
+            if (!current) return
+            const now = Date.now()
+            if (current.charCount !== lastChars) {
+              lastChars = current.charCount
+              lastChange = now
+              return
+            }
+            if (now - lastChange >= quietMs) {
+              removeSessionUpdateCallback(onUpdate)
+              resolve(QUIET)
+            }
+          })
+        }, interval)
+      })
+    }
+
     // A transport that cuts a call that says nothing cuts a long wait. The
     // heartbeat is what keeps the line open while the session runs.
     let heartbeatHandle: ReturnType<typeof setInterval> | undefined
@@ -184,12 +247,17 @@ export const ptyWait = tool({
       }, policy.heartbeatMs ?? WAIT_HEARTBEAT_MS)
     }
 
-    const winner = await Promise.race([done, timeout])
+    const winner = await Promise.race(
+      quiet === undefined ? [done, timeout] : [done, timeout, quiet]
+    )
     if (timeoutHandle !== undefined) {
       clearTimeout(timeoutHandle)
     }
     if (heartbeatHandle !== undefined) {
       clearInterval(heartbeatHandle)
+    }
+    if (quietHandle !== undefined) {
+      clearInterval(quietHandle)
     }
     if (winner === TIMEOUT) {
       return [
@@ -199,6 +267,13 @@ export const ptyWait = tool({
         `</pty_wait_timeout>`,
       ].join('\n')
     }
-    return await formatWaitedBlock(winner, tailBudget)
+    if (winner === QUIET) {
+      // Re-read rather than reuse a snapshot: the session kept running while the
+      // sample interval was ticking, and the tail has to be the tail of now.
+      const current = await Promise.resolve(getPtyManager().get(args.id))
+      if (!current) throw await buildSessionNotFoundError(args.id)
+      return await formatWaitedBlock(current, tailBudget, 'quiet', quietMs)
+    }
+    return await formatWaitedBlock(winner, tailBudget, 'exit')
   },
 })

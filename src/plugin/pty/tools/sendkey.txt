@@ -1,0 +1,30 @@
+Sends named keys to a running PTY session.
+
+Use this instead of `pty_write` when what you want to press has a name: it saves you
+from knowing that Enter is `\r`, that ArrowUp is `\x1b[A`, or that Ctrl-C is a single
+byte. The result says which key was sent, so a key that did nothing is visible in the
+transcript rather than in a prompt that never moved.
+
+Usage:
+- `id`: The PTY session ID
+- `key`: The key by name (case-insensitive)
+- `times`: How often to send it (default 1, at most 100)
+
+Keys:
+- `Enter`, `Tab`, `Escape` (or `Esc`), `Space`, `Backspace`, `Delete`, `Insert`
+- `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp` (or `PgUp`), `PageDown`
+- `C-a` through `C-z` (also written `Ctrl-a`), and `C-space`
+- `F1` through `F12`
+
+Behavior:
+- Only named keys go through this tool. **A command is still typed with `pty_write`**,
+  where the permission policy sees the line - this tool cannot enter text, so it
+  cannot be used to route around that check.
+- A name the terminal does not have is refused with the list of names that exist; it
+  is not silently sent as text.
+- Sending keys to an exited session fails; the record stays readable with `pty_read`.
+
+Example:
+- `pty_write` `"ls -la"`, then `pty_sendkey` `Enter` - rather than `pty_write` `"ls -la\r"`.
+- `pty_sendkey` `Down` with `times: 3` to move three rows in a menu.
+- `pty_sendkey` `C-c` to interrupt a program that is printing.

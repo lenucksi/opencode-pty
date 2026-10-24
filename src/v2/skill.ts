@@ -21,7 +21,7 @@ import type { SkillDraft, SkillInfoV2 } from './types.ts'
 export const PTY_USAGE_SKILL: SkillInfoV2 = {
   name: 'pty-usage',
   description:
-    'Use when a command needs a TTY: interactive prompts, long-running or background processes, TUIs (vim/htop), watching live output, or when the exit status matters. Covers pty_spawn/pty_write/pty_read/pty_wait/pty_list/pty_resize/pty_screen/pty_kill.',
+    'Use when a command needs a TTY: interactive prompts, long-running or background processes, TUIs (vim/htop), watching live output, or when the exit status matters. Covers pty_spawn/pty_write/pty_sendkey/pty_read/pty_wait/pty_list/pty_resize/pty_screen/pty_kill.',
   slash: false,
   location: 'opencode-pty:pty-usage',
   content: `# Using the pty_* tools
@@ -148,10 +148,18 @@ output) over babysitting it.
 
 {{completionSection}}
 
+**Waiting**
+- \`pty_wait({ id })\` returns when the session exits.
+- \`pty_wait({ id, quietMs: 500 })\` returns once the program has printed nothing
+  for that long - **and it is still running**. That is how you wait for a prompt
+  after a command without polling; the result says \`reason="quiet"\` and has no
+  \`Exit:\` line, because there is no exit status yet.
+
 **Anti-patterns**
 - \`sleep\` + \`pty_read\` loops to detect completion - always wrong.
 - Repeated \`pty_read\` polling just to see whether it finished - use \`pty_wait\`.
-- Assuming silence means "done" - check status with \`pty_list\` or \`pty_wait\`.
+- Assuming silence means "done" - a quiet session is \`reason="quiet"\`, not exited;
+  use \`pty_list\` or \`pty_wait\` without \`quietMs\` for that.
 
 ## Sending input
 
@@ -162,6 +170,12 @@ will see it in the output stream. Useful sequences:
 - Ctrl+D (EOF): \`"\\x04"\`
 - Enter: \`"\\n"\` (or \`"\\r"\` for TUIs)
 - Arrow keys / TUI navigation: the usual ANSI sequences (e.g. \`"\\x1b[A"\`).
+
+For the keys that have names, prefer \`pty_sendkey\`: \`{ id, key: "Enter" }\`,
+\`"Tab"\`, \`"Up"\`, \`"C-c"\`, \`"F5"\`, with \`times\` to repeat. It sends the same
+bytes, but the result names the key, so a key that did nothing is visible in
+the transcript instead of being mistaken for an idle program. Text still goes
+through \`pty_write\`.
 
 For interactive prompts, write the value and then a newline. Shells only
 execute a line once they receive it, so do not assume a command ran just
@@ -262,10 +276,11 @@ The plugin also serves a web UI for a **human** to watch the sessions.
 | Need | Tool |
 | --- | --- |
 | Start a process | \`pty_spawn\` |
-| Send keystrokes/input | \`pty_write\` |
+| Send keystrokes/input | \`pty_write\` (text) or \`pty_sendkey\` (named keys: Enter, Tab, C-c, arrows) |
 | Look at output now | \`pty_read\` |
 | See what the screen looks like | \`pty_screen\` |
 | Block until it exits | \`pty_wait\` |
+| Wait until it stops printing (prompt back) | \`pty_wait\` with \`quietMs\` |
 | See all sessions | \`pty_list\` |
 | Change the terminal size | \`pty_resize\` |
 | Stop a process (keep logs) | \`pty_kill\` |

@@ -1,15 +1,32 @@
-Waits for a PTY session to finish running and returns once it has completed.
+Waits for a PTY session to finish, or — with `quietMs` — for it to go quiet.
 
-{{waitIntro}}
+Use it after `pty_spawn` when you need the exit status, and after `pty_write` when you
+need to know the program has finished reacting before you read again. It returns when
+the session ends, so you do not poll `pty_read` in a loop.
 
 Usage:
-- `id`: The PTY session ID (from `pty_spawn` or `pty_list`)
-- `timeoutSeconds`: Optional. Maximum time to wait in seconds. If the session is still running after this, returns a `<pty_wait_timeout>` result instead of blocking forever. Default: no limit.
+- `id`: The PTY session ID
+- `timeoutSeconds`: Maximum time to wait. If the session is still running after
+  this, returns a `<pty_wait_timeout>` result instead of blocking forever.
+  Default: no limit on the OpenCode route, the route's cap on MCP.
+- `quietMs`: Return once the session has printed nothing for this many
+  milliseconds. **The session keeps running** — this is how you wait for a shell
+  prompt after sending a command, without a loop.
 
-Returns `<pty_waited>` block with the final status, exit code, and the last 20
-lines of output (tail). If the session already exited, returns immediately.
+Behavior:
+- With `quietMs`, the wait ends on whichever comes first: the session printing
+  nothing for that long, the session exiting, or the timeout. The result says which,
+  in its `reason` attribute (`quiet` or `exit`).
+- A quiet result is not a completion: the process is still running and `Exit:` is
+  absent, because there is no exit status yet.
+- The output position is sampled a few times a second, never finer than the window
+  you asked for. A very small `quietMs` therefore measures your sample, not the
+  program — 200-500 ms is the range a prompt actually needs.
+- On a session that has already ended, both forms return at once with
+  `reason="exit"`.
+- The heartbeat keeps a long wait alive on a transport that would cut a silent call;
+  with `quietMs` the same applies.
 
-Tips:
-- Combine with `pty_spawn` (with or without notifyOnExit) to run a command and wait.
-- After a timeout result, call `pty_read` for live output, `pty_kill` to stop the session, or call `pty_wait` again with a longer timeout.
-- Prefer this over sleep plus `pty_read` polling loops.
+Examples:
+- `pty_write` `"make test"`, then `pty_wait` `{ quietMs: 500 }` — the prompt is back.
+- `pty_spawn` a build, then `pty_wait` `{ timeoutSeconds: 600 }` — the exit status.
