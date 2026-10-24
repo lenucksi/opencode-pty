@@ -155,13 +155,14 @@ describe('the TUI dependencies', () => {
     }
   })
 
-  it('names the newest opentui it builds against', () => {
+  it('names the opentui it builds and type-checks against', () => {
     // Not a drift guard: a statement of the decision. The panel needs a scrollbox
     // with multi-line text, which renders nothing before 0.6.x - measured against
-    // both, 0.5.14 shows the OLDEST lines and 0.6.6 the newest - so a floor below
-    // 0.6.0 would promise a version that cannot render the panel's console.
-    expect(manifest.peerDependencies['@opentui/solid']).toBe('>=0.6.6')
-    expect(manifest.peerDependencies['@opentui/core']).toBe('>=0.6.6')
+    // both, 0.5.14 shows the OLDEST lines and 0.6.6 the newest. The floor tracks the
+    // devDependency, so the contract the typecheck proves is the one consumers get;
+    // it is raised by the same commit that raises the pin, never ahead of it.
+    expect(manifest.peerDependencies['@opentui/solid']).toBe('>=0.6.8')
+    expect(manifest.peerDependencies['@opentui/core']).toBe('>=0.6.8')
   })
 
   it('marks every one of them optional, so installing without a TUI still works', () => {
@@ -246,6 +247,28 @@ describe('the TUI dependencies', () => {
     // Expiry: when `express-rate-limit` (or `socks`) moves to a range that already admits a
     // patched version, the override has outlived its reason and goes.
     expect(manifest.overrides?.['ip-address']).toBe('10.7.4')
+  })
+
+  // The four the `bun audit` gate found when it was finally run to the end: one
+  // through the MCP SDK's express, three through the effect stacks of
+  // `@opencode/plugin`, `@opencode/client` and `@opencode/theme`.
+  //
+  // `body-parser` and the 8.x `undici` are inside what their carriers declare
+  // (express: `^2.3.0`, @effect/platform-node: `^8.11.2`), and the 6.x `undici` is a
+  // different major, so it gets its own `pkg@range` key instead of being dragged
+  // across one. `zod` is the exception: `@opencode-ai/plugin` pins 4.1.8 exactly, so
+  // 4.6.7 is outside that range - the same major, and the whole suite exercises the
+  // tool schemas that would notice a break.
+  it('overrides the advisories the audit gate surfaced, inside the carriers where it can', () => {
+    expect(manifest.overrides?.['body-parser']).toBe('2.4.0')
+    expect(manifest.overrides?.['undici@^8.0.0']).toBe('8.12.3')
+    expect(manifest.overrides?.['undici@^6.0.0']).toBe('6.29.1')
+    expect(manifest.overrides?.zod).toBe('4.6.7')
+    // `toml` is the one that leaves a declared range: every carrier asks for
+    // `^4.1.1` and the fix is 5.0.1. It was tried rather than excused - the suite
+    // exercises the tool schemas and the whole plugin boots with it - and the
+    // expiry is the day a carrier asks for `^5`, at which point this line goes.
+    expect(manifest.overrides?.toml).toBe('5.0.1')
   })
 
   // The premise the override is comfortable in: the vulnerable code is a build-time and

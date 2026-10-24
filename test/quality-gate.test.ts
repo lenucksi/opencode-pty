@@ -45,13 +45,16 @@ function aislopReport(overrides: Partial<AislopReport> = {}): AislopReport {
 
 describe('local quality gate helpers', () => {
   test('compares semantic versions and enforces the Bun baseline', () => {
-    expect(compareVersions('1.4.2', '1.4.1')).toBe(1)
+    // The floor is 1.4.4 because the gate now runs `bun check` (1.4.3+) and
+    // `bun fmt` (1.4.4+): a machine below it cannot run the gate at all, so the
+    // manifest and this check have to agree.
+    expect(compareVersions('1.4.4', '1.4.3')).toBe(1)
     expect(compareVersions('2.0.0', '2.0.0')).toBe(0)
-    expect(compareVersions('1.3.9', '1.4.2')).toBe(-1)
-    expect(() => validateBunToolchain('1.4.2', 'bun@1.4.2')).not.toThrow()
-    expect(() => validateBunToolchain('1.4.3', 'bun@1.4.2')).not.toThrow()
-    expect(() => validateBunToolchain('1.4.1', 'bun@1.4.2')).toThrow('Bun 1.4.2+ is required')
-    expect(() => validateBunToolchain('1.4.2', 'bun@1.3.8')).toThrow('packageManager')
+    expect(compareVersions('1.3.9', '1.4.4')).toBe(-1)
+    expect(() => validateBunToolchain('1.4.4', 'bun@1.4.4')).not.toThrow()
+    expect(() => validateBunToolchain('1.4.5', 'bun@1.4.4')).not.toThrow()
+    expect(() => validateBunToolchain('1.4.3', 'bun@1.4.4')).toThrow('Bun 1.4.4+ is required')
+    expect(() => validateBunToolchain('1.4.4', 'bun@1.3.8')).toThrow('packageManager')
   })
 
   describe('the release-age window', () => {

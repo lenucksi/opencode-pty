@@ -48,16 +48,16 @@ collected.
 
 ## The tools
 
-| Tool | What it does |
-| --- | --- |
-| `pty_spawn` | starts a process in a PTY |
-| `pty_write` | sends input to a running session |
-| `pty_read` | reads the output, with paging and a pattern filter |
-| `pty_list` | lists the sessions, running and finished |
-| `pty_wait` | waits for a session to end and answers with the exit code |
-| `pty_resize` | changes the geometry of a running session |
-| `pty_screen` | renders the screen the program currently draws |
-| `pty_kill` | stops a session |
+| Tool         | What it does                                              |
+| ------------ | --------------------------------------------------------- |
+| `pty_spawn`  | starts a process in a PTY                                 |
+| `pty_write`  | sends input to a running session                          |
+| `pty_read`   | reads the output, with paging and a pattern filter        |
+| `pty_list`   | lists the sessions, running and finished                  |
+| `pty_wait`   | waits for a session to end and answers with the exit code |
+| `pty_resize` | changes the geometry of a running session                 |
+| `pty_screen` | renders the screen the program currently draws            |
+| `pty_kill`   | stops a session                                           |
 
 The names, the arguments and the result tags are the ones the OpenCode plugin
 uses - the same modules serve both routes, so a script that works against one

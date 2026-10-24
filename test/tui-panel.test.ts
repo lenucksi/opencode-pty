@@ -1483,8 +1483,7 @@ describe('the PTY sidebar panel', () => {
 
       expect(seen.opened).toEqual(['opencode-pty'])
       const store = seen.stores.get('opencode-pty.session-panel') as
-        | { selected?: string | null }
-        | undefined
+        { selected?: string | null } | undefined
       expect(store?.selected).not.toBeNull()
     } finally {
       server[Symbol.dispose]()
@@ -1513,8 +1512,7 @@ describe('the PTY sidebar panel', () => {
       await clickSidebarRow(seen, 'elsewhere')
 
       const store = seen.stores.get('opencode-pty.session-panel') as
-        | { scope?: string | null; sessions?: { title?: string }[] }
-        | undefined
+        { scope?: string | null; sessions?: { title?: string }[] } | undefined
       const listed = await waitFor(() =>
         (store?.sessions?.length ?? 0) > 0 ? store?.sessions : undefined
       )
@@ -1572,8 +1570,7 @@ describe('the PTY sidebar panel', () => {
 
       const rows = await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
-          | { sessions?: { title?: string }[] }
-          | undefined
+          { sessions?: { title?: string }[] } | undefined
         const listed = stored?.sessions ?? []
         return listed.some((row) => row.title === 'mine') ? listed : undefined
       })
@@ -1604,8 +1601,7 @@ describe('the PTY sidebar panel', () => {
       // the click - a modal-free panel may as well arrive with its content.
       const screen = await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
-          | { screen?: ScreenContent }
-          | undefined
+          { screen?: ScreenContent } | undefined
         const text = stored?.screen?.text ?? ''
         return text.includes('hello from the pty') ? text : undefined
       }, 8000)
@@ -1633,8 +1629,7 @@ describe('the PTY sidebar panel', () => {
       await Bun.sleep(3000)
 
       const stored = seen.stores.get('opencode-pty.session-panel') as
-        | { sessionID?: string | null; screen?: ScreenContent }
-        | undefined
+        { sessionID?: string | null; screen?: ScreenContent } | undefined
       expect(stored?.sessionID).toBeNull()
       expect(stored?.screen?.text).not.toContain('not yours')
     } finally {
@@ -1660,8 +1655,7 @@ describe('the PTY sidebar panel', () => {
       command.run()
       await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
-          | { sessions?: unknown[] }
-          | undefined
+          { sessions?: unknown[] } | undefined
         return (stored?.sessions?.length ?? 0) >= 2 ? true : undefined
       })
 
@@ -1690,8 +1684,7 @@ describe('the PTY sidebar panel', () => {
       await setup.mockMouse.click(4, foldY)
       await setup.renderOnce()
       const stored = seen.stores.get('opencode-pty.session-panel') as
-        | { listExpanded?: boolean }
-        | undefined
+        { listExpanded?: boolean } | undefined
       // Row 0 is the header, so row 1 is the first session. The click has to reach the
       // panel's own handler and not just stop at the element - a claim that renders and
       // ignores every click is still broken.
@@ -1776,8 +1769,7 @@ describe('the PTY sidebar panel', () => {
 
       const message = await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
-          | { screen?: ScreenContent }
-          | undefined
+          { screen?: ScreenContent } | undefined
         const text = stored?.screen?.text ?? ''
         return text.includes('could not read the screen') ? text : undefined
       }, 8000)
@@ -1810,8 +1802,7 @@ describe('the PTY sidebar panel', () => {
       command.run()
       await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
-          | { screen?: ScreenContent }
-          | undefined
+          { screen?: ScreenContent } | undefined
         return (stored?.screen?.text ?? '').includes('first output') ? true : undefined
       }, 8000)
 
@@ -1821,14 +1812,12 @@ describe('the PTY sidebar panel', () => {
       // vanished - the list blanked and refilled on each poll.
       await waitFor(() => {
         const stored = seen.stores.get('opencode-pty.session-panel') as
-          | { screen?: ScreenContent; sessions?: unknown[] }
-          | undefined
+          { screen?: ScreenContent; sessions?: unknown[] } | undefined
         return (stored?.sessions?.length ?? 0) > 0 ? true : undefined
       }, 8000)
 
       const stored = seen.stores.get('opencode-pty.session-panel') as
-        | { screen?: ScreenContent }
-        | undefined
+        { screen?: ScreenContent } | undefined
       expect(stored?.screen?.text).toContain('first output')
     } finally {
       server[Symbol.dispose]()

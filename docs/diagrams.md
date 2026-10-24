@@ -196,4 +196,3 @@ sequenceDiagram
         WS-->>UI: UI shows red "exited" badge / stops live output
     end
 ```
-

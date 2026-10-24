@@ -37,7 +37,9 @@ bun run src/daemon/index.ts --socket /tmp/ptyd.sock --state-dir ~/.local/share/o
 
 ```json
 {
-  "plugin": [{ "package": "opencode-pty/v2", "options": { "daemon": true, "socketPath": "/tmp/ptyd.sock" } }]
+  "plugin": [
+    { "package": "opencode-pty/v2", "options": { "daemon": true, "socketPath": "/tmp/ptyd.sock" } }
+  ]
 }
 ```
 
@@ -83,16 +85,19 @@ if they were running).
 ## Debugging
 
 Check daemon logs:
+
 ```bash
 cat ~/.local/share/opencode-pty/daemon.log  # if configured
 ```
 
 Check if daemon is running:
+
 ```bash
 ls -la $XDG_RUNTIME_DIR/opencode-pty/ptyd.sock
 ```
 
 Kill a stuck daemon:
+
 ```bash
 kill $(cat $XDG_RUNTIME_DIR/opencode-pty/ptyd.pid)
 ```

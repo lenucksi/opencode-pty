@@ -8,16 +8,16 @@ plugin contributes a collapsible **PTY** section to the sidebar, next to the
 built-in items (MCP, File Tree, Todo), and shows a session's live output in a
 dialog.
 
-| Row shows        | Meaning                                                     |
-| ---------------- | ----------------------------------------------------------- |
-| `120L`           | Running, with that many lines of output                     |
-| `exit 0`         | Ended on its own with that exit code                        |
-| `signal SIGTERM` | Ended on a signal                                            |
-| `killing`        | Asked to stop; the teardown is still running                 |
-| `killed`         | Stopped, no exit code of its own                            |
+| Row shows        | Meaning                                      |
+| ---------------- | -------------------------------------------- |
+| `120L`           | Running, with that many lines of output      |
+| `exit 0`         | Ended on its own with that exit code         |
+| `signal SIGTERM` | Ended on a signal                            |
+| `killing`        | Asked to stop; the teardown is still running |
+| `killed`         | Stopped, no exit code of its own             |
 
 Each row has a `✕`. On a running session it asks first, because it kills a live
-process; on a finished one it acts at once. The header offers *(clear finished)*
+process; on a finished one it acts at once. The header offers _(clear finished)_
 whenever there is something finished to clear — never for a running session.
 
 Rows are grouped by the conversation that started them, one collapsible heading per
@@ -50,8 +50,8 @@ server and needs no project key — and only then falls back to the address the
 server published for a project. That order matters when one
 `opencode serve --service` hosts the plugin for several projects: the published
 record is filed under the directory that process was started in, which a panel
-cannot derive from its own session, and deriving it alone meant reading *not
-running* beside a server that answered.
+cannot derive from its own session, and deriving it alone meant reading _not
+running_ beside a server that answered.
 
 ### Requirements
 
@@ -63,7 +63,7 @@ second set of its own.
 
 They are declared as **optional peer** dependencies anyway, at the floors
 `@opencode/plugin` itself declares, because that is what the SDK asks for and because
-it keeps them visible: they are needed to *build* the panel, and the development
+it keeps them visible: they are needed to _build_ the panel, and the development
 dependencies pin them so the TUI contract is type-checked.
 
 What the panel does need from the configuration is a **package** entry rather than a
@@ -100,7 +100,7 @@ The daemon is **machine state, not panel state**. Every OpenCode instance on the
 machine talks to the same daemon over one socket, so a roll is a decision about
 the machine rather than about the list you happen to be looking at. That is why
 the line sits in the footer — the one place in the sidebar that talks about the
-machine — and not in the header, whose actions (the filter, *clear finished*)
+machine — and not in the header, whose actions (the filter, _clear finished_)
 act on the list.
 
 The roll is asked of the half that owns the client: the panel cannot do it
@@ -128,19 +128,19 @@ routes that do close it (switching session, picking a terminal, opening the side
 different actions that happen to close it as a side effect. So this panel owes you a way
 out of it and offers three:
 
-| Route     | What it does                     | Key          |
-| --------- | -------------------------------- | ------------ |
-| Palette   | Close the PTY panel              | —            |
-| Palette   | Enlarge the PTY panel            | —            |
-| Palette   | Leave for the session list       | —            |
-| Key       | Close the PTY panel              | `ctrl+y`     |
-| Key       | Enlarge the PTY panel            | `f3`         |
-| Pointer   | Close the PTY panel              | `✕ close`    |
+| Route   | What it does               | Key       |
+| ------- | -------------------------- | --------- |
+| Palette | Close the PTY panel        | —         |
+| Palette | Enlarge the PTY panel      | —         |
+| Palette | Leave for the session list | —         |
+| Key     | Close the PTY panel        | `ctrl+y`  |
+| Key     | Enlarge the PTY panel      | `f3`      |
+| Pointer | Close the PTY panel        | `✕ close` |
 
 The command ids are `opencode-pty.session-panel.close`, `.fullscreen` and `.sessions`, so
 every key can be moved or dropped in your keymap config. The two keys are on `ctrl+y` and
-`f3` because the obvious ones are taken by OpenCode: `escape` is *Interrupt current
-session* and `q` is *Close diff viewer*. Switching sessions needs no key of ours —
+`f3` because the obvious ones are taken by OpenCode: `escape` is _Interrupt current
+session_ and `q` is _Close diff viewer_. Switching sessions needs no key of ours —
 OpenCode has it on `<leader>l`, and it closes this panel as a side effect.
 
 Without this panel having an exit of its own, opening it left no way back except
@@ -161,7 +161,7 @@ failing.
 
 A plugin gets named commands from `context.keymap` and no raw key events, so typing would
 mean binding every printable key separately. `q` — the key every full-screen program uses to
-quit — is bound by OpenCode's own *Close diff viewer*, whose command has no `enabled`
+quit — is bound by OpenCode's own _Close diff viewer_, whose command has no `enabled`
 predicate and is therefore live at all times. There is no key left that a program would
 recognise.
 
@@ -169,11 +169,11 @@ What the SDK does offer is `ui.dialog.prompt`: OpenCode renders a real text fiel
 editing, and returns the line. So the panel has a **command line** instead of a keystroke
 forwarder:
 
-| Route    | What it does                    | Key          |
-| -------- | ------------------------------- | ------------ |
-| Palette  | Send a line to the selected PTY | —            |
-| Key      | Send a line to the selected PTY | `f4`         |
-| Pointer  | `⌨ send` in the panel header    | —            |
+| Route   | What it does                    | Key  |
+| ------- | ------------------------------- | ---- |
+| Palette | Send a line to the selected PTY | —    |
+| Key     | Send a line to the selected PTY | `f4` |
+| Pointer | `⌨ send` in the panel header    | —    |
 
 Type `q`, `k`, `1`, `/pattern` or `H` and it arrives as if typed, with a newline. The control
 appears only for a process that is still running, and the line is refused before you are asked
@@ -183,4 +183,3 @@ for it if there is no server to send it to. The command id is
 This is a command line, not a terminal: a program that wants arrow keys, function keys or
 raw control characters will not get them. `top` is fully usable this way — `q`, `k`, `1`, `c`
 all work — and `htop` needs its own key handling, which this SDK does not expose.
-

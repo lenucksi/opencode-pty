@@ -22,7 +22,7 @@ There is now one roll, reachable from everywhere:
   pid of the daemon that answered the last roll. Clicking it rolls the daemon;
   the line says `daemon · restarting…` while the roll runs and the result
   arrives as a toast.
-- the **web interface** gets a *Restart the daemon* button in the settings,
+- the **web interface** gets a _Restart the daemon_ button in the settings,
   with the answer next to the button. The button is disabled while a roll runs:
   two rolls at once are how a machine ends up with two daemons.
 
@@ -259,7 +259,7 @@ PTY masters belong to that process.
 A session draws its screen for the terminal it was started with. The panel is a
 fraction of that, and everything past its right edge was unreachable: opentui's
 scrollbox cannot scroll sideways, because its scroll size is the content's
-*computed* width — which is the viewport's, so it never has more to show than it
+_computed_ width — which is the viewport's, so it never has more to show than it
 already does. The offset is the panel's own now: the console is cut to a cell
 window, with the colour runs cut along with their characters and a double-width
 character at the edge kept whole. A bar under the console carries the position and
@@ -745,7 +745,7 @@ beside the built-in sidebar items rather than replacing them.
   nothing was stored, and is never merged into what comes back. So every preference added after
   a reader's first run is `undefined` until something writes it - and `filter` was read as a
   string, reached `normalizeQuery`, and threw `undefined is not an object (evaluating
-  'query.trim')` inside the `sidebar.content` slot on every render, which is why dismissing the
+'query.trim')` inside the `sidebar.content` slot on every render, which is why dismissing the
   crash panel brought it straight back. The preferences are now repaired once per setup
   (`fillMissingPrefs`), which also replaces a stored value of the wrong type, and covers
   `collapsedGroups` from the same kind of store.

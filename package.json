@@ -36,7 +36,7 @@
     "opencode-pty-web": "dist/src/web/entry.js"
   },
   "license": "MIT",
-  "packageManager": "bun@1.4.2",
+  "packageManager": "bun@1.4.4",
   "type": "module",
   "exports": {
     "./v2": {
@@ -73,7 +73,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun check",
     "unittest": "bun test --max-concurrency=1",
     "test:llm": "bun test/llm/run.ts",
     "test:daemon": "bun test/llm/daemon-survival-run.ts",
@@ -87,24 +87,24 @@
     "secrets:gitleaks": "gitleaks git --no-banner --redact --log-opts='--all' .",
     "secrets:trufflehog": "trufflehog git file://$PWD --results=verified --no-update --no-color --fail",
     "capture:demo": "bun scripts/capture-demo.ts",
-    "build:plugin": "tsc -p tsconfig.build.json && bun x copyfiles -u 0 \"src/**/*.txt\" dist",
+    "build:plugin": "tsc -p tsconfig.build.json && bun scripts/copy-tool-texts.ts",
     "build:dev": "bun clean && bun build:plugin && vite build --mode development",
     "build:prod": "bun clean && bun build:plugin && bun run build:version && vite build --mode production",
     "prepack": "bun build:prod",
     "clean": "rm -rf dist playwright-report test-results",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
-    "format": "biome format .",
-    "format:fix": "biome format --write .",
+    "format": "bun fmt --check",
+    "format:fix": "bun fmt",
     "build:version": "bun scripts/version.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
-    "@opencode/theme": "2.0.32",
-    "@opentui/core": "0.6.6",
-    "@opentui/solid": "0.6.6",
+    "@biomejs/biome": "2.6.2",
+    "@opencode/theme": "2.1.4",
+    "@opentui/core": "0.6.8",
+    "@opentui/solid": "0.6.8",
     "@playwright/test": "1.64.1",
-    "@types/bun": "^1.4.3",
+    "@types/bun": "1.4.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
@@ -112,24 +112,24 @@
     "react-dom": "^19.3.1",
     "solid-js": "1.9.17",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4"
+    "vite": "8.3.5"
   },
   "peerDependencies": {
     "typescript": "^7.0.2",
-    "@opencode/theme": ">=2.0.32",
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opencode/theme": ">=2.1.4",
+    "@opentui/core": ">=0.6.8",
+    "@opentui/solid": ">=0.6.8",
     "solid-js": ">=1.9.0"
   },
   "engines": {
-    "bun": ">=1.4.2",
+    "bun": ">=1.4.4",
     "opencode": ">=2.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "@opencode-ai/plugin": "^1.19.3",
-    "@opencode-ai/sdk": "^1.19.3",
-    "@opencode/plugin": "^2.0.32",
+    "@opencode-ai/plugin": "1.19.4",
+    "@opencode-ai/sdk": "1.19.4",
+    "@opencode/plugin": "2.1.4",
     "bun-pty": "^0.5.1",
     "ghostty-web": "github:anomalyco/ghostty-web#6e24d040458ddd7aae81572fe2901deec32f9fe7",
     "open": "^11.0.4"
@@ -157,6 +157,11 @@
   "overrides": {
     "@babel/core": "7.29.7",
     "seroval": "1.6.8",
-    "ip-address": "10.7.4"
+    "ip-address": "10.7.4",
+    "body-parser": "2.4.0",
+    "undici@^8.0.0": "8.12.3",
+    "undici@^6.0.0": "6.29.1",
+    "zod": "4.6.7",
+    "toml": "5.0.1"
   }
 }

@@ -7,12 +7,12 @@ version: 2
 
 # Only evaluate pull requests that touch dependency manifests or lockfiles.
 triggerPaths:
-  - "package.json"
-  - "bun.lock"
+  - 'package.json'
+  - 'bun.lock'
 
 # Keep test fixtures out of dependency ingestion.
 projectIgnorePaths:
-  - "test/e2e/fixtures"
+  - 'test/e2e/fixtures'
 
 issueRules:
   unresolvedRequire: true

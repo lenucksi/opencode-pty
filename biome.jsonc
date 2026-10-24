@@ -1,0 +1,43 @@
+{
+  // JSON with comments: two rules need a reason next to them, and a reason in a
+  // commit message is not one a reader of this file will find.
+  "$schema": "node_modules/@biomejs/biome/configuration_schema.json",
+  "files": {
+    "includes": ["**", "!bun.lock"],
+    "ignoreUnknown": true,
+  },
+  "overrides": [
+    {
+      // `usePlaywrightValidDescribeCallback` fires on any call named `describe`.
+      // Ours is a formatter for a value (`src/v2/notifier.ts`, the LLM harness
+      // driver) - not a test suite - so the rule is right for `test/**` and wrong
+      // here. Scoped rather than switched off: the specs still get it.
+      "includes": ["src/**", "test/llm/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "usePlaywrightValidDescribeCallback": "off",
+          },
+        },
+      },
+    },
+  ],
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded",
+      "trailingCommas": "es5",
+    },
+  },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true,
+  },
+}

@@ -31,3 +31,16 @@ coveragePathIgnorePatterns = [
   "src/plugin/pty/state-paths.ts",
   "src/web/server/handlers/server-info.ts",
 ]
+
+[fmt]
+# The house style, in Prettier's own option names: `bun fmt` reads this section
+# (it does not read `biome.json`), so the formatter and the linter cannot drift
+# apart on what the tree looks like.
+printWidth = 100
+singleQuote = true
+semi = false
+trailingComma = "es5"
+# Off on purpose: the import order in this tree is curated - host imports, then
+# relative ones, grouped by what a reader needs first - and sorting would churn
+# every file for no gain.
+sortImports = false

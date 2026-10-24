@@ -2,6 +2,7 @@
 description: Analyzes recent git commits, curates notable user-facing changes, and updates/merges them into the [Unreleased] section of CHANGELOG.md following Keep a Changelog guidelines.
 subtask: true
 ---
+
 Follow these steps to curate and update only the [Unreleased] section of CHANGELOG.md based on recent git history.
 
 Key guidelines from Keep a Changelog[](https://keepachangelog.com/en/1.1.0/):
