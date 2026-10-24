@@ -111,6 +111,7 @@ describe('OpenCode V2 Live Integration', () => {
       'pty_read',
       'pty_resize',
       'pty_screen',
+      'pty_sendkey',
       'pty_spawn',
       'pty_wait',
       'pty_write',

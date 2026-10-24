@@ -46,18 +46,36 @@ processes, and starting a second harness shows the same sessions. The sessions o
 one MCP server are grouped under `mcp-<pid>`, which is also how they are
 collected.
 
+## Installing it
+
+`agentterm-mcp install` prints the two edges this package is reached through, and
+writes the one it owns:
+
+- **OpenCode** loads the package as a plugin, so the entry belongs in `opencode.json`
+  — that is the edge `--write` can add: it merges into the existing `plugin` array,
+  keeps that file's other keys and any options an earlier install chose, and writes a
+  `.bak` of the previous file first.
+- **Everything else** starts `agentterm-mcp` as a stdio server. The plan prints the
+  `mcpServers` block for a generic client, the `claude mcp add` command for Claude
+  Code (its own mechanism and its own scopes — none of its files are edited), and the
+  TOML block for Codex (printed, never written: this tool does not edit TOML).
+
+`--harness=opencode|generic|claude|codex` narrows it; without a flag you get all
+four. Nothing is written without `--write`.
+
 ## The tools
 
-| Tool         | What it does                                              |
-| ------------ | --------------------------------------------------------- |
-| `pty_spawn`  | starts a process in a PTY                                 |
-| `pty_write`  | sends input to a running session                          |
-| `pty_read`   | reads the output, with paging and a pattern filter        |
-| `pty_list`   | lists the sessions, running and finished                  |
-| `pty_wait`   | waits for a session to end and answers with the exit code |
-| `pty_resize` | changes the geometry of a running session                 |
-| `pty_screen` | renders the screen the program currently draws            |
-| `pty_kill`   | stops a session                                           |
+| Tool          | What it does                                              |
+| ------------- | --------------------------------------------------------- |
+| `pty_spawn`   | starts a process in a PTY                                 |
+| `pty_write`   | sends input to a running session                          |
+| `pty_sendkey` | sends a named key (Enter, Tab, C-c, F5) instead of bytes  |
+| `pty_read`    | reads the output, with paging and a pattern filter        |
+| `pty_list`    | lists the sessions, running and finished                  |
+| `pty_wait`    | waits for a session to end and answers with the exit code |
+| `pty_resize`  | changes the geometry of a running session                 |
+| `pty_screen`  | renders the screen the program currently draws            |
+| `pty_kill`    | stops a session                                           |
 
 The names, the arguments and the result tags are the ones the OpenCode plugin
 uses - the same modules serve both routes, so a script that works against one

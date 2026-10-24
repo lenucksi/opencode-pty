@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { manager } from '../src/plugin/pty/manager.ts'
 import { setPermissionAuthorizer } from '../src/plugin/pty/permissions.ts'
 import { ptyKill } from '../src/plugin/pty/tools/kill.ts'
+import { ptySendkey } from '../src/plugin/pty/tools/sendkey.ts'
 import { ptyWrite } from '../src/plugin/pty/tools/write.ts'
 import type { PTYSessionInfo } from '../src/plugin/pty/types.ts'
 
@@ -197,5 +198,60 @@ describe('ptyWrite tool', () => {
     expect(ptyWrite.execute({ id: 'pty_killwrite', data: 'x' }, ctx)).rejects.toThrow(
       "Failed to write to PTY 'pty_killwrite'."
     )
+  })
+})
+
+describe('ptySendkey tool', () => {
+  afterEach(() => {
+    mock.restore()
+  })
+
+  it('sends the bytes of a named key and says which key it was', async () => {
+    spyOn(manager, 'get').mockReturnValue(buildSession())
+    const write = spyOn(manager, 'write').mockReturnValue(true)
+
+    const answer = await ptySendkey.execute({ id: 'pty_killwrite', key: 'Enter' }, ctx as never)
+
+    expect(write).toHaveBeenCalledWith('pty_killwrite', '\r')
+    // The name, not the byte: the point of the tool is that a reader can see what
+    // was pressed.
+    expect(answer).toContain('Enter')
+    expect(answer).toContain('1 byte')
+  })
+
+  it('repeats a key, and says how often', async () => {
+    spyOn(manager, 'get').mockReturnValue(buildSession())
+    const write = spyOn(manager, 'write').mockReturnValue(true)
+
+    const answer = await ptySendkey.execute(
+      { id: 'pty_killwrite', key: 'Down', times: 3 },
+      ctx as never
+    )
+
+    expect(write).toHaveBeenCalledWith('pty_killwrite', '\x1b[B\x1b[B\x1b[B')
+    expect(answer).toContain('3 times')
+    expect(answer).toContain('9 bytes')
+  })
+
+  // A key it cannot spell is refused with the names it does know - never sent as
+  // literal text, which is what a silent fallback would do.
+  it('refuses a name it does not know and lists the ones it does', async () => {
+    spyOn(manager, 'get').mockReturnValue(buildSession())
+    const write = spyOn(manager, 'write').mockReturnValue(true)
+
+    await expect(
+      ptySendkey.execute({ id: 'pty_killwrite', key: 'Hyper' }, ctx as never)
+    ).rejects.toThrow(/Unknown key 'Hyper'/)
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it('refuses a session that has ended', async () => {
+    spyOn(manager, 'get').mockReturnValue(buildSession({ status: 'exited' }))
+    const write = spyOn(manager, 'write').mockReturnValue(true)
+
+    await expect(
+      ptySendkey.execute({ id: 'pty_killwrite', key: 'Enter' }, ctx as never)
+    ).rejects.toThrow(/status is 'exited'/)
+    expect(write).not.toHaveBeenCalled()
   })
 })
