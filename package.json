@@ -37,8 +37,7 @@
   },
   "homepage": "https://github.com/lenucksi/opencode-pty#readme",
   "files": [
-    "dist",
-    "patches"
+    "dist"
   ],
   "bin": {
     "agentterm-mcp": "dist/src/mcp/entry.js",
