@@ -24,7 +24,27 @@ shape that can be contributed upstream. The plugin id, the daemon socket and the
 directory keep the name `opencode-pty`: renaming them would orphan the archive and the
 sidebar preferences of every existing install.
 
-## Why?
+![agentterm in the browser](docs/media/web-ui-demo.gif)
+
+![agentterm's TUI panel in OpenCode](docs/media/tui-demo.gif)
+
+## Why agentterm?
+
+tmux is built for a human attached to a terminal. agentterm is built for a model that
+reads and types, and for a human who wants to watch the same process: a **PTY** layer,
+not a pipe.
+
+|                                | tmux                    | agentterm                                                                      |
+| ------------------------------ | ----------------------- | ------------------------------------------------------------------------------ |
+| Who reads it                   | a human, attached       | the agent: byte-exact paging with an offset cursor, regex filter, token budget |
+| Who watches                    | a human                 | the human, in the browser, on the same process                                 |
+| Waiting for new output         | polling in the terminal | `pty_wait`, or a `<pty_exited>` message, instead of polling                    |
+| Programs that need a TTY       | yes                     | yes — a real PTY: mouse reporting, true colour, alternate screen               |
+| What outlives the session      | the tmux server         | the daemon                                                                     |
+| How the agent knows it is over | —                       | `<pty_exited>` (OpenCode) / `pty_wait` (MCP)                                   |
+
+The word **PTY** is in the name of every tool for that reason: it is what people and
+models type when they are looking for this.
 
 OpenCode v2 can background shell calls — so this plugin isn't about _whether_ a process
 runs in the background. It's about **real terminal emulation** and **shared control**:
@@ -73,6 +93,20 @@ Same daemon, same sessions, same result tags — a session an MCP client starts 
 session the OpenCode plugin lists. The texts, the permission gate and the completion
 signal are the route's own: see [`docs/mcp.md`](docs/mcp.md). The web interface is
 also a binary of its own (`bunx -p @lenucksi/agentterm agentterm-web`) for a human who wants to watch.
+
+## Where to find it
+
+- **As an OpenCode plugin** — `@lenucksi/agentterm` in `opencode.json`; the TUI panel is
+  found by the host from the package itself. The plugin id it reports is `opencode-pty`.
+- **As an MCP server** — the same package ships `agentterm-mcp`, an MCP stdio server for
+  harnesses that are not OpenCode (Claude Code, Codex, anything that speaks MCP). It is
+  not a Bash replacement: the eight `pty_*` tools are added next to whatever shell tool
+  the harness already has.
+- **As a web terminal** — `agentterm-web` serves the same interface against the daemon,
+  loopback by default.
+- **Search terms that find it** — `pty`, `terminal`, `tmux`, `mcp`, `mcp-server`,
+  `opencode-plugin`. The repository carries those as GitHub topics, the package as npm
+  keywords, and the description names PTY, terminal, MCP and OpenCode in one sentence.
 
 ## Try it
 
@@ -152,10 +186,6 @@ See `docs/configuration.md`.
   `rm -rf ~/.cache/opencode/node_modules/opencode-pty && opencode`.
 
 ## Web UI & TUI panel
-
-![opencode-pty Web UI](docs/media/web-ui-demo.gif)
-
-![opencode-pty TUI panel](docs/media/tui-demo.gif)
 
 - **Web UI**: React/xterm, real-time WebSocket streaming, mouse selection, themes,
   download, session groups, coloured output. Start with `/pty-open-background-spy`.
