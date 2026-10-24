@@ -5,13 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.2] - 2026-10-24
+## [1.0.3] - 2026-10-24
 
 No functional change. This release exists to validate the repository's trusted
-publisher: npm requires one publish through the configured workflow before it trusts
-the configuration, and 1.0.1 could not carry provenance because the first version of
-a package cannot come from a trusted publisher (the setting lives on a package that
-has to exist already). From 1.0.2 on, releases come from CI, signed, without a token.
+publisher, and to move releases onto it.
+
+1.0.1 was published by hand, without an attestation: the first version of a package
+cannot come from a trusted publisher, because the setting lives on a package that has
+to exist already. From here on, CI publishes - signed, without a token. The trusted
+publisher is configured for **`npm stage publish`**, so the workflow stages the
+version and signs the provenance statement, and a human approves it with 2FA. A
+compromised workflow therefore cannot put a version live; the cost is one approval
+per release (`npm stage list`, then `npm stage approve <stage-id>`).
 
 ## [1.0.1] - 2026-10-24
 
