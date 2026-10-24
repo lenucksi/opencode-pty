@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The mark is one terminal with two cursors in it: the agent types, the human watches
   the same buffer. `docs/media/logo-variants.html` keeps the two alternatives that were
   drawn for the pick.
+- **The Licences tab now carries the copyright lines and the licence bodies.** Each
+  package shows the copyright line its own licence file spells (owner and year, or a
+  note that the package has none and the manifest's author is all there is), and every
+  distinct licence body is reproduced once per group instead of once per package -
+  Apache-2.0 alone is eleven kilobytes. The same data is written to
+  `dist/THIRD-PARTY-NOTICES.md`, so the notice travels in the tarball as a flat file
+  too, and `docs/credits.md` names the four projects this stands on.
+
 ### Changed
 
 - **`patches/` is no longer in the published tarball.** npm strips patch files that

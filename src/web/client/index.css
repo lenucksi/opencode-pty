@@ -1588,3 +1588,45 @@ span.settings-build-value {
 .status-sep {
   color: var(--border);
 }
+
+/* The licence notice. The copyright line is the part a licence obliges us to carry,
+   so it sits under the package name rather than in a tooltip; the body is
+   reproduced once per group and stays collapsible because Apache-2.0 is 11 kB. */
+.docs-license-package {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.docs-license-copyright {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-muted);
+}
+.docs-license-copyright-missing {
+  font-style: italic;
+  color: var(--fg-subtle);
+}
+.docs-license-text {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.docs-license-text-summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.docs-license-text-body {
+  margin: 6px 0 0;
+  padding: 8px;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: var(--fg-muted);
+}
