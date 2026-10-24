@@ -3,7 +3,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "module": "dist/index.js",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "PTY sessions for coding agents - an OpenCode plugin, an MCP server for terminal sessions, and a standalone web terminal (tmux, but agent-native)",
   "author": "lenucksi",
   "keywords": [
