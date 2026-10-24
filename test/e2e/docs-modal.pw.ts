@@ -3,6 +3,18 @@ import { expect, test as extendedTest } from './fixtures'
 const DOCS_BUTTON = 'button:has-text("Docs")'
 const TAB_HUMANS = '#docs-tab-humans'
 const TAB_LLM = '#docs-tab-llm'
+const TAB_LICENSES = '#docs-tab-licenses'
+
+/** The slice of `/api/licenses` this spec reads; the server owns the full type. */
+interface LicensesPayload {
+  available: boolean
+  total: number
+  groups: {
+    license: string
+    count: number
+    packages: { name: string; version: string; license: string }[]
+  }[]
+}
 
 extendedTest.describe('documentation dialog', () => {
   extendedTest('opens from the sidebar and shows the human sections', async ({ page }) => {
@@ -43,6 +55,53 @@ extendedTest.describe('documentation dialog', () => {
     })
     expect(shown).toBe(expected)
     expect(shown).toContain('pty_wait')
+  })
+
+  extendedTest('covers third-party notices from the generated artifact', async ({ page }) => {
+    await page.locator(DOCS_BUTTON).click()
+    await page.locator(TAB_LICENSES).click()
+
+    await expect(page.locator(TAB_LICENSES)).toHaveAttribute('aria-selected', 'true')
+    const panel = page.locator('#docs-panel-licenses')
+    await expect(panel).toBeVisible()
+
+    // Credits are the only hand-written part of this tab.
+    await expect(panel.locator('.docs-credit-list li')).toHaveCount(4)
+    await expect(panel.locator('.docs-credit-list')).toContainText('ghostty-web')
+
+    // The grouped list has to be what the server reports, not a copy that drifts.
+    const payload = (await page.evaluate(async () => {
+      const response = await fetch('/api/licenses')
+      return response.json() as Promise<unknown>
+    })) as LicensesPayload
+    expect(payload.available).toBe(true)
+    expect(payload.groups.length).toBeGreaterThan(3)
+    await expect(panel.locator('.docs-paragraph').first()).toContainText(
+      `${payload.total} installed packages`
+    )
+
+    for (const group of payload.groups) {
+      const details = panel.locator(`.docs-license-group[data-license="${group.license}"]`)
+      await expect(details).toHaveCount(1)
+      await expect(details.locator('.docs-license-count')).toHaveText(
+        `${group.count} ${group.count === 1 ? 'package' : 'packages'}`
+      )
+    }
+
+    // A known package is the second half of the answer: which licence it is under.
+    // The exact name@version comes from the API, never from a guess in this file.
+    const packages = payload.groups.flatMap((group) => group.packages)
+    for (const name of ['react', 'ghostty-web']) {
+      const pkg = packages.find((entry) => entry.name === name)
+      expect(pkg).toBeDefined()
+      if (!pkg) continue
+      const details = panel.locator(`.docs-license-group[data-license="${pkg.license}"]`)
+      if ((await details.getAttribute('open')) === null) {
+        await details.locator('summary').click()
+      }
+      // `exact` matters: `@types/react@…` also contains `react@…`.
+      await expect(details.getByText(`${pkg.name}@${pkg.version}`, { exact: true })).toBeVisible()
+    }
   })
 
   extendedTest('scrolls the human sections instead of clipping them', async ({ page }) => {

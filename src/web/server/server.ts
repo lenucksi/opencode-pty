@@ -28,6 +28,7 @@ import { handleUpgrade } from './handlers/upgrade.ts'
 const NOTICE_TOPIC = 'notices'
 import { restartDaemonRoute } from './handlers/daemon.ts'
 import { handleUsageDocs } from './handlers/usage-docs.ts'
+import { handleLicenses } from './handlers/licenses.ts'
 import { handleWebSocketMessage } from './handlers/websocket.ts'
 import type { WSMessageServerNotice } from '../shared/types.ts'
 
@@ -219,6 +220,9 @@ export class PTYServer implements Disposable {
         [routes.server.path]: () => handleServerInfo(this.server),
         [routes.docs.path]: {
           GET: () => handleUsageDocs(),
+        },
+        [routes.licenses.path]: {
+          GET: () => handleLicenses(),
         },
         [routes.daemon.path]: {
           POST: (request: Request) => restartDaemonRoute(request),
