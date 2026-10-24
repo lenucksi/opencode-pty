@@ -13,7 +13,7 @@ async function setupSession(
 ): Promise<string> {
   const session = await api.sessions.create({ command: 'bash', args: ['-i'], description })
   const { id } = session
-  await page.waitForSelector('h1:has-text("PTY Sessions")')
+  await page.waitForSelector('[data-testid="sidebar-brand"]')
   await page.waitForSelector('.session-item')
   await page.locator(`.session-item:has-text("${description}")`).click()
   await page.waitForSelector('.output-container', { timeout: 5000 })

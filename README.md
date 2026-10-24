@@ -1,5 +1,7 @@
 # agentterm
 
+<img src="docs/media/logo.svg" alt="agentterm — PTY sessions for agents" width="380">
+
 > Run long-lived processes the agent can read, write to and wait on.
 > Stop wrapping dev servers in `&`.
 
@@ -214,6 +216,7 @@ More detail: [`docs/how-it-works.md`](docs/how-it-works.md), [`docs/diagrams.md`
 - [`docs/web-ui.md`](docs/web-ui.md) — Web UI features and starting it
 - [`docs/tui-panel.md`](docs/tui-panel.md) — TUI sidebar and session panel
 - [`docs/how-it-works.md`](docs/how-it-works.md) — buffer, paging, screen rendering
+- [`docs/credits.md`](docs/credits.md) — licence and the projects this stands on
 - [`docs/diagrams.md`](docs/diagrams.md) — sequence diagrams
 - [`docs/development.md`](docs/development.md) — local setup and quality gate
 
@@ -230,7 +233,10 @@ See [`docs/development.md`](docs/development.md).
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). [Credits](docs/credits.md) names the four projects this
+stands on; the full third-party notice is generated at build time (`dist/licenses.json`
+and `dist/THIRD-PARTY-NOTICES.md`, shown in the docs dialog's **Licences** tab), with
+each package's copyright line and every distinct licence body reproduced once.
 
 ## Contributing
 

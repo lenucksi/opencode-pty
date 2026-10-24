@@ -3,7 +3,6 @@ import { describe, expect, it } from 'bun:test'
 import type { PreferenceStorage } from '../src/web/client/lib/theme.ts'
 import {
   clampFontSize,
-  DEFAULT_SHOW_DEBUG_BAR,
   DEFAULT_TERMINAL_FONT_SIZE,
   DEFAULT_UI_PREFS,
   MAX_TERMINAL_FONT_SIZE,
@@ -81,7 +80,7 @@ describe('parseUiPrefs', () => {
   })
 
   it('reads a complete stored object', () => {
-    const stored: UiPrefs = { terminalFontSize: 20, showDebugBar: false }
+    const stored: UiPrefs = { terminalFontSize: 20 }
     expect(parseUiPrefs(JSON.stringify(stored))).toEqual(stored)
   })
 
@@ -89,25 +88,21 @@ describe('parseUiPrefs', () => {
     expect(parseUiPrefs('{}')).toEqual(DEFAULT_UI_PREFS)
     expect(parseUiPrefs('{"terminalFontSize":18}')).toEqual({
       terminalFontSize: 18,
-      showDebugBar: DEFAULT_SHOW_DEBUG_BAR,
     })
     expect(parseUiPrefs('{"showDebugBar":false}')).toEqual({
       terminalFontSize: DEFAULT_TERMINAL_FONT_SIZE,
-      showDebugBar: false,
     })
   })
 
   it('clamps and ignores malformed fields without discarding the valid ones', () => {
     expect(parseUiPrefs('{"terminalFontSize":99,"showDebugBar":false}')).toEqual({
       terminalFontSize: MAX_TERMINAL_FONT_SIZE,
-      showDebugBar: false,
     })
     expect(parseUiPrefs('{"terminalFontSize":"large","showDebugBar":"yes"}')).toEqual(
       DEFAULT_UI_PREFS
     )
     expect(parseUiPrefs('{"terminalFontSize":null,"showDebugBar":false}')).toEqual({
       terminalFontSize: DEFAULT_TERMINAL_FONT_SIZE,
-      showDebugBar: false,
     })
   })
 })
@@ -117,7 +112,7 @@ describe('readUiPrefs', () => {
     const storage = fakeStorage({
       [UI_PREFS_STORAGE_KEY]: JSON.stringify({ terminalFontSize: 16, showDebugBar: false }),
     })
-    expect(readUiPrefs(storage)).toEqual({ terminalFontSize: 16, showDebugBar: false })
+    expect(readUiPrefs(storage)).toEqual({ terminalFontSize: 16 })
   })
 
   it('returns the defaults when the key is absent', () => {
@@ -140,15 +135,15 @@ describe('readUiPrefs', () => {
 describe('storeUiPrefs', () => {
   it('round-trips through storage under the prefs key', () => {
     const storage = fakeStorage()
-    storeUiPrefs(storage, { terminalFontSize: 22, showDebugBar: false })
+    storeUiPrefs(storage, { terminalFontSize: 22 })
 
-    expect(readUiPrefs(storage)).toEqual({ terminalFontSize: 22, showDebugBar: false })
+    expect(readUiPrefs(storage)).toEqual({ terminalFontSize: 22 })
     expect(storage.values.has(UI_PREFS_STORAGE_KEY)).toBe(true)
   })
 
   it('clamps the font size before writing', () => {
     const storage = fakeStorage()
-    storeUiPrefs(storage, { terminalFontSize: 99, showDebugBar: true })
+    storeUiPrefs(storage, { terminalFontSize: 99 })
 
     expect(readUiPrefs(storage).terminalFontSize).toBe(MAX_TERMINAL_FONT_SIZE)
   })

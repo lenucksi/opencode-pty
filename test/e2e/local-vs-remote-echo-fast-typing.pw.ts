@@ -8,7 +8,7 @@ extendedTest.describe('Xterm Content Extraction - Local vs Remote Echo (Fast Typ
   extendedTest(
     'should demonstrate local vs remote echo behavior with fast typing',
     async ({ page, api }) => {
-      await page.waitForSelector('h1:has-text("PTY Sessions")')
+      await page.waitForSelector('[data-testid="sidebar-brand"]')
 
       // Create interactive bash session
       await api.sessions.create({

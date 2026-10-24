@@ -13,6 +13,7 @@ import {
 import { countSessions, filterGroups, normalizeQuery } from '../../shared/session-search.ts'
 import type { ThemePreference } from '../lib/theme.ts'
 import { SessionSearch } from './session-search.tsx'
+import { BrandMark } from './brand-mark.tsx'
 import { ThemeSwitch } from './theme-switch.tsx'
 
 interface SidebarProps {
@@ -414,7 +415,16 @@ export function Sidebar({
   return (
     <div className="sidebar">
       <div className="sidebar-header">
-        <h1>PTY Sessions</h1>
+        {/* The brand, and under it what the page is: the mark carries the claim
+            (one terminal, two readers) and the subtitle keeps the word "PTY"
+            where a reader looks for it. */}
+        <h1 className="sidebar-brand" data-testid="sidebar-brand">
+          <BrandMark size={22} />
+          <span className="sidebar-brand-text">
+            <span className="sidebar-brand-name">agentterm</span>
+            <span className="sidebar-brand-sub">PTY sessions</span>
+          </span>
+        </h1>
         <div className="sidebar-header-controls">
           <ThemeSwitch preference={themePreference} onChange={onThemePreferenceChange} />
           <button

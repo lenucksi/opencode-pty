@@ -1,5 +1,5 @@
 import { api } from '../../shared/api-client.ts'
-import type { LicensesResponse } from '../../shared/licenses.ts'
+import type { LicenseText, LicensesResponse } from '../../shared/licenses.ts'
 import type { UsageDocsResponse } from '../../shared/usage-docs.ts'
 import { type RefObject, useCallback, useEffect, useState } from 'react'
 import { useDialog } from '../hooks/use-dialog.ts'
@@ -238,6 +238,23 @@ function LlmPanel({
  * Opening a group shows its packages; the count on the summary stays visible, so
  * a reader can stop without opening anything.
  */
+/**
+ * A stable key for one licence body: the body itself, folded.
+ *
+ * The array index would work today and be wrong the moment an entry is inserted -
+ * an open `<details>` would silently show a different licence. The body text is the
+ * identity here (the artifact groups bodies by exactly that), so the key is derived
+ * from it. FNV-1a, because it is four lines and needs no dependency.
+ */
+function licenseBodyKey(body: LicenseText): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < body.text.length; index += 1) {
+    hash ^= body.text.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `${body.license}-${(hash >>> 0).toString(16)}`
+}
+
 function LicensesPanel({ data }: { data: LicensesResponse }) {
   return (
     <div
@@ -267,30 +284,67 @@ function LicensesPanel({ data }: { data: LicensesResponse }) {
           <>
             <p className="docs-paragraph">
               {data.total} installed packages under {data.groups.length} licences, generated from
-              the lockfile at build time. Open a licence to see its packages.
+              the lockfile at build time. Each group shows the copyright lines its packages ship -
+              the notice a licence requires us to pass on - and the licence text once per distinct
+              body.
             </p>
             <div className="docs-license-groups">
-              {data.groups.map((group) => (
-                <details
-                  key={group.license}
-                  className="docs-license-group"
-                  data-license={group.license}
-                >
-                  <summary className="docs-license-summary">
-                    <span className="docs-license-name">{group.license}</span>
-                    <span className="docs-license-count">
-                      {group.count} {group.count === 1 ? 'package' : 'packages'}
-                    </span>
-                  </summary>
-                  <ul className="docs-license-packages">
-                    {group.packages.map((pkg) => (
-                      <li key={`${pkg.name}@${pkg.version}`} className="docs-license-package">
-                        {pkg.name}@{pkg.version}
-                      </li>
+              {data.groups.map((group) => {
+                // A licence body is reproduced once per group, not once per package:
+                // the Apache-2.0 text alone is eleven kilobytes. A group can carry
+                // more than one body when two files say the same licence differently,
+                // so this is a list.
+                const texts = (data.texts ?? []).filter((body) => body.license === group.license)
+                return (
+                  <details
+                    key={group.license}
+                    className="docs-license-group"
+                    data-license={group.license}
+                  >
+                    <summary className="docs-license-summary">
+                      <span className="docs-license-name">{group.license}</span>
+                      <span className="docs-license-count">
+                        {group.count} {group.count === 1 ? 'package' : 'packages'}
+                      </span>
+                    </summary>
+                    <ul className="docs-license-packages">
+                      {group.packages.map((pkg) => (
+                        <li key={`${pkg.name}@${pkg.version}`} className="docs-license-package">
+                          <span className="docs-license-package-name">
+                            {pkg.name}@{pkg.version}
+                          </span>
+                          {pkg.copyright.length > 0 ? (
+                            <span className="docs-license-copyright">
+                              {pkg.copyright.join(' / ')}
+                            </span>
+                          ) : (
+                            <span className="docs-license-copyright docs-license-copyright-missing">
+                              {pkg.copyrightSource === 'author-field'
+                                ? 'no licence file in the package; the manifest names an author'
+                                : 'no copyright line found'}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {texts.map((body) => (
+                      <details
+                        key={licenseBodyKey(body)}
+                        className="docs-license-text"
+                        data-license-body={body.license}
+                      >
+                        <summary className="docs-license-text-summary">
+                          Licence text
+                          {body.packageCount > 1
+                            ? ` (shared by ${body.packageCount} packages)`
+                            : ''}
+                        </summary>
+                        <pre className="docs-license-text-body">{body.text}</pre>
+                      </details>
                     ))}
-                  </ul>
-                </details>
-              ))}
+                  </details>
+                )
+              })}
             </div>
           </>
         ) : (

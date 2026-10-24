@@ -137,10 +137,37 @@ body {
   border-bottom: 1px solid var(--border);
   background: var(--bg-elevated);
 }
-.sidebar-header h1 {
-  font-size: 18px;
-  font-weight: 600;
+/* The brand: the mark carries the claim (one terminal, two readers), the name says
+   who it is, the subtitle keeps the word PTY where a reader looks for it. */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
   color: var(--accent);
+}
+.sidebar-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.sidebar-brand-name {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+}
+.sidebar-brand-sub {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+.brand-mark {
+  flex-shrink: 0;
+  display: block;
 }
 .theme-switch {
   display: flex;
@@ -1515,4 +1542,91 @@ span.settings-build-value {
 .toast-close:hover,
 .toast-close:focus-visible {
   color: var(--fg);
+}
+
+/* The status line at the bottom of the interface.
+   It is always there: "which session am I looking at" and "which build is this" are
+   questions a reader asks without wanting to open settings. The bar it replaced had
+   no styles at all, which is why it read as something that had fallen off the page. */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--fg-subtle);
+  overflow: hidden;
+}
+.status-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.status-name {
+  color: var(--fg-muted);
+  letter-spacing: 0.02em;
+}
+.status-metrics {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.status-sep {
+  color: var(--border);
+}
+
+/* The licence notice. The copyright line is the part a licence obliges us to carry,
+   so it sits under the package name rather than in a tooltip; the body is
+   reproduced once per group and stays collapsible because Apache-2.0 is 11 kB. */
+.docs-license-package {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.docs-license-copyright {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-muted);
+}
+.docs-license-copyright-missing {
+  font-style: italic;
+  color: var(--fg-subtle);
+}
+.docs-license-text {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.docs-license-text-summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.docs-license-text-body {
+  margin: 6px 0 0;
+  padding: 8px;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: var(--fg-muted);
 }

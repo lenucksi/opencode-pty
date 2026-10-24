@@ -9,7 +9,7 @@ extendedTest.describe('Xterm Content Extraction', () => {
   extendedTest(
     'should validate SerializeAddon extraction against the Terminal buffer API',
     async ({ page, api }) => {
-      await page.waitForSelector('h1:has-text("PTY Sessions")')
+      await page.waitForSelector('[data-testid="sidebar-brand"]')
 
       // Create a session and run some commands to generate content
       await api.sessions.create({

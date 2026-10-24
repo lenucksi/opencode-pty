@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>agentterm</title>
+  <style>
+    .bg { fill: #0d1117; }
+    .frame { fill: none; stroke: #58a6ff; stroke-width: 2.5; }
+    .typed { fill: #58a6ff; }
+    .watch { fill: none; stroke: #58a6ff; stroke-width: 2; }
+  </style>
+  <rect class="bg" width="32" height="32" rx="7" />
+  <rect class="frame" x="4.5" y="8" width="23" height="16" rx="3" />
+  <rect class="typed" x="9" y="13" width="5.5" height="7.5" rx="1.5" />
+  <rect class="watch" x="17.5" y="13" width="5.5" height="7.5" rx="1.5" />
+</svg>

@@ -4,9 +4,11 @@ import { join, resolve } from 'node:path'
 import type { FileReader } from '../../../shared/file-reader.ts'
 import {
   LICENSE_CREDITS,
+  type CopyrightSource,
   type LicenseGroup,
   type LicensePackage,
   type LicenseReport,
+  type LicenseText,
   type LicensesResponse,
 } from '../../shared/licenses.ts'
 import { JsonResponse } from './responses.ts'
@@ -43,13 +45,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+function parseCopyright(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((line): line is string => typeof line === 'string' && line.trim() !== '')
+}
+
+/**
+ * A source the artifact declared, or the one its data implies.
+ *
+ * An older artifact has neither field; it is served with `[]` and `none` rather
+ * than thrown away, because a stale dist under a running dev server is a normal
+ * state and an empty copyright list is what that artifact knows.
+ */
+function parseCopyrightSource(value: unknown, copyright: string[]): CopyrightSource {
+  if (value === 'license-file' || value === 'author-field' || value === 'none') return value
+  return copyright.length > 0 ? 'license-file' : 'none'
+}
+
 function parsePackage(value: unknown): LicensePackage | null {
   if (!isRecord(value)) return null
   const { name, version, license } = value
   if (typeof name !== 'string' || name === '') return null
   if (typeof version !== 'string') return null
   if (typeof license !== 'string' || license === '') return null
-  return { name, version, license }
+  const copyright = parseCopyright(value.copyright)
+  return {
+    name,
+    version,
+    license,
+    copyright,
+    copyrightSource: parseCopyrightSource(value.copyrightSource, copyright),
+  }
 }
 
 function parseGroup(value: unknown): LicenseGroup | null {
@@ -61,6 +87,18 @@ function parseGroup(value: unknown): LicenseGroup | null {
   // The count is recomputed rather than trusted: a stale count would label a
   // collapsed group with a number its own list contradicts.
   return { license: value.license, count: packages.length, packages }
+}
+
+function parseText(value: unknown): LicenseText | null {
+  if (!isRecord(value)) return null
+  const { license, packageCount, text } = value
+  if (typeof license !== 'string' || license === '') return null
+  if (typeof text !== 'string') return null
+  const count =
+    typeof packageCount === 'number' && Number.isInteger(packageCount) && packageCount >= 0
+      ? packageCount
+      : 0
+  return { license, packageCount: count, text }
 }
 
 /**
@@ -81,9 +119,13 @@ export function parseLicenseReport(raw: string): LicenseReport | null {
   const groups = parsed.groups
     .map(parseGroup)
     .filter((group): group is LicenseGroup => group !== null)
+  const texts = Array.isArray(parsed.texts)
+    ? parsed.texts.map(parseText).filter((text): text is LicenseText => text !== null)
+    : []
   return {
     total: groups.reduce((sum, group) => sum + group.count, 0),
     groups,
+    texts,
   }
 }
 
@@ -108,6 +150,6 @@ export function handleLicenses(path: string = LICENSES_ARTIFACT_PATH): JsonRespo
   const report = readLicenseReport(path)
   const payload: LicensesResponse = report
     ? { available: true, ...report, credits: LICENSE_CREDITS }
-    : { available: false, total: 0, groups: [], credits: LICENSE_CREDITS }
+    : { available: false, total: 0, groups: [], texts: [], credits: LICENSE_CREDITS }
   return new JsonResponse(payload, 200, SECURITY_HEADERS)
 }

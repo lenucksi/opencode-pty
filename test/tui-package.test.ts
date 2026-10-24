@@ -283,8 +283,11 @@ describe('the TUI dependencies', () => {
     expect({
       solidJsShipped: shipped.includes('solid-js'),
       // The whole package: a published artifact is `files`, so a dependency missing here
-      // is a dependency no consumer resolves.
+      // is a dependency no consumer resolves. `patches` is NOT shipped: the ghostty-web
+      // patch only touches client code that is already prebundled in `dist/web`, and npm
+      // strips `patchedDependencies` patch files out of the tarball anyway - shipping the
+      // directory would only add dead weight.
       publishedFiles: manifest.files,
-    }).toEqual({ solidJsShipped: false, publishedFiles: ['dist', 'patches'] })
+    }).toEqual({ solidJsShipped: false, publishedFiles: ['dist'] })
   })
 })

@@ -1,6 +1,5 @@
-import { existsSync, readFileSync, copyFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { mkdirSync } from 'node:fs'
 
 /**
  * The two edges this package is installed through.

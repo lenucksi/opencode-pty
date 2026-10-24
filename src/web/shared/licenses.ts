@@ -8,12 +8,49 @@
  * cannot discover that fact from its lockfile.
  */
 
+/** Where a package's copyright line came from, or that none could be found. */
+export type CopyrightSource = 'license-file' | 'author-field' | 'none'
+
 /** One installed package. `license` repeats the group's licence on purpose: a
  * flat reader (a test, a future export) should not have to walk the group. */
 export interface LicensePackage {
   name: string
   version: string
   license: string
+  /**
+   * The copyright lines as the package's own licence file spells them - owner and
+   * year, verbatim.
+   *
+   * MIT and BSD require the notice to travel with every copy, so it is not enough
+   * to name the licence: the line has to be reproduced, which is what
+   * `https://…/LICENSE` in a package's tarball is for and what a reader of this tab
+   * needs to see.
+   */
+  copyright: string[]
+  /**
+   * `license-file` when the lines were read out of the package's own licence file,
+   * `author-field` when it has none and the manifest's author is all there is,
+   * `none` when even that is missing. A reader should be able to see which one they
+   * are looking at rather than assume the notice is complete.
+   */
+  copyrightSource: CopyrightSource
+}
+
+/**
+ * One licence body, reproduced once.
+ *
+ * The texts are grouped by their content, not by their identifier: two MIT
+ * packages can ship differently worded files, and a licence id is not a text. Each
+ * distinct body appears once, with the number of packages that carry it, so an
+ * Apache-2.0 text of eleven kilobytes is not repeated 75 times.
+ */
+export interface LicenseText {
+  /** The licence identifier this body was filed under. */
+  license: string
+  /** How many packages ship this exact body. */
+  packageCount: number
+  /** The body, verbatim apart from normalised line endings. */
+  text: string
 }
 
 /** Installed packages under one licence, sorted by package name. */
@@ -28,6 +65,8 @@ export interface LicenseGroup {
 export interface LicenseReport {
   total: number
   groups: LicenseGroup[]
+  /** Every distinct licence body, once, largest group first. */
+  texts: LicenseText[]
 }
 
 /** A project this repository is built on, named by hand. */

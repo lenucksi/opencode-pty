@@ -5,7 +5,6 @@ import { clampFontSize, readUiPrefs, storeUiPrefs, type UiPrefs } from '../lib/u
 interface UseUiPrefsResult {
   prefs: UiPrefs
   setTerminalFontSize: (size: number) => void
-  setShowDebugBar: (show: boolean) => void
 }
 
 /**
@@ -24,9 +23,5 @@ export function useUiPrefs(): UseUiPrefsResult {
     setPrefs((prev) => ({ ...prev, terminalFontSize: clampFontSize(size) }))
   }, [])
 
-  const setShowDebugBar = useCallback((show: boolean) => {
-    setPrefs((prev) => ({ ...prev, showDebugBar: show }))
-  }, [])
-
-  return { prefs, setTerminalFontSize, setShowDebugBar }
+  return { prefs, setTerminalFontSize }
 }

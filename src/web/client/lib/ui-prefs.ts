@@ -6,19 +6,15 @@ export const UI_PREFS_STORAGE_KEY = 'opencode-pty-ui-prefs'
 export const MIN_TERMINAL_FONT_SIZE = 10
 export const MAX_TERMINAL_FONT_SIZE = 24
 export const DEFAULT_TERMINAL_FONT_SIZE = 14
-export const DEFAULT_SHOW_DEBUG_BAR = true
 
 /** Client-side presentation preferences that are not part of the server API. */
 export interface UiPrefs {
   /** Terminal font size in CSS pixels. */
   terminalFontSize: number
-  /** Whether the diagnostics bar under the terminal is rendered. */
-  showDebugBar: boolean
 }
 
 export const DEFAULT_UI_PREFS: UiPrefs = {
   terminalFontSize: DEFAULT_TERMINAL_FONT_SIZE,
-  showDebugBar: DEFAULT_SHOW_DEBUG_BAR,
 }
 
 /**
@@ -58,8 +54,6 @@ export function parseUiPrefs(value: string | null | undefined): UiPrefs {
   const record = parsed as Record<string, unknown>
   return {
     terminalFontSize: coerceFontSize(record.terminalFontSize),
-    showDebugBar:
-      typeof record.showDebugBar === 'boolean' ? record.showDebugBar : DEFAULT_SHOW_DEBUG_BAR,
   }
 }
 
@@ -83,7 +77,6 @@ export function storeUiPrefs(storage: PreferenceStorage | null | undefined, pref
   if (!storage) return
   const payload: UiPrefs = {
     terminalFontSize: clampFontSize(prefs.terminalFontSize),
-    showDebugBar: prefs.showDebugBar,
   }
   try {
     storage.setItem(UI_PREFS_STORAGE_KEY, JSON.stringify(payload))

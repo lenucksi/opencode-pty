@@ -12,8 +12,15 @@ interface LicensesPayload {
   groups: {
     license: string
     count: number
-    packages: { name: string; version: string; license: string }[]
+    packages: {
+      name: string
+      version: string
+      license: string
+      copyright: string[]
+      copyrightSource: 'license-file' | 'author-field' | 'none'
+    }[]
   }[]
+  texts: { license: string; packageCount: number; text: string }[]
 }
 
 extendedTest.describe('documentation dialog', () => {
@@ -97,10 +104,36 @@ extendedTest.describe('documentation dialog', () => {
       if (!pkg) continue
       const details = panel.locator(`.docs-license-group[data-license="${pkg.license}"]`)
       if ((await details.getAttribute('open')) === null) {
-        await details.locator('summary').click()
+        // Scoped to the group's own summary: the licence bodies inside it are
+        // `<details>` too, so a bare `summary` matches a hundred elements.
+        await details.locator('.docs-license-summary').click()
       }
       // `exact` matters: `@types/react@…` also contains `react@…`.
-      await expect(details.getByText(`${pkg.name}@${pkg.version}`, { exact: true })).toBeVisible()
+      const row = details.locator('.docs-license-package', {
+        hasText: `${pkg.name}@${pkg.version}`,
+      })
+      await expect(row).toBeVisible()
+
+      // The copyright line is the part a licence obliges us to pass on, so it has to
+      // be what the package's own file says - read from the API, never typed here.
+      if (pkg.copyright.length > 0) {
+        await expect(row.locator('.docs-license-copyright')).toHaveText(pkg.copyright.join(' / '))
+      } else {
+        await expect(row.locator('.docs-license-copyright-missing')).toBeVisible()
+      }
+    }
+
+    // One body per distinct text, not per package: Apache-2.0 alone is 11 kB, and MIT
+    // arrives in dozens of wordings. The count comes from the API for the same reason
+    // the package names do.
+    const mit = payload.groups.find((group) => group.license === 'MIT')
+    expect(mit).toBeDefined()
+    if (mit) {
+      const bodies = payload.texts.filter((body) => body.license === 'MIT')
+      expect(bodies.length).toBeGreaterThan(0)
+      await expect(
+        panel.locator('.docs-license-group[data-license="MIT"] .docs-license-text')
+      ).toHaveCount(bodies.length)
     }
   })
 

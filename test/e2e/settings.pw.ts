@@ -33,9 +33,7 @@ async function reselectAfterReload(page: Page): Promise<void> {
   await page.waitForFunction(() => window.xtermTerminal !== undefined, { timeout: 10000 })
 }
 
-async function readStoredPrefs(
-  page: Page
-): Promise<{ terminalFontSize?: number; showDebugBar?: boolean }> {
+async function readStoredPrefs(page: Page): Promise<{ terminalFontSize?: number }> {
   return await page.evaluate((key) => {
     const raw = localStorage.getItem(key)
     return raw ? JSON.parse(raw) : {}
@@ -133,23 +131,22 @@ extendedTest.describe('settings modal', () => {
     }
   )
 
+  // The bar at the bottom used to be a debug strip behind a toggle. It is the status
+  // line now - which build is serving, which session is on screen - so it is always
+  // there, and the thing worth testing is that it survives a reload.
   extendedTest(
-    'toggles the debug bar and persists the preference across reload',
+    'keeps the status bar, and the build it names, across a reload',
     async ({ page, api }) => {
       await openSessionTerminal(page, api)
-      await expect(page.locator('[data-testid="debug-info"]')).toHaveCount(1)
 
-      await settingsButton(page).click()
-      await dialog(page).getByLabel('Show debug bar').uncheck()
-      await page.keyboard.press('Escape')
-
-      await expect(page.locator('[data-testid="debug-info"]')).toHaveCount(0)
-      expect((await readStoredPrefs(page)).showDebugBar).toBe(false)
+      const bar = page.locator('[data-testid="status-bar"]')
+      await expect(bar).toHaveCount(1)
+      await expect(page.locator('[data-testid="status-build"]')).not.toBeEmpty()
 
       await page.reload()
       await reselectAfterReload(page)
-      await expect(page.locator('.output-header')).toBeVisible()
-      await expect(page.locator('[data-testid="debug-info"]')).toHaveCount(0)
+      await expect(bar).toHaveCount(1)
+      await expect(page.locator('[data-testid="status-session"]')).not.toBeEmpty()
     }
   )
 
