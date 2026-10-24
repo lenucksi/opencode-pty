@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The mark is a prompt and a second cursor.** V1c of the eight drawn for the pick: a
+  chevron the agent works at, and a hollow cursor that is not the agent's - a second one,
+  waiting on the same line. Two tone values (the prompt at full strength, the second
+  cursor at `0.62`), and the favicon is the same geometry reduced to one tone and thicker
+  strokes rather than a second logo, because a dimmed shape at 16 px is a smudge. The
+  status line now renders it at 16 px instead of 14: at 14 every one of the eight
+  candidates lost either a detail or a contour. `docs/media/logo-variants.html` keeps all
+  eight with the reasoning, and V1a as the previous state.
 - **A brand, a status line, and the notice a licence asks for.**
   The sidebar header is the mark plus `agentterm` under `PTY sessions`, the same pair
   once more in a status line that is now always at the bottom - it used to be an

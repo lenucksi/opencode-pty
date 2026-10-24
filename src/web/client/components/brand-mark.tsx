@@ -1,29 +1,20 @@
 /**
- * The mark: one terminal, two readers.
+ * The mark: a prompt, and a second cursor.
  *
- * A PTY is a process that a model reads and types into while a human watches the
- * same screen. The drawing is that sentence: one frame (the session) holding two
- * cursors - a filled one and an outlined one - side by side on the same line. It is
- * deliberately two shapes and no text, so it survives 16 px in a favicon.
+ * A PTY is one process that an agent works in and a human watches - and can type
+ * into. The drawing is that sentence in two glyphs: the chevron is the shell prompt
+ * the agent is working at, the hollow block is a cursor that is not the agent's -
+ * a second one, waiting on the same line.
  *
- * `currentColor` throughout: the mark takes the colour of whatever it sits in, so
- * the same file works on the dark and the light theme without a variant.
+ * Two tone values: the prompt is the agent's and is drawn at full strength, the
+ * second cursor at `0.62` so it reads as present rather than speaking. The favicon
+ * (`public/favicon.svg`) is the same geometry in one tone and thicker strokes,
+ * because at 16 px a dimmed shape becomes a smudge - it is a reduction of this
+ * drawing, not a second logo.
  *
  * It is `aria-hidden`: the sidebar heading and the status line spell the name in
  * text right next to it, so a screen reader would otherwise say it twice.
  */
-
-/**
- * The two cursors, as data rather than as two nearly identical `<rect>` blocks.
- *
- * `strokeWidth: undefined` is the filled one - it needs no outline, and drawing one
- * would make it a pixel wider on every side than the outlined cursor beside it.
- */
-const CURSORS = [
-  { x: 8, filled: true, strokeWidth: undefined },
-  { x: 17.5, filled: false, strokeWidth: 2 },
-] as const
-
 export function BrandMark({ size = 20 }: { size?: number }) {
   return (
     <svg
@@ -45,20 +36,27 @@ export function BrandMark({ size = 20 }: { size?: number }) {
         stroke="currentColor"
         strokeWidth="2.5"
       />
-      {/* The one who types, and the one who watches: same line, same buffer. */}
-      {CURSORS.map((cursor) => (
-        <rect
-          key={cursor.x}
-          x={cursor.x}
-          y="12.5"
-          width="6.5"
-          height="9"
-          rx="1.5"
-          fill={cursor.filled ? 'currentColor' : 'none'}
-          stroke="currentColor"
-          strokeWidth={cursor.strokeWidth}
-        />
-      ))}
+      {/* The prompt the agent is working at. */}
+      <path
+        d="M8.5 12.4 14 16l-5.5 3.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* The other cursor: someone else can type here. */}
+      <rect
+        x="18.6"
+        y="11.9"
+        width="7"
+        height="9.2"
+        rx="1.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.3"
+        opacity="0.62"
+      />
     </svg>
   )
 }

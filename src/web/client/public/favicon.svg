@@ -1,13 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <title>agentterm</title>
-  <style>
-    .bg { fill: #0d1117; }
-    .frame { fill: none; stroke: #58a6ff; stroke-width: 2.5; }
-    .typed { fill: #58a6ff; }
-    .watch { fill: none; stroke: #58a6ff; stroke-width: 2; }
-  </style>
-  <rect class="bg" width="32" height="32" rx="7" />
-  <rect class="frame" x="4.5" y="8" width="23" height="16" rx="3" />
-  <rect class="typed" x="9" y="13" width="5.5" height="7.5" rx="1.5" />
-  <rect class="watch" x="17.5" y="13" width="5.5" height="7.5" rx="1.5" />
+  <!-- The same drawing as BrandMark, reduced for 16 px: one tone, a chevron of 3
+       instead of 2.6, and the second cursor at full strength - a dimmed shape is a
+       smudge at this size. -->
+  <rect width="32" height="32" rx="7" fill="#0d1117" />
+  <rect
+    x="4.5"
+    y="8"
+    width="23"
+    height="16"
+    rx="3"
+    fill="none"
+    stroke="#58a6ff"
+    stroke-width="2.8"
+  />
+  <path
+    d="M9.5 12.6 14.2 16 9.5 19.4"
+    fill="none"
+    stroke="#58a6ff"
+    stroke-width="3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <rect
+    x="18.6"
+    y="12.2"
+    width="6.6"
+    height="7.6"
+    rx="1.5"
+    fill="none"
+    stroke="#58a6ff"
+    stroke-width="2.6"
+  />
 </svg>
