@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it } from 'bun:test'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -79,7 +87,17 @@ describe('package pack integration', () => {
     expect(jsAsset).toBeDefined()
     const assetName = jsAsset?.replace('package/dist/web/assets/', '')
 
-    // 3) Install in temp workspace
+    // 3) Install in temp workspace.
+    //
+    // The workspace needs its own manifest first. `bun install <tarball>` in a directory
+    // without one walks UP the tree looking for a package root, and installs into the first
+    // it finds: with `TMPDIR` under `$HOME` - which it is on this machine, `~/.cache/tmp` -
+    // that was `~/package.json`, so the package landed in the developer's home and this
+    // assertion looked for it in an empty temp dir. A manifest makes the workspace a root.
+    writeFileSync(
+      join(tempDir, 'package.json'),
+      JSON.stringify({ name: 'pack-integration-probe', version: '0.0.0', private: true }, null, 2)
+    )
     const install = await run(['bun', 'install', tgzPath], { cwd: tempDir })
     expect(install.code).toBe(0)
 

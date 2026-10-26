@@ -110,7 +110,7 @@
     "build:licenses": "bun scripts/licenses.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.2",
+    "@biomejs/biome": "2.6.3",
     "@opencode/theme": "2.1.4",
     "@opentui/core": "0.6.8",
     "@opentui/solid": "0.6.8",

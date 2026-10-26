@@ -9,15 +9,7 @@
  * spawn that waits for an answer instead of guessing.
  */
 
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 /** Signal 0: permission check plus liveness, without disturbing the process. */
@@ -146,18 +138,47 @@ export function daemonMissing(socketPath: string, logPath: string): string {
 }
 
 /**
+ * How long to wait between checks while a daemon is starting.
+ *
+ * The daemon binds in tens of milliseconds - measured: 37 ms from `spawn` to a socket that
+ * answers, cold, on this machine. A fixed quarter-second step therefore spends several times
+ * longer asleep than the thing it is waiting for, and that sleep sits on the boot path of
+ * every plugin instance: a cold `opencode` start paid ~250 ms per client for a daemon that
+ * was ready in 40. The schedule starts tight and falls back to the old 250 ms, so a start
+ * that really is stuck costs no more than it did.
+ */
+const SOCKET_POLL_MS = [10, 20, 40, 80, 160, 250] as const
+
+/** The delay before attempt `attempt`, once the tight early steps are used up. */
+export function socketPollDelay(attempt: number): number {
+  return SOCKET_POLL_MS[Math.min(attempt, SOCKET_POLL_MS.length - 1)] ?? 250
+}
+
+/**
+ * Wait until the daemon behind `socketPath` answers, or the budget runs out.
+ *
+ * The answer is the proof, not the file: a socket file without a daemon behind it is
+ * exactly what a start that lost a race - or a daemon that was killed - leaves behind, and
+ * connecting to it is the failure this wait exists to avoid. Checking before sleeping is
+ * the other half of the same point: a socket that is already there costs nothing.
+ */
+async function waitForAnswer(socketPath: string, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  for (let attempt = 0; ; attempt += 1) {
+    if (await socketAnswers(socketPath)) return true
+    if (Date.now() >= deadline) return false
+    await new Promise((resolve) => setTimeout(resolve, socketPollDelay(attempt)))
+  }
+}
+
+/**
  * Wait for a daemon to answer on the socket.
  *
- * Used when another client is starting one: the wait is the cooperation, and the
- * answer at the end is the proof - a socket file without a daemon behind it is
- * what a failed start leaves behind.
+ * Used when another client is starting one: the wait is the cooperation, and the answer at
+ * the end is the proof.
  */
-export async function waitForSocket(socketPath: string, steps: number): Promise<void> {
-  for (let i = 0; i < steps; i++) {
-    await new Promise((r) => setTimeout(r, 250))
-    if (existsSync(socketPath)) break
-  }
-  if (await socketAnswers(socketPath)) return
+export async function waitForSocket(socketPath: string, timeoutMs: number): Promise<void> {
+  if (await waitForAnswer(socketPath, timeoutMs)) return
   throw new Error(daemonMissing(socketPath, daemonLogPath()))
 }
 
@@ -175,7 +196,7 @@ export async function startDaemon(options: {
   readonly socketPath: string
   readonly stateDir: string
   readonly lockPath: string
-  readonly steps: number
+  readonly timeoutMs: number
 }): Promise<void> {
   // The lock lives beside the socket, and the lock cannot be taken in a directory
   // that does not exist yet. On a machine where the daemon has never run, that
@@ -185,7 +206,7 @@ export async function startDaemon(options: {
   if (!acquireStartLock(options.lockPath)) {
     // Another client is starting one. Waiting for its socket is the whole
     // cooperation: a second daemon would only fight the first for the path.
-    await waitForSocket(options.socketPath, options.steps)
+    await waitForSocket(options.socketPath, options.timeoutMs)
     return
   }
   try {
@@ -199,7 +220,7 @@ async function spawnDaemon(options: {
   readonly daemonBin: string
   readonly socketPath: string
   readonly stateDir: string
-  readonly steps: number
+  readonly timeoutMs: number
 }): Promise<void> {
   const { daemonBin, socketPath, stateDir } = options
   const logPath = daemonLogPath()
@@ -226,14 +247,9 @@ async function spawnDaemon(options: {
   } finally {
     closeSync(logFd)
   }
-  // Wait for socket to appear
-  for (let i = 0; i < options.steps; i++) {
-    await new Promise((r) => setTimeout(r, 250))
-    if (existsSync(socketPath)) return
-  }
   // The file can be there without a daemon behind it: one that lost the race
   // exits, and one that was killed leaves the file. Only an answer proves a
   // daemon - and the answer may come from the daemon that won the race.
-  if (await socketAnswers(socketPath)) return
+  if (await waitForAnswer(socketPath, options.timeoutMs)) return
   throw new Error(daemonMissing(socketPath, logPath))
 }

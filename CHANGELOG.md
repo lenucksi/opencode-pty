@@ -34,6 +34,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dist/THIRD-PARTY-NOTICES.md`, so the notice travels in the tarball as a flat file
   too, and `docs/credits.md` names the four projects this stands on.
 
+### Fixed
+
+- **A cold `opencode` start no longer waits a quarter second for a daemon that is already
+  up.** The client polled for the daemon's socket in fixed 250 ms steps, and it slept before
+  it looked - so every plugin setup paid 250 ms for a daemon that binds in about 37. Measured
+  on this machine, cold, three runs each: **252 / 251 / 252 ms before, 32 / 31 / 31 ms
+  after**. The schedule now starts at 10 ms and falls back to 250, and it checks before it
+  sleeps. `startDaemon` and the lock-loser path share one wait, and it waits for an _answer_
+  rather than for the socket file: a file without a daemon behind it is what a lost race
+  leaves behind, and connecting to it is the failure the wait exists to avoid.
+- **The sidebar's first look is retried instead of waiting 2.5 s.** The panel refreshes once
+  at setup - while the server half is still starting, so it finds neither an RPC answer nor
+  an origin record - and a refresh that finds nothing returns at once. The next chance was a
+  full poll interval away, which is why a boot that was 300 ms slower than the panel showed
+  an empty sidebar for seconds and read as "waiting for the PTY daemon". A bounded burst now
+  asks every 250 ms (12 tries) and stops at the first list. It never starts a server: that
+  path creates and deletes a session and belongs to the user, not to a load path.
+
 ### Changed
 
 - **`patches/` is no longer in the published tarball.** npm strips patch files that

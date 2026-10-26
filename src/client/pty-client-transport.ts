@@ -197,18 +197,13 @@ export class PtyClientTransport {
       socketPath: this.socketPath,
       stateDir: this.stateDir,
       lockPath: this.lockFile,
-      steps: this.startSteps(),
+      timeoutMs: this.startTimeoutMs,
     })
     try {
       await this.starting
     } finally {
       this.starting = null
     }
-  }
-
-  /** How many quarter-second steps the start window is worth. */
-  private startSteps(): number {
-    return Math.max(1, Math.ceil(this.startTimeoutMs / 250))
   }
 
   private processBuffer() {

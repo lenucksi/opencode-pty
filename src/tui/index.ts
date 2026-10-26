@@ -9,6 +9,7 @@ import { noteDaemonPid } from './daemon-state.ts'
 import { listWithDaemonPid } from './daemon-status.ts'
 import { subscribeNotices } from './notices.ts'
 import { registerFilterCommand } from './filter-command.ts'
+import { firstLookBurst } from './first-look.ts'
 import { type PanelSession, resolveParentTitles } from './lib.ts'
 import {
   groupsForDisplay,
@@ -425,6 +426,15 @@ export default Plugin.define({
     // setup must not wait on a refresh that can take seconds. The panel renders its
     // starting status and fills in when the answer arrives.
     void refresh()
+    // The one above usually loses its race: it runs while the server half is still
+    // starting, so it finds neither an RPC answer nor a record - and the next chance
+    // would be a full poll away. This closes that window; it stops at the first list
+    // and never starts a server (see `first-look.ts`).
+    void firstLookBurst({
+      refresh: () => refresh(),
+      found: () => panel.origin !== null,
+      disposed: () => disposed,
+    }).then(() => debug('first-look.done', { found: panel.origin !== null }))
     const poll = setInterval(() => void refresh(), POLL_MS)
 
     return (): void => {
