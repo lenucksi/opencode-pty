@@ -1,6 +1,6 @@
 import type { Plugin } from '@opencode/plugin'
 import type { SessionNoticeTarget, SessionNotifier } from '../adapters/types.ts'
-import { buildExitNotification } from '../plugin/pty/notification-manager.ts'
+import { buildExitNotice, exitNoticeData, type ExitNoticeData } from '../plugin/pty/exit-notice.ts'
 import { logPtyEvent, type PtyLogger } from '../plugin/pty/plugin-log.ts'
 import type { PTYSession } from '../plugin/pty/types.ts'
 
@@ -47,18 +47,23 @@ export class V2SessionNotifier implements SessionNotifier {
     private readonly log: PtyLogger = logPtyEvent
   ) {}
 
+  /** Compatibility for an in-process caller that still holds a live session. */
   async sendExitNotification(session: PTYSession, exitCode: number): Promise<void> {
-    if (!session.parentSessionId) {
-      this.log('warn', `no parent session to notify for ${session.id}`)
+    await this.sendExitNotice(exitNoticeData(session, exitCode))
+  }
+
+  async sendExitNotice(data: ExitNoticeData): Promise<void> {
+    if (!data.parentSessionId) {
+      this.log('warn', `no parent session to notify for ${data.id}`)
       return
     }
     await this.sendNotice(
       {
-        id: session.id,
-        parentSessionId: session.parentSessionId,
-        ...(session.parentAgent ? { parentAgent: session.parentAgent } : {}),
+        id: data.id,
+        parentSessionId: data.parentSessionId,
+        ...(data.parentAgent ? { parentAgent: data.parentAgent } : {}),
       },
-      buildExitNotification(session, exitCode),
+      buildExitNotice(data),
       'exited'
     )
   }

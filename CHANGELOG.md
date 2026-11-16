@@ -36,6 +36,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`<pty_exited>` again reports the output it actually has.** In daemon mode the daemon
+  serialised the whole live `PTYSession` for the exit push. A `RingBuffer` keeps its state
+  in private fields but `length` and `read()` live on its prototype, so JSON carried the
+  bytes and dropped the behaviour: the tag said `Output Lines: undefined` and `Last Line:`
+  was empty - exactly when a failing command's tail was the only evidence the model got.
+  The daemon now computes a plain `ExitNoticeData` (id, routing fields, line count and an
+  ANSI-free tail) while the real buffer is still there and pushes that; the client renders
+  plain data. The full buffer was never affected: `pty_read`, `pty_screen`, downloads and
+  the archive still ask the daemon, which answers from the buffer it owns. An old wire
+  shape is still accepted, so a new plugin meeting an old daemon degrades to a working
+  notice instead of a broken one. The regression test goes through `encodeMessage()` and
+  failed with the verbatim `Output Lines: undefined` before the fix.
 - **A cold `opencode` start no longer waits a quarter second for a daemon that is already
   up.** The client polled for the daemon's socket in fixed 250 ms steps, and it slept before
   it looked - so every plugin setup paid 250 ms for a daemon that binds in about 37. Measured
@@ -54,6 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Dependencies are current again.** `bun audit fix` repaired nine advisories inside the
+  declared ranges (including the Seroval override, now 1.6.11); `effect`, `glob` and
+  `minimatch` needed overrides past their carriers' ranges and carry expiry notes in
+  `tui-package.test.ts`. The direct dependencies moved to their targets as well — notably
+  `bun-pty` 0.6.1, `@opencode/plugin` 2.3.0 and the dev toolchain (Vite, Playwright, Biome).
+  The SDK's new peer floor also raised `@opentui/core` and `@opentui/solid` to 0.8.4 in both
+  devDependencies and peerDependencies. `bun audit` is clean.
 - **`patches/` is no longer in the published tarball.** npm strips patch files that
   belong to `patchedDependencies` anyway (`bearing: patch files in patchedDependencies
 must not be published`), so the 11 kB bought nothing except a warning on every

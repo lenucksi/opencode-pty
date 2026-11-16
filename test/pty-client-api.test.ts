@@ -150,8 +150,8 @@ describe('PtyClient API surface', () => {
     const stub = client({})
     const seen: string[] = []
     stub.setNotifier({
-      sendExitNotification: async (session) => {
-        seen.push(session.id)
+      sendExitNotice: async (data) => {
+        seen.push(data.id)
       },
     })
     stub.setNotificationManager(null)

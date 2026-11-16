@@ -15,6 +15,7 @@ import {
   OutputManager,
 } from './output-manager.ts'
 import { PROTOCOL_VERSION } from '../../daemon/protocol.ts'
+import { exitNoticeData } from './exit-notice.ts'
 import { logPtyEvent } from './plugin-log.ts'
 import { type BoundedRawResult, buildBoundedRaw } from './read-budget.ts'
 import { ARCHIVE_REPLAY_WINDOW, renderScreen, type ScreenSnapshot } from './screen.ts'
@@ -162,7 +163,7 @@ export class PTYManager {
             notifier: activeNotifier.constructor?.name ?? typeof activeNotifier,
             exitCode,
           })
-          await activeNotifier.sendExitNotification(session, exitCode || 0)
+          await activeNotifier.sendExitNotice(exitNoticeData(session, exitCode || 0))
         }
       }
     )

@@ -161,8 +161,8 @@ describe('the TUI dependencies', () => {
     // both, 0.5.14 shows the OLDEST lines and 0.6.6 the newest. The floor tracks the
     // devDependency, so the contract the typecheck proves is the one consumers get;
     // it is raised by the same commit that raises the pin, never ahead of it.
-    expect(manifest.peerDependencies['@opentui/solid']).toBe('>=0.6.8')
-    expect(manifest.peerDependencies['@opentui/core']).toBe('>=0.6.8')
+    expect(manifest.peerDependencies['@opentui/solid']).toBe('>=0.8.4')
+    expect(manifest.peerDependencies['@opentui/core']).toBe('>=0.8.4')
   })
 
   it('marks every one of them optional, so installing without a TUI still works', () => {
@@ -232,7 +232,25 @@ describe('the TUI dependencies', () => {
     // Expiry, like the override above: solid-js is at 1.9.15 with no release carrying a
     // patched seroval, and `~1.5.4` will not reach 1.6.x on its own. When solid-js moves to
     // a version that asks for a fixed seroval, this goes with it.
-    expect(manifest.overrides?.seroval).toBe('1.6.8')
+    expect(manifest.overrides?.seroval).toBe('1.6.11')
+  })
+
+  // New advisories from November 2026. `bun audit fix` could repair nine of the twelve
+  // findings within the declared ranges (@hono/node-server, hono and seroval); these three
+  // are the remainder, where every carrier pins a vulnerable major. `effect` also moved from
+  // 4.0.0-beta.83 to the stable 4.0.0 that the advisory names as fixed. Glob/minimatch arrive
+  // through the host SDK's tooling and a Babel plugin, neither of which the shipped plugin
+  // executes - but they are installed and audited, so an override is still better than
+  // narrowing the check.
+  //
+  // Unlike the two above these are PAST the carriers' ranges, not inside them: `bun audit
+  // fix` listed them as blocked. Remove each when its carrier publishes a version whose own
+  // manifest asks for a fixed dependency; until then a gate that ignores the advisories
+  // would only hide them.
+  it('overrides the November transitive advisories that have no in-range fix', () => {
+    expect(manifest.overrides?.effect).toBe('4.0.0')
+    expect(manifest.overrides?.glob).toBe('14.0.2')
+    expect(manifest.overrides?.minimatch).toBe('11.0.1')
   })
 
   // The same shape once more, and the one that arrived last: `ip-address@10.7.3` carries a

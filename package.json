@@ -110,27 +110,27 @@
     "build:licenses": "bun scripts/licenses.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.3",
-    "@opencode/theme": "2.1.4",
-    "@opentui/core": "0.6.8",
-    "@opentui/solid": "0.6.8",
-    "@playwright/test": "1.64.1",
+    "@biomejs/biome": "2.6.8",
+    "@opencode/theme": "2.3.0",
+    "@opentui/core": "0.8.4",
+    "@opentui/solid": "0.8.4",
+    "@playwright/test": "1.65.1",
     "@types/bun": "1.4.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.2",
+    "@vitejs/plugin-react": "^6.3.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "solid-js": "1.9.17",
+    "solid-js": "1.9.19",
     "typescript": "^7.0.2",
-    "vite": "8.3.5"
+    "vite": "8.3.8"
   },
   "peerDependencies": {
     "typescript": "^7.0.2",
-    "@opencode/theme": ">=2.1.4",
-    "@opentui/core": ">=0.6.8",
-    "@opentui/solid": ">=0.6.8",
-    "solid-js": ">=1.9.0"
+    "@opencode/theme": ">=2.3.0",
+    "@opentui/core": ">=0.8.4",
+    "@opentui/solid": ">=0.8.4",
+    "solid-js": ">=1.9.19"
   },
   "engines": {
     "bun": ">=1.4.4",
@@ -138,10 +138,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "@opencode-ai/plugin": "1.19.4",
-    "@opencode-ai/sdk": "1.19.4",
-    "@opencode/plugin": "2.1.4",
-    "bun-pty": "^0.5.1",
+    "@opencode-ai/plugin": "1.19.5",
+    "@opencode-ai/sdk": "1.19.5",
+    "@opencode/plugin": "2.3.0",
+    "bun-pty": "^0.6.1",
     "ghostty-web": "github:anomalyco/ghostty-web#6e24d040458ddd7aae81572fe2901deec32f9fe7",
     "open": "^11.0.4"
   },
@@ -167,13 +167,16 @@
   },
   "overrides": {
     "@babel/core": "7.29.7",
-    "seroval": "1.6.8",
+    "seroval": "1.6.11",
     "ip-address": "10.7.4",
     "body-parser": "2.4.0",
     "undici@^8.0.0": "8.12.3",
     "undici@^6.0.0": "6.29.1",
     "zod": "4.6.7",
-    "toml": "5.0.1"
+    "toml": "5.0.1",
+    "effect": "4.0.0",
+    "glob": "14.0.2",
+    "minimatch": "11.0.1"
   },
   "publishConfig": {
     "access": "public"

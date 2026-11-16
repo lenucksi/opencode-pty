@@ -25,8 +25,9 @@ import {
   notifySessionRemoved,
   notifySessionUpdate,
 } from '../plugin/pty/manager-notifications.ts'
+import { exitNoticeFromWire } from '../plugin/pty/exit-notice.ts'
 import { sessionsRoot } from '../plugin/pty/state-paths.ts'
-import type { PTYSession, PTYSessionInfo } from '../plugin/pty/types.ts'
+import type { PTYSessionInfo } from '../plugin/pty/types.ts'
 
 export interface PtyClientOptions {
   socketPath?: string
@@ -265,11 +266,13 @@ export class PtyClientTransport {
       notifySessionRemoved(params.sessionId as string)
     })
     this.onPush('exit_notification', async (params) => {
-      if (this.notifier?.sendExitNotification) {
-        await this.notifier.sendExitNotification(
-          params.session as PTYSession,
-          params.exitCode as number
-        )
+      const data = exitNoticeFromWire(params)
+      if (data === null) {
+        console.warn('[PtyClient] an exit notification had no usable data')
+        return
+      }
+      if (this.notifier?.sendExitNotice) {
+        await this.notifier.sendExitNotice(data)
       }
     })
   }

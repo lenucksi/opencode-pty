@@ -1,4 +1,4 @@
-import type { PTYSession } from '../plugin/pty/types.ts'
+import type { ExitNoticeData } from '../plugin/pty/exit-notice.ts'
 
 /** Anything that needs to wake a session with text (exit, restart, ...). */
 export interface SessionNoticeTarget {
@@ -13,7 +13,12 @@ export interface SessionNoticeTarget {
  * Allows decoupling PTY lifecycle from any specific OpenCode client SDK.
  */
 export interface SessionNotifier {
-  sendExitNotification(session: PTYSession, exitCode: number): Promise<void> | void
+  /**
+   * Plain data, not a live session: the daemon has no RingBuffer on this side of the
+   * socket, and a JSON-serialised one has lost its methods. The sender computes the
+   * fields while the buffer is still real.
+   */
+  sendExitNotice(data: ExitNoticeData): Promise<void> | void
   /**
    * Wake a session with arbitrary text. Optional: a host that can only report
    * exits keeps working, and callers log when it is unavailable.
