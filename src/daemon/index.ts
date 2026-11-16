@@ -20,6 +20,7 @@ import {
   sessionRemovedCallbacks,
   sessionUpdateCallbacks,
 } from '../plugin/pty/manager-notifications.ts'
+import { encodeExitNotice } from '../plugin/pty/exit-notice.ts'
 import { logPtyEvent } from '../plugin/pty/plugin-log.ts'
 import { SessionStore } from '../plugin/pty/session-store.ts'
 import { sessionsRoot } from '../plugin/pty/state-paths.ts'
@@ -165,9 +166,10 @@ const handleRequest = createRequestHandler(store, clients)
 
 // Daemon notifier: pushes exit notifications to connected clients
 manager.setNotifier({
-  sendExitNotification: async (session, exitCode) => {
-    const payload =
-      JSON.stringify({ method: 'exit_notification', params: { session, exitCode } }) + '\n'
+  sendExitNotice: async (data) => {
+    // The buffer's `length` and `read()` live on its prototype, which JSON drops.
+    // The data was computed in the manager while the real RingBuffer was there.
+    const payload = encodeExitNotice(data)
     for (const client of clients.values()) client.writer.enqueue(payload)
   },
   sendNotice: async () => {},

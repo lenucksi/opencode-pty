@@ -15,7 +15,6 @@ import {
   getPermissionAuthorizer,
   setPermissionAuthorizer,
 } from '../src/plugin/pty/permissions.ts'
-import type { PTYSession } from '../src/plugin/pty/types.ts'
 
 /**
  * A host that evaluates its own rules.
@@ -154,13 +153,13 @@ describe('Adapter Layer', () => {
 
   describe('SessionNotifier decoupling', () => {
     it('dispatches exit notifications to custom SessionNotifier without OpencodeClient', async () => {
-      let notifiedSession: PTYSession | null = null
+      let notifiedSession: string | undefined
       let notifiedExitCode: number | null = null
 
       const customNotifier: SessionNotifier = {
-        sendExitNotification: (session, exitCode) => {
-          notifiedSession = session
-          notifiedExitCode = exitCode
+        sendExitNotice: (data) => {
+          notifiedSession = data.id
+          notifiedExitCode = data.exitCode
         },
       }
 
@@ -177,8 +176,7 @@ describe('Adapter Layer', () => {
       // Wait briefly for process to exit and notify
       await new Promise((resolve) => setTimeout(resolve, 150))
 
-      expect(notifiedSession).not.toBeNull()
-      expect((notifiedSession as PTYSession | null)?.id).toBe(info.id)
+      expect(notifiedSession).toBe(info.id)
       expect(notifiedExitCode as number | null).toBe(0)
     })
   })
@@ -186,7 +184,7 @@ describe('Adapter Layer', () => {
   describe('HostAdapter integration', () => {
     it('installHostAdapter wires both notifier and permissions', () => {
       const customNotifier: SessionNotifier = {
-        sendExitNotification: () => {},
+        sendExitNotice: () => {},
       }
       const customPermissions: PermissionAuthorizer = {
         checkCommand: async () => {},
@@ -206,7 +204,7 @@ describe('Adapter Layer', () => {
     })
 
     it('createV2Adapter forwards session deletion and options', () => {
-      const notifier = { sendExitNotification: () => {} }
+      const notifier = { sendExitNotice: () => {} }
       const permissions = {
         checkCommand: async () => {},
         checkWorkdir: async () => {},

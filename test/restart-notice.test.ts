@@ -112,7 +112,7 @@ describe('announceRestart', () => {
   it('wakes the parent once, with the tail and the UI address', async () => {
     const { store, root } = lostStore()
     const sendNotice = mock(async (_target: unknown, _text: string, _kind: string) => {})
-    const notifier = { sendExitNotification: () => {}, sendNotice } as unknown as SessionNotifier
+    const notifier = { sendExitNotice: () => {}, sendNotice } as unknown as SessionNotifier
 
     try {
       await announceRestart({
@@ -147,7 +147,7 @@ describe('announceRestart', () => {
       // A notifier without `sendNotice` must not retry forever.
       await announceRestart({
         store,
-        notifier: { sendExitNotification: () => {} } as unknown as SessionNotifier,
+        notifier: { sendExitNotice: () => {} } as unknown as SessionNotifier,
         restored: store.list(),
       })
 
@@ -166,7 +166,7 @@ describe('announceRestart', () => {
     try {
       await announceRestart({
         store,
-        notifier: { sendExitNotification: () => {}, sendNotice } as unknown as SessionNotifier,
+        notifier: { sendExitNotice: () => {}, sendNotice } as unknown as SessionNotifier,
         restored: [],
       })
 

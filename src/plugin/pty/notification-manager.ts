@@ -1,12 +1,12 @@
 import type { OpencodeClient } from '@opencode-ai/sdk'
 import type { SessionNoticeTarget, SessionNotifier } from '../../adapters/types.ts'
-import {
-  NOTIFICATION_LINE_TRUNCATE,
-  NOTIFICATION_TAIL_LINES,
-  NOTIFICATION_TITLE_TRUNCATE,
-} from '../constants.ts'
+import { buildExitNotice, exitNoticeData, type ExitNoticeData } from './exit-notice.ts'
 import { logPtyEvent } from './plugin-log.ts'
 import type { PTYSession } from './types.ts'
+
+/** Kept for the in-process callers and tests that still hold a live session. */
+export { buildExitNotification } from './exit-notice.ts'
+export type { ExitNoticeData } from './exit-notice.ts'
 
 export class NotificationManager implements SessionNotifier {
   private client: OpencodeClient | null = null
@@ -15,19 +15,27 @@ export class NotificationManager implements SessionNotifier {
     this.client = client
   }
 
+  /**
+   * Compatibility for an in-process caller: derive the plain data while the session is
+   * still live, then take the same path the daemon push takes.
+   */
   async sendExitNotification(session: PTYSession, exitCode: number): Promise<void> {
-    if (!session.parentSessionId) {
+    await this.sendExitNotice(exitNoticeData(session, exitCode))
+  }
+
+  async sendExitNotice(data: ExitNoticeData): Promise<void> {
+    if (!data.parentSessionId) {
       // Nobody to wake: a session created without a conversation has no target.
-      logPtyEvent('warn', `no parent session to notify for ${session.id}`)
+      logPtyEvent('warn', `no parent session to notify for ${data.id}`)
       return
     }
     await this.sendNotice(
       {
-        id: session.id,
-        parentSessionId: session.parentSessionId,
-        ...(session.parentAgent ? { parentAgent: session.parentAgent } : {}),
+        id: data.id,
+        parentSessionId: data.parentSessionId,
+        ...(data.parentAgent ? { parentAgent: data.parentAgent } : {}),
       },
-      buildExitNotification(session, exitCode),
+      buildExitNotice(data),
       'exited'
     )
   }
@@ -93,94 +101,4 @@ export class NotificationManager implements SessionNotifier {
       logPtyEvent('error', `failed to send ${kind} notification for ${target.id}`, error)
     }
   }
-}
-
-/**
- * Builds the `<pty_exited>` notification text for a finished PTY session.
- *
- * Shared between the V1 notifier (`NotificationManager`, delivered via the
- * SDK client's `promptAsync`) and the V2 notifier (delivered via the plugin
- * context's `ctx.session.prompt`).
- */
-export function buildExitNotification(session: PTYSession, exitCode: number): string {
-  const lineCount = session.buffer.length
-  const tail = collectTailLines(session, NOTIFICATION_TAIL_LINES)
-  const lastLine = tail.at(-1) ?? ''
-
-  const displayTitle = session.description ?? session.title
-  const truncatedTitle =
-    displayTitle.length > NOTIFICATION_TITLE_TRUNCATE
-      ? `${displayTitle.slice(0, NOTIFICATION_TITLE_TRUNCATE)}...`
-      : displayTitle
-
-  const lines = [
-    // The id is an attribute, not only a prose line, and this is the tag where it
-    // matters most. The notification arrives on its own: the model is not in the
-    // middle of a call and may have several sessions running, so "which one just
-    // finished" is answerable only from this tag. With the id buried in prose the
-    // model has to parse it, and a parse error means it reads the wrong session's
-    // output - or concludes the tag carried no id and gives up on the tail below,
-    // which is the part worth having.
-    `<pty_exited id="${session.id}">`,
-    `ID: ${session.id}`,
-    `Description: ${truncatedTitle}`,
-    `Exit Code: ${exitCode}`,
-    `TimeoutSeconds: ${session.timeoutSeconds ?? 'none'}`,
-    `Timed Out: ${session.timedOut ? 'yes' : 'no'}`,
-    `Output Lines: ${lineCount}`,
-    `Last Line: ${lastLine}`,
-  ]
-
-  if (tail.length > 1) {
-    // The tail is what the model actually needs (ansible's `PLAY RECAP`, the
-    // failing task, ...) and it arrives ANSI-free; previously only the last
-    // line was sent, colour codes and all.
-    lines.push('', `Tail (last ${tail.length} non-empty lines):`)
-    for (const line of tail) {
-      lines.push(`  ${line}`)
-    }
-  }
-
-  lines.push('</pty_exited>', '')
-
-  if (session.timedOut) {
-    lines.push(
-      'Process reached its PTY timeout and was stopped automatically. Use pty_read to inspect the final output.'
-    )
-  } else if (exitCode === 0) {
-    lines.push('Use pty_read to check the full output.')
-  } else {
-    lines.push(
-      'Process failed. Use pty_read with the pattern parameter to search for errors in the output.'
-    )
-  }
-
-  return lines.join('\n')
-}
-
-/** `Bun.stripANSI` when available; raw text otherwise (never throw). */
-function stripAnsi(text: string): string {
-  return typeof Bun !== 'undefined' && typeof Bun.stripANSI === 'function'
-    ? Bun.stripANSI(text)
-    : text
-}
-
-/** One notification line: ANSI-free, right-trimmed and length-capped. */
-function truncateLine(line: string): string {
-  const clean = stripAnsi(line).replace(/\s+$/, '')
-  return clean.length > NOTIFICATION_LINE_TRUNCATE
-    ? `${clean.slice(0, NOTIFICATION_LINE_TRUNCATE)}...`
-    : clean
-}
-
-/** The last `count` non-empty output lines, oldest first. */
-function collectTailLines(session: PTYSession, count: number): string[] {
-  const lines: string[] = []
-  for (let i = session.buffer.length - 1; i >= 0 && lines.length < count; i--) {
-    const line = session.buffer.read(i, 1)[0]
-    if (line !== undefined && line.trim() !== '') {
-      lines.unshift(truncateLine(line))
-    }
-  }
-  return lines
 }
