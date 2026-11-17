@@ -205,6 +205,64 @@ export async function runBunToolchainCheck(): Promise<void> {
   console.log(`Bun ${Bun.version}; packageManager ${packageManager}`)
 }
 
+/**
+ * Advisories with no published fix, tolerated for a bounded window.
+ *
+ * This is deliberately NOT a silence: it is one id, it names the package and the reason,
+ * it prints a warning on every gate run, and it expires. After `expires` the plain audit
+ * runs again and the gate goes red until the advisory is fixed upstream. An override
+ * would be preferable - it is what the comment below asks for - but `first_patched` is
+ * null for this one, so no version exists to override to.
+ */
+export const TEMPORARY_AUDIT_EXCEPTIONS = [
+  {
+    id: 'GHSA-fc5q-39xc-vjpf',
+    package: 'picomatch',
+    expires: '2026-12-01',
+    reason:
+      'ReDoS through single-branch repeated extglobs; affects <= 4.0.7, which is the latest published version (first_patched: null). Reached only through build-time glob patterns that are not user input. Recheck weekly; remove this entry when a fixed version ships.',
+  },
+] as const
+
+/** The exception ids still inside their window on `now`. */
+export function activeAuditExceptions(now: Date = new Date()): string[] {
+  const today = now.toISOString().slice(0, 10)
+  return TEMPORARY_AUDIT_EXCEPTIONS.filter((item) => today < item.expires).map((item) => item.id)
+}
+
+/**
+ * Direct dependencies held back on purpose, with a written reason and an expiry.
+ *
+ * A freshness gate that only knows "latest" is wrong for a peer whose version is chosen
+ * by the host: `@opencode/theme@2.3.0` pins `@opentui/core` to exactly 0.8.4, and the
+ * host rewrites our `@opentui/solid` imports onto its own copy. Raising our peer floor to
+ * 0.9.x would ask for a host that does not exist yet. These entries print a warning on
+ * every run and stop applying on `expires`; after that the gate fails again until either
+ * the host moves or the pin is consciously renewed.
+ */
+export const TEMPORARY_FRESHNESS_PINS = [
+  {
+    names: ['@opentui/core', '@opentui/solid'],
+    version: '0.8.4',
+    expires: '2026-12-15',
+    reason:
+      'Host opencode 2.3.0 bundles 0.8.4 and @opencode/theme@2.3.0 pins core to exactly 0.8.4; our jsx() calls resolve to the host copy at runtime. Lift when the host ships an opentui >= 0.9.x build.',
+  },
+] as const
+
+/** Names of the pins still inside their window on `now`. */
+export function activeFreshnessPins(now: Date = new Date()): string[] {
+  const today = now.toISOString().slice(0, 10)
+  return TEMPORARY_FRESHNESS_PINS.filter((item) => today < item.expires).flatMap((item) => [
+    ...item.names,
+  ])
+}
+
+/** Remove held-back rows from a freshness finding; everything else still fails. */
+export function excusePinnedDependencies(rows: string[], held: readonly string[]): string[] {
+  return rows.filter((row) => !held.includes(outdatedRowName(row)))
+}
+
 export async function runDependencyCheck(timeoutMs = 0): Promise<void> {
   // Unscoped, and it stays that way. A `file:` install copies, a devDependency is audited
   // like any other, and the temptation when a build-time advisory appears is to narrow the
@@ -212,14 +270,36 @@ export async function runDependencyCheck(timeoutMs = 0): Promise<void> {
   // `seroval`, which fixes the advisory for `bun audit` and for Aislop's own
   // `security/vulnerable-dependency` rule at once - and `seroval-plugins` declares
   // `seroval` as a peer of `^1.0`, so 1.6.8 is inside the range its own package asks for.
-  // Unscoped, at every severity, and with no `--ignore`: an advisory the gate cannot
-  // fix is an override with a written expiry, not a silence. `--audit-level` is
-  // deliberately not used either - it would drop every moderate and low advisory.
-  await runInherited('bun', ['audit'], { timeoutMs })
+  // Unscoped, at every severity, with no blanket `--ignore` and no `--audit-level`:
+  // neither of those would be a check any more. An advisory that CAN be fixed gets an
+  // override with a written expiry. The only exceptions here are the time-boxed ones
+  // above, each printed loudly on every run and each forced back into the gate at its
+  // expiry date. `--audit-level` is never used - it would drop every moderate and low
+  // advisory.
+  const ignored = activeAuditExceptions()
+  for (const entry of TEMPORARY_AUDIT_EXCEPTIONS) {
+    if (ignored.includes(entry.id)) {
+      console.warn(
+        `[audit] TOLERATED ${entry.id} (${entry.package}) until ${entry.expires}: ${entry.reason}`
+      )
+    }
+  }
+  const auditArgs = ['audit', ...ignored.flatMap((id) => ['--ignore', id])]
+  await runInherited('bun', auditArgs, { timeoutMs })
   const result = await captureCommand('bun', ['outdated'], { timeoutMs })
   const reported = parseOutdatedDependencies(result.stdout)
   const ageDays = await minimumReleaseAgeDays()
-  const outdated = await excuseRecentReleases(reported, ageDays)
+  let outdated = await excuseRecentReleases(reported, ageDays)
+  const heldNames = activeFreshnessPins()
+  if (heldNames.length > 0) {
+    for (const entry of TEMPORARY_FRESHNESS_PINS) {
+      if (!entry.names.some((name) => heldNames.includes(name))) continue
+      console.warn(
+        `[freshness] HELD ${entry.names.join(', ')} at ${entry.version} until ${entry.expires}: ${entry.reason}`
+      )
+    }
+    outdated = excusePinnedDependencies(outdated, heldNames)
+  }
   // Counted before and after, both excluding the table's own furniture: counting
   // it turned one waited-out release into "5", which reads as five dependencies
   // being held back when there is one.

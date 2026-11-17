@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-11-17
+
 ### Added
 
 - **The mark is a prompt and a second cursor.** V1c of the eight drawn for the pick: a
@@ -66,6 +68,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The freshness gate holds `@opentui/core` and `@opentui/solid` at 0.8.4 until
+  2026-12-15.** 0.9.2 is out and the gate asks for it, but host opencode 2.3.0 bundles
+  0.8.4 and `@opencode/theme@2.3.0` pins core to exactly that version; our `jsx()` calls
+  resolve to the host copy at runtime. A peer floor of `>=0.9.2` would ask for a host that
+  does not exist. The hold prints a warning on every gate run and expires, so a host
+  upgrade cannot be forgotten. `test/dependency-pins.test.ts` pins the expiry.
+- **The dependency gate tolerates one advisory with an expiry.** `picomatch <= 4.0.7`
+  has a high ReDoS advisory with **no published fix** (`first_patched: null`, advisory
+  updated 2026-11-17). An override is impossible, so the gate ignores exactly that GHSA
+  until **2026-12-01**, prints a loud warning on every run, and fails again on expiry.
+  Aislop's own dependency rule gets the same dated, scoped exception, because JSON cannot
+  carry an inline suppression comment; its report is still printed in full. No blanket
+  `--ignore`, no severity filter.
 - **Dependencies are current again.** `bun audit fix` repaired nine advisories inside the
   declared ranges (including the Seroval override, now 1.6.11); `effect`, `glob` and
   `minimatch` needed overrides past their carriers' ranges and carry expiry notes in

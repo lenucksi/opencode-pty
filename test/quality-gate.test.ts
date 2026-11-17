@@ -268,6 +268,30 @@ describe('local quality gate helpers', () => {
     ])
   })
 
+  test('tolerates the one dependency exception only while it is open', () => {
+    const report = aislopReport({
+      summary: { ...aislopReport().summary, errors: 1 },
+      diagnostics: [
+        {
+          filePath: 'package.json',
+          rule: 'security/vulnerable-dependency',
+          severity: 'error',
+          message: 'picomatch (high) — ReDoS',
+          line: 0,
+          column: 0,
+          fixable: false,
+        },
+      ],
+    })
+    expect(evaluateAislopReport(report, new Date('2026-11-17T12:00:00Z'))).toEqual({
+      passed: true,
+      reasons: [],
+    })
+    expect(evaluateAislopReport(report, new Date('2026-12-01T00:00:00Z')).reasons).toEqual([
+      '1 error(s)',
+    ])
+  })
+
   test('rejects malformed Aislop JSON', () => {
     expect(() => parseAislopReport('not json')).toThrow()
     expect(() => parseAislopReport('{"score":96,"diagnostics":[]}')).toThrow(
