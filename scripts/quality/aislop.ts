@@ -1,3 +1,4 @@
+import { activeAuditExceptions, TEMPORARY_AUDIT_EXCEPTIONS } from './dependencies.ts'
 import { captureCommand } from './process.ts'
 
 export const AISLOP_MINIMUM_SCORE = 90
@@ -93,10 +94,39 @@ export function parseAislopReport(output: string): AislopReport {
   }
 }
 
-export function evaluateAislopReport(report: AislopReport): AislopEvaluation {
+/**
+ * The audit exception and Aislop's own dependency rule have to agree.
+ *
+ * Aislop does not read bun's `--ignore` flags; it runs its own advisory check and reports
+ * a finding on `package.json`, where JSON cannot carry an inline suppression comment. The
+ * only honest way to keep the two checks consistent is to filter that one finding here,
+ * for exactly as long as the audit exception is open, and to print it on every run.
+ */
+export function isToleratedAislopFinding(
+  diagnostic: AislopDiagnostic,
+  now: Date = new Date()
+): boolean {
+  if (
+    diagnostic.rule !== 'security/vulnerable-dependency' ||
+    diagnostic.filePath !== 'package.json'
+  ) {
+    return false
+  }
+  const active = activeAuditExceptions(now)
+  return TEMPORARY_AUDIT_EXCEPTIONS.some(
+    (entry) => active.includes(entry.id) && diagnostic.message.startsWith(`${entry.package} (`)
+  )
+}
+
+export function evaluateAislopReport(
+  report: AislopReport,
+  now: Date = new Date()
+): AislopEvaluation {
+  const tolerated = report.diagnostics.filter((item) => isToleratedAislopFinding(item, now)).length
+  const errors = Math.max(0, report.summary.errors - tolerated)
   const reasons: string[] = []
-  if (report.summary.errors > 0) {
-    reasons.push(`${report.summary.errors} error(s)`)
+  if (errors > 0) {
+    reasons.push(`${errors} error(s)`)
   }
   if (report.score < AISLOP_MINIMUM_SCORE) {
     reasons.push(`score ${report.score} is below ${AISLOP_MINIMUM_SCORE}`)
@@ -120,9 +150,20 @@ export function formatAislopReport(report: AislopReport): string {
 }
 
 export async function runAislopCheck(): Promise<void> {
-  const result = await captureCommand('bunx', ['aislop@0.16.1', 'scan', '.', '--json'])
+  // Aislop exits 1 whenever it has an error finding, even when the report is valid JSON
+  // and the gate's own evaluation tolerates that one finding. Let the report decide.
+  const result = await captureCommand('bunx', ['aislop@0.16.1', 'scan', '.', '--json'], {
+    allowedExitCodes: [1],
+  })
   const report = parseAislopReport(result.stdout)
   console.log(formatAislopReport(report))
+  for (const diagnostic of report.diagnostics) {
+    if (isToleratedAislopFinding(diagnostic)) {
+      console.warn(
+        `[aislop] TOLERATED ${diagnostic.message} (audit exception, expires with the bun audit exception)`
+      )
+    }
+  }
   const evaluation = evaluateAislopReport(report)
   if (!evaluation.passed) {
     throw new Error(`Aislop gate failed: ${evaluation.reasons.join(', ')}`)

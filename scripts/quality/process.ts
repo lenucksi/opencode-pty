@@ -11,6 +11,12 @@ export interface RunOptions {
   env?: EnvironmentOverrides
   /** Milliseconds before the child is killed and the run fails. 0 disables it. */
   timeoutMs?: number
+  /**
+   * Exit codes the caller will judge itself from stdout. Used by the Aislop check:
+   * the CLI exits 1 for its own error count, but the report is what the gate judges.
+   * A crash still fails because its stdout is not parseable JSON.
+   */
+  allowedExitCodes?: readonly number[]
 }
 
 export class CommandFailure extends Error {
@@ -104,7 +110,7 @@ export async function captureCommand(
   args: string[],
   options?: RunOptions
 ): Promise<CapturedCommand> {
-  const { timeoutMs = 0, env } = options ?? {}
+  const { timeoutMs = 0, env, allowedExitCodes = [] } = options ?? {}
   const text = commandText(command, args)
   const processHandle = Bun.spawn([command, ...args], {
     env: spawnEnvironment(env),
@@ -123,7 +129,7 @@ export async function captureCommand(
     throw error
   }
   const [stdout, stderr] = await Promise.all([stdoutPromise, stderrPromise])
-  if (exitCode !== 0) {
+  if (exitCode !== 0 && !allowedExitCodes.includes(exitCode)) {
     throw new CommandFailure(text, exitCode, stderr)
   }
   return { exitCode, stdout, stderr }
