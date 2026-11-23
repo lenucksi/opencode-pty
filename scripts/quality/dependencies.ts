@@ -246,7 +246,14 @@ export const TEMPORARY_FRESHNESS_PINS = [
     version: '0.8.4',
     expires: '2026-12-15',
     reason:
-      'Host opencode 2.3.0 bundles 0.8.4 and @opencode/theme@2.3.0 pins core to exactly 0.8.4; our jsx() calls resolve to the host copy at runtime. Lift when the host ships an opentui >= 0.9.x build.',
+      'Host opencode bundles 0.8.4 and @opencode/theme pins core to exactly 0.8.4; our jsx() calls resolve to the host copy at runtime. Lift when the host ships an opentui >= 0.9.x build.',
+  },
+  {
+    names: ['solid-js'],
+    version: '1.9.19',
+    expires: '2026-12-15',
+    reason:
+      '2.0.3 is a major. opencode 2.3.x bundles a patched 1.9.17 and rewrites plugin imports of solid-js onto its own copy, so our peer floor cannot outrun the host. Recheck when the host moves to solid 2.x.',
   },
 ] as const
 

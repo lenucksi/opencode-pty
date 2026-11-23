@@ -8,7 +8,11 @@
  */
 
 import { manager } from '../plugin/pty/manager.ts'
-import type { RetentionPolicy, SessionStore } from '../plugin/pty/session-store.ts'
+import type {
+  PersistedSession,
+  RetentionPolicy,
+  SessionStore,
+} from '../plugin/pty/session-store.ts'
 import type { SpawnOptions } from '../plugin/pty/types.ts'
 import {
   type DaemonRequest,
@@ -45,7 +49,13 @@ type RequestHandler = (
  */
 export function createRequestHandler(
   store: SessionStore,
-  clients: Map<string, WireClient>
+  clients: Map<string, WireClient>,
+  /**
+   * What THIS daemon marked lost when it started. The plugin asks for it at every
+   * setup to decide whether a restart notice is due; the answer must be a snapshot,
+   * never a fresh call to the mutating `markStaleAsLost()`.
+   */
+  startupLost: readonly PersistedSession[]
 ): (socket: Bun.Socket<undefined>, request: DaemonRequest) => void {
   const handlers: Record<string, RequestHandler> = {
     ping: () => ({
@@ -105,7 +115,14 @@ export function createRequestHandler(
       manager.cleanupBySession(params.parentSessionId as string)
       return { ok: true }
     },
-    load_persisted_sessions: () => manager.loadPersistedSessions(),
+    // READ-ONLY snapshot. `manager.loadPersistedSessions()` runs `markStaleAsLost()`,
+    // a STARTUP operation that belongs to the daemon alone. This RPC is called by every
+    // plugin setup - once per opencode server restart and once per project - so calling
+    // the mutating version here marked sessions that were still running as "lost", sent
+    // a false <pty_restart>, and made the agent start them again into ports the originals
+    // still held. Returning what this daemon ACTUALLY lost at its own startup keeps a
+    // genuine restart notice intact without ever changing state on a read.
+    load_persisted_sessions: () => startupLost,
     bulk_remove: (params) => manager.bulkRemove(params.ids as string[]),
     restore_sessions: (params) => manager.restoreSessions(params.ids as string[]),
     clear_all_sessions: () => {
