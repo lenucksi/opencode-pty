@@ -162,7 +162,16 @@ manager.setSessionStore(store)
  * The table lives in `requests.ts`: it is a long list of short answers, and this
  * file is about being a daemon.
  */
-const handleRequest = createRequestHandler(store, clients)
+// Mark once, at this daemon's start, and keep the result: the RPC below hands the
+// SAME snapshot to every plugin setup that asks whether a restart notice is due.
+const restored = manager.loadPersistedSessions()
+if (restored.length > 0) {
+  logPtyEvent('info', `restored ${restored.length} archived session(s)`, {
+    ids: restored.map((session) => session.id),
+  })
+}
+
+const handleRequest = createRequestHandler(store, clients, restored)
 
 // Daemon notifier: pushes exit notifications to connected clients
 manager.setNotifier({
@@ -196,13 +205,6 @@ sessionRemovedCallbacks.push((sessionId: string) => {
     client.writer.enqueue(msg)
   }
 })
-
-const restored = manager.loadPersistedSessions()
-if (restored.length > 0) {
-  logPtyEvent('info', `restored ${restored.length} archived session(s)`, {
-    ids: restored.map((session) => session.id),
-  })
-}
 
 // Apply retention
 const prunedRetention = store.updateRetention({})

@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A connecting client no longer declares running sessions lost.** `load_persisted_sessions`
+  called `markStaleAsLost()` on the daemon's live store, and the plugin asks for it at
+  **every** setup — once per opencode server restart, once per project. A second client
+  therefore marked sessions that were still running as `lost` in the archive, emitted a
+  false `<pty_restart>`, and made the agent start them again into ports the originals
+  still held (observed twice, 2026-11-18 and 2026-11-23, with `bench-dev`/`dummy-dev`).
+  The daemon now computes the snapshot **once at its own startup** and the RPC only reads
+  it. Genuine startup losses are still reported; two integration tests pin both sides:
+  `test/restart-lost.test.ts` and `test/restart-genuine.test.ts`.
 - **`<pty_exited>` again reports the output it actually has.** In daemon mode the daemon
   serialised the whole live `PTYSession` for the exit push. A `RingBuffer` keeps its state
   in private fields but `length` and `read()` live on its prototype, so JSON carried the
@@ -81,6 +90,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Aislop's own dependency rule gets the same dated, scoped exception, because JSON cannot
   carry an inline suppression comment; its report is still printed in full. No blanket
   `--ignore`, no severity filter.
+- **solid-js stays at 1.9.19 until the host moves.** 2.0.3 is a major and opencode
+  2.3.x bundles a patched 1.9.17, rewriting plugin imports onto its own copy; a peer floor
+  of 2.x would demand a host that does not exist. Like the OpenTUI hold, the exception is
+  loud, named and expires 2026-12-15. The other freshness findings were bumped in range.
 - **Dependencies are current again.** `bun audit fix` repaired nine advisories inside the
   declared ranges (including the Seroval override, now 1.6.11); `effect`, `glob` and
   `minimatch` needed overrides past their carriers' ranges and carry expiry notes in
